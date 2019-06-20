@@ -1,0 +1,29 @@
+{
+  "name": "noble-secp256k1",
+  "version": "0.1.0",
+  "description": "Noble secp256k1. High-security, easily auditable, zero-dependencies pubkey/ECDSA.",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "compile": "tsc -d",
+    "test": "jest"
+  },
+  "jest": {
+    "testRegex": "/.*?\\.test.ts",
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    }
+  },
+  "author": "Paul Miller (https://paulmillr.com)",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^24.0.15",
+    "@types/node": "^12.0.8",
+    "fast-check": "^1.15.1",
+    "jest": "^24.8.0",
+    "ts-jest": "^24.0.2"
+  }
+}

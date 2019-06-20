@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "esnext",
+    "module": "commonjs",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true
+  },
+  "include": ["./*.ts"],
+  "exclude": ["node_modules", "index.test.ts"]
+}
