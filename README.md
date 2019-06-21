@@ -17,6 +17,8 @@
 
 ## Usage
 
+> npm install noble-secp256k1
+
 ```js
 import * as secp256k1 from "noble-secp256k1";
 
