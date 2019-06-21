@@ -3,7 +3,6 @@
 // https://bitcoin.stackexchange.com/questions/21907/what-does-the-curve-used-in-bitcoin-secp256k1-look-like
 const A = 0n;
 const B = 7n;
-const ENCODING_LENGTH = 32;
 // p = 2^256 - 2^32 - 2^9 - 2^8 - 2^7 - 2^6 - 2^4 - 1
 export const P = 2n ** 256n - 2n ** 32n - 977n;
 export const PRIME_ORDER =

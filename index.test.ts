@@ -1,6 +1,5 @@
 import * as fc from "fast-check";
 import * as secp256k1 from "./index";
-// import ripemd160 from "../ripemd160/index";
 const SignResult = secp256k1.SignResult;
 
 const bigIntToHex = (num: bigint): string => {
@@ -9,15 +8,8 @@ const bigIntToHex = (num: bigint): string => {
   return hex;
 };
 
-// const PRIVATE_KEY = 60915644994268724639141444668491785949011881302943832872016721211779089794926n;
 const PRIVATE_KEY = bigIntToHex(60915644994268724639141444668491785949011881302943832872016721211779089794926n);
-// const MESSAGE = ripemd160(
-//   "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
-// );
 const MESSAGE = '63262f29f0c9c0abc347b5c519f646d6ff683760';
-// const WRONG_MESSAGE = ripemd160(
-//   "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD03641"
-// );
 const WRONG_MESSAGE = 'ab9c7f26c71e9d442bccd5fdc9747b3b74c8d587';
 
 const toLEHex = (n: bigint) =>

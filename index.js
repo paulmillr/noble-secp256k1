@@ -3,7 +3,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const A = 0n;
 const B = 7n;
-const ENCODING_LENGTH = 32;
 exports.P = 2n ** 256n - 2n ** 32n - 977n;
 exports.PRIME_ORDER = 2n ** 256n - 432420386565659656852420866394968145599n;
 class Point {
