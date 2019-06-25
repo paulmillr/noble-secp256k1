@@ -207,6 +207,9 @@ function add(a: Point, b: Point): Point {
   if (b.x === 0n && b.y === 0n) {
     return a;
   }
+  if (a.x === b.y && a.y == -b.y) {
+    return new Point(0n, 0n);
+  }
   const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, P), P);
   const x = mod(lamAdd * lamAdd - a.x - b.x, P);
   const y = mod(lamAdd * (a.x - x) - a.y, P);
