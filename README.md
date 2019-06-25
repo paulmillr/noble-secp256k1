@@ -95,6 +95,17 @@ secp256k1.SignResult {
 }
 ```
 
+## Security
+
+Noble is production-ready & secure. Our goal is to have it audited by a good security expert.
+
+We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But:
+
+1. JIT-compiler and Garbage Collector make "constant time" extremely hard to achieve in a scripting language.
+2. Which means *any other JS library doesn't use constant-time bigints*. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases.
+3. Overall they are quite rare; for our particular usage they're unimportant. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Try LibreSSL & similar low-level libraries & languages.
+4. We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
+
 ## License
 
 MIT (c) Paul Miller (https://paulmillr.com), see LICENSE file.
