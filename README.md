@@ -67,7 +67,7 @@ function verify(signature: Uint8Array | string | SignResult, hash: Uint8Array | 
 The library also exports helpers:
 
 ```typescript
-// Finite field over prime Fp
+// 𝔽p
 secp256k1.P // 2 ^ 256 - 2 ^ 32 - 977
 
 // Prime order
