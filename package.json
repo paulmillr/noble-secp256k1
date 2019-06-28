@@ -18,6 +18,11 @@
     }
   },
   "author": "Paul Miller (https://paulmillr.com)",
+  "homepage": "https://github.com/paulmillr/noble-secp256k1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paulmillr/noble-secp256k1.git"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/jest": "^24.0.15",
