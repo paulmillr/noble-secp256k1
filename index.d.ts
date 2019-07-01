@@ -10,6 +10,7 @@ export declare class Point {
     y: bigint;
     constructor(x: bigint, y: bigint);
     private static fromCompressedHex;
+    private static isValidPoint;
     private static fromUncompressedHex;
     static fromHex(hash: Hex): Point;
     private uncompressedHex;
@@ -25,10 +26,20 @@ export declare class SignResult {
     toHex(): string;
 }
 export declare const BASE_POINT: Point;
+export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): PubKey | null;
 export declare function getPublicKey(privateKey: Uint8Array, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function getPublicKey(privateKey: bigint | number, isCompressed?: boolean): Point;
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, k?: bigint | number): Uint8Array;
-export declare function sign(hash: string, privateKey: PrivKey, k?: bigint | number): string;
+declare type Options = {
+    recovered: true;
+    canonical?: true;
+    k?: number | bigint;
+};
+declare type OptionsWithK = Partial<Options>;
+export declare function sign(hash: string, privateKey: PrivKey, opts: Options): [string, bigint];
+export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, bigint];
+export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
+export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean;
 export {};

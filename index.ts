@@ -7,6 +7,9 @@ const B = 7n;
 export const P = 2n ** 256n - 2n ** 32n - 977n;
 export const PRIME_ORDER =
   2n ** 256n - 432420386565659656852420866394968145599n;
+const PRIME_SIZE = 256;
+const HIGH_NUMBER = PRIME_ORDER >> 1n;
+const SUBPN = P - PRIME_ORDER;
 
 type PrivKey = Uint8Array | string | bigint | number;
 type PubKey = Uint8Array | string | Point;
@@ -28,9 +31,27 @@ export class Point {
     return new Point(x, y);
   }
 
+  private static isValidPoint(x: bigint, y: bigint) {
+    const sqrY = y * y;
+    const yEquivalence = x ** 3n + A * x + B;
+    const actualSqrY1 = mod(sqrY, P);
+    const actualSqrY2 = mod(-sqrY, P);
+    const expectedSqrY1 = mod(yEquivalence, P);
+    const expectedSqrY2 = mod(-yEquivalence, P);
+    return (
+      actualSqrY1 === expectedSqrY1 ||
+      actualSqrY1 === expectedSqrY2 ||
+      actualSqrY2 === expectedSqrY1 ||
+      actualSqrY2 === expectedSqrY2
+    );
+  }
+
   private static fromUncompressedHex(bytes: Uint8Array) {
-    const x = numberFromByteArray(bytes.slice(1, 64));
-    const y = numberFromByteArray(bytes.slice(64));
+    const x = numberFromByteArray(bytes.slice(1, 33));
+    const y = numberFromByteArray(bytes.slice(33));
+    if (!this.isValidPoint(x, y)) {
+      throw new Error("secp256k1: Point is not on elliptic curve");
+    }
     return new Point(x, y);
   }
 
@@ -233,10 +254,17 @@ function multiple(g: Point, n: bigint): Point {
   return q;
 }
 
-function truncateHash(hash: Uint8Array): bigint {
-  const e = numberFromByteArrayLE(hash);
-  const delta = bitLength(e) - N_BIT_LENGTH;
-  return delta > 0 ? e >> delta : e;
+function truncateHash(hash: string | Uint8Array): bigint {
+  hash = typeof hash === "string" ? hash : arrayToHex(hash)
+  let msg = BigInt(`0x${hash || "0"}`);
+  const delta = (hash.length / 2) * 8 - PRIME_SIZE;
+  if (delta > 0) {
+    msg = msg >> BigInt(delta);
+  }
+  if (msg >= PRIME_ORDER) {
+    msg -= PRIME_ORDER;
+  }
+  return msg;
 }
 
 function isValidPrivateKey(privateKey: PrivKey) {
@@ -251,7 +279,9 @@ function isValidPrivateKey(privateKey: PrivKey) {
 
 function normalizePrivateKey(privateKey: PrivKey): bigint {
   if (!isValidPrivateKey(privateKey)) {
-    throw new Error("Private key is invalid. It should be less than 257 bit or contain valid hex string");
+    throw new Error(
+      "Private key is invalid. It should be less than 257 bit or contain valid hex string"
+    );
   }
   if (privateKey instanceof Uint8Array) {
     return numberFromByteArray(privateKey);
@@ -266,11 +296,7 @@ function normalizePublicKey(publicKey: PubKey): Point {
   return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
 
-function normalizePoint(
-  point: Point,
-  privateKey: PrivKey,
-  isCompressed = false
-): Uint8Array | string | Point {
+function normalizePoint(point: Point, privateKey: PrivKey, isCompressed = false): PubKey {
   if (privateKey instanceof Uint8Array) {
     return point.toRawBytes(isCompressed);
   }
@@ -286,6 +312,30 @@ function normalizeSignature(signature: Signature): SignResult {
     : SignResult.fromHex(signature);
 }
 
+export function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): PubKey | null {
+  const sign = normalizeSignature(signature);
+  const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
+  if (sign.r === 0n || sign.s === 0n) {
+    return null;
+  }
+  let publicKeyX = sign.r;
+  if (recovery >> 1n) {
+    if (publicKeyX >= SUBPN) {
+      return null;
+    }
+    publicKeyX = sign.r + PRIME_ORDER;
+  }
+
+  const compresedHex = `$0{2n + (recovery & 1n)}${publicKeyX.toString(16)}`;
+  const publicKey = Point.fromHex(compresedHex);
+  const rInv = modInverse(sign.r, PRIME_ORDER);
+  const s1 = mod((PRIME_ORDER - message) * rInv, P);
+  const s2 = mod(sign.s * rInv, P);
+  const point1 = multiple(BASE_POINT, s1);
+  const point2 = multiple(publicKey, s2);
+  return add(point1, point2);
+}
+
 export function getPublicKey(privateKey: Uint8Array, isCompressed?: boolean): Uint8Array;
 export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export function getPublicKey(privateKey: bigint | number, isCompressed?: boolean): Point;
@@ -295,28 +345,45 @@ export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKe
   return normalizePoint(point, privateKey, isCompressed);
 }
 
-export function sign(hash: Uint8Array, privateKey: PrivKey, k?: bigint | number): Uint8Array;
-export function sign(hash: string, privateKey: PrivKey, k?: bigint | number): string;
-export function sign(hash: Hex, privateKey: PrivKey, k: bigint | number = getRandomValue(5)): Hex {
+type Options = {
+  recovered: true,
+  canonical?: true,
+  k?: number | bigint
+};
+
+type OptionsWithK = Partial<Options>;
+
+export function sign(hash: string, privateKey: PrivKey, opts: Options): [string, bigint];
+export function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, bigint];
+export function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
+export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+export function sign(
+  hash: Hex,
+  privateKey: PrivKey,
+  { k = getRandomValue(5), recovered, canonical }: OptionsWithK = {}
+): Hex | [Hex, bigint] {
   const number = normalizePrivateKey(privateKey);
   k = BigInt(k);
-  const message = truncateHash(
-    typeof hash === "string" ? hexToArray(hash) : hash
-  );
+  const message = truncateHash(hash);
   const q = multiple(BASE_POINT, k);
   const r = mod(q.x, PRIME_ORDER);
-  const s = mod(
+  let s = mod(
     modInverse(k, PRIME_ORDER) * (message + r * number),
     PRIME_ORDER
   );
+  let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
+  if (s > HIGH_NUMBER && canonical) {
+    s = PRIME_ORDER - s;
+    recovery ^= 1n;
+  }
   const res = new SignResult(r, s).toHex();
-  return hash instanceof Uint8Array ? hexToArray(res) : res;
+  const hashed = hash instanceof Uint8Array ? hexToArray(res) : res;
+  return recovered ? [hashed, recovery] : hashed;
 }
 
 export function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean {
-  const message = truncateHash(
-    typeof hash === "string" ? hexToArray(hash) : hash
-  );
+  const message = truncateHash(hash);
   const point = normalizePublicKey(publicKey);
   const sign = normalizeSignature(signature);
   const w = modInverse(sign.s, PRIME_ORDER);
