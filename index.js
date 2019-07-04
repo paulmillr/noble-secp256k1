@@ -76,7 +76,7 @@ class SignResult {
     }
     static fromHex(hex) {
         const hash = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
-        const rLength = parseInt(`${hash[6]}${hash[7]}`, 16);
+        const rLength = parseInt(`${hash[6]}${hash[7]}`, 16) * 2;
         const r = BigInt(`0x${hash.substr(8, rLength)}`);
         const s = BigInt(`0x${hash.slice(12 + rLength)}`);
         return new SignResult(r, s);

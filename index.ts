@@ -89,7 +89,7 @@ export class SignResult {
 
   static fromHex(hex: Hex) {
     const hash = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
-    const rLength = parseInt(`${hash[6]}${hash[7]}`, 16);
+    const rLength = parseInt(`${hash[6]}${hash[7]}`, 16) * 2;
     const r = BigInt(`0x${hash.substr(8, rLength)}`);
     const s = BigInt(`0x${hash.slice(12 + rLength)}`);
     return new SignResult(r, s);
@@ -321,7 +321,7 @@ function normalizeSignature(signature: Signature): SignResult {
     : SignResult.fromHex(signature);
 }
 
-export function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): PubKey | null {
+export function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): Point | null {
   const sign = normalizeSignature(signature);
   const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
   if (sign.r === 0n || sign.s === 0n) {
