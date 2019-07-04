@@ -48,13 +48,16 @@ function getPublicKey(privateKey: bigint): Point;
 `isCompressed` (default is `false`) determines whether the output should contain `y` coordinate of the point.
 
 ```typescript
-function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, k?: bigint): Uint8Array;
-function sign(hash: string, privateKey: string | bigint, k?: bigint): string;
+function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Uint8Array;
+function sign(hash: string, privateKey: string | bigint, opts?: Options): string;
 ```
 - `hash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
-- `k?: bigint` - *optional* random seed. Default is one from `crypto.getRandomValues()`. **Must be cryptographically secure**, which means `Math.random()` won't work.
-- Returns DER encoded ECDSA signature, as hex uint8a / string.
+- `options?: Options` - *optional* object related to signature value and format
+- `options?.k: number | bigint` - random seed. Default is one from `crypto.getRandomValues()`. **Must be cryptographically secure**, which means `Math.random()` won't work.
+- `options?.recovered: boolean` - determines whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
+- `options?.canonical: boolean` - determines whether a signature `s` should be sorted by half prime order
+- Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`.
 
 ```typescript
 function verify(signature: Uint8Array | string | SignResult, hash: Uint8Array | string): boolean
@@ -83,9 +86,7 @@ secp256k1.Point {
   constructor(x: bigint, y: bigint);
   // Compressed elliptic curve point representation
   static fromHex(hex: Uint8Array | string);
-  static fromCompressedHex(hex: string);
   toHex(): string;
-  toCompressedHex(): string;
 }
 secp256k1.SignResult {
   constructor(r: bigint, s: bigint);
