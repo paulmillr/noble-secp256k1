@@ -23,6 +23,8 @@ export declare class SignResult {
     s: bigint;
     constructor(r: bigint, s: bigint);
     static fromHex(hex: Hex): SignResult;
+    private formatLength;
+    private formatNumberToHex;
     toHex(): string;
 }
 export declare const BASE_POINT: Point;

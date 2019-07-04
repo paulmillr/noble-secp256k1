@@ -81,13 +81,20 @@ class SignResult {
         const s = BigInt(`0x${hash.slice(12 + rLength)}`);
         return new SignResult(r, s);
     }
+    formatLength(hex) {
+        return (hex.length / 2).toString(16).padStart(2, "0");
+    }
+    formatNumberToHex(num) {
+        const res = num.toString(16);
+        return res.length & 1 ? `0${res}` : res;
+    }
     toHex() {
-        const rHex = this.r.toString(16);
-        const sHex = this.s.toString(16);
-        const len = (rHex.length + sHex.length + 6).toString(16).padStart(2, "0");
-        const rLen = rHex.length.toString(16).padStart(2, "0");
-        const sLen = sHex.length.toString(16).padStart(2, "0");
-        return `30${len}02${rLen}${rHex}02${sLen}${sHex}`;
+        const rHex = `00${this.formatNumberToHex(this.r)}`;
+        const sHex = this.formatNumberToHex(this.s);
+        const rLen = this.formatLength(rHex);
+        const sLen = this.formatLength(sHex);
+        const length = this.formatNumberToHex(rHex.length / 2 + sHex.length / 2 + 4);
+        return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
     }
 }
 exports.SignResult = SignResult;
