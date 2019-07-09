@@ -13,7 +13,8 @@
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519),
-  [ripemd160](https://github.com/paulmillr/noble-ripemd160)
+  [ripemd160](https://github.com/paulmillr/noble-ripemd160),
+  [secretbox-aes-gcm](https://github.com/paulmillr/noble-secretbox-aes-gcm)
 
 ## Usage
 
