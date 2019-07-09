@@ -122,20 +122,18 @@ export const BASE_POINT = new Point(
   32670510020758816978083085130507043184471273380659243275938904335757337482424n
 );
 
-const N_BIT_LENGTH = 256n;
-
-let cryptoRandom = (n: number) => new Uint8Array(0);
+let secureRandom = (bytesLength: number) => new Uint8Array(bytesLength);
 
 if (typeof window == "object" && "crypto" in window) {
-  cryptoRandom = (bytesLength: number): Uint8Array => {
+  secureRandom = (bytesLength: number): Uint8Array => {
     const array = new Uint8Array(bytesLength);
     window.crypto.getRandomValues(array);
     return array;
   };
 } else if (typeof process === "object" && "node" in process.versions) {
   const { randomBytes } = require("crypto");
-  cryptoRandom = (bytesLength: number): Uint8Array => {
-    const b = randomBytes(bytesLength);
+  secureRandom = (bytesLength: number): Uint8Array => {
+    const b: Buffer = randomBytes(bytesLength);
     return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
   };
 } else {
@@ -145,7 +143,7 @@ if (typeof window == "object" && "crypto" in window) {
 }
 
 function getRandomValue(bytesLength: number): bigint {
-  return numberFromByteArrayLE(cryptoRandom(bytesLength));
+  return numberFromByteArrayLE(secureRandom(bytesLength));
 }
 
 function powMod(x: bigint, power: bigint, order: bigint) {

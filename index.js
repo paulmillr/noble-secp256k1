@@ -99,10 +99,9 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
-const N_BIT_LENGTH = 256n;
-let cryptoRandom = (n) => new Uint8Array(0);
+let secureRandom = (bytesLength) => new Uint8Array(bytesLength);
 if (typeof window == "object" && "crypto" in window) {
-    cryptoRandom = (bytesLength) => {
+    secureRandom = (bytesLength) => {
         const array = new Uint8Array(bytesLength);
         window.crypto.getRandomValues(array);
         return array;
@@ -110,7 +109,7 @@ if (typeof window == "object" && "crypto" in window) {
 }
 else if (typeof process === "object" && "node" in process.versions) {
     const { randomBytes } = require("crypto");
-    cryptoRandom = (bytesLength) => {
+    secureRandom = (bytesLength) => {
         const b = randomBytes(bytesLength);
         return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
     };
@@ -119,7 +118,7 @@ else {
     throw new Error("The environment doesn't have cryptographically secure random function");
 }
 function getRandomValue(bytesLength) {
-    return numberFromByteArrayLE(cryptoRandom(bytesLength));
+    return numberFromByteArrayLE(secureRandom(bytesLength));
 }
 function powMod(x, power, order) {
     let res = 1n;
