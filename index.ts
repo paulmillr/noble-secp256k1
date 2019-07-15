@@ -110,7 +110,9 @@ export class SignResult {
     const sHex = this.formatNumberToHex(this.s);
     const rLen = this.formatLength(rHex);
     const sLen = this.formatLength(sHex);
-    const length = this.formatNumberToHex(rHex.length / 2 + sHex.length / 2 + 4);
+    const length = this.formatNumberToHex(
+      rHex.length / 2 + sHex.length / 2 + 4
+    );
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
   }
 }
@@ -261,7 +263,7 @@ function multiple(g: Point, n: bigint): Point {
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
-  hash = typeof hash === "string" ? hash : arrayToHex(hash)
+  hash = typeof hash === "string" ? hash : arrayToHex(hash);
   let msg = BigInt(`0x${hash || "0"}`);
   const delta = (hash.length / 2) * 8 - PRIME_SIZE;
   if (delta > 0) {
@@ -302,7 +304,11 @@ function normalizePublicKey(publicKey: PubKey): Point {
   return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
 
-function normalizePoint(point: Point, privateKey: PrivKey, isCompressed = false): PubKey {
+function normalizePoint(
+  point: Point,
+  privateKey: PrivKey,
+  isCompressed = false
+): PubKey {
   if (privateKey instanceof Uint8Array) {
     return point.toRawBytes(isCompressed);
   }
@@ -318,9 +324,15 @@ function normalizeSignature(signature: Signature): SignResult {
     : SignResult.fromHex(signature);
 }
 
-export function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): Point | null {
+export function recoverPublicKey(
+  hash: Hex,
+  signature: Signature,
+  recovery: bigint
+): Point | null {
   const sign = normalizeSignature(signature);
-  const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
+  const message = truncateHash(
+    typeof hash === "string" ? hexToArray(hash) : hash
+  );
   if (sign.r === 0n || sign.s === 0n) {
     return null;
   }
@@ -352,9 +364,9 @@ export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKe
 }
 
 type Options = {
-  recovered: true,
-  canonical?: true,
-  k?: number | bigint
+  recovered: true;
+  canonical?: true;
+  k?: number | bigint;
 };
 
 type OptionsWithK = Partial<Options>;
@@ -374,10 +386,7 @@ export function sign(
   const message = truncateHash(hash);
   const q = multiple(BASE_POINT, k);
   const r = mod(q.x, PRIME_ORDER);
-  let s = mod(
-    modInverse(k, PRIME_ORDER) * (message + r * number),
-    PRIME_ORDER
-  );
+  let s = mod(modInverse(k, PRIME_ORDER) * (message + r * number), PRIME_ORDER);
   let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
   if (s > HIGH_NUMBER && canonical) {
     s = PRIME_ORDER - s;
