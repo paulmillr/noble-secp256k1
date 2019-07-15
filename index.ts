@@ -1,9 +1,8 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
-// https://en.bitcoin.it/wiki/Secp256k1
-// https://bitcoin.stackexchange.com/questions/21907/what-does-the-curve-used-in-bitcoin-secp256k1-look-like
+// https://www.secg.org/sec2-v2.pdf
 const A = 0n;
 const B = 7n;
-// p = 2^256 - 2^32 - 2^9 - 2^8 - 2^7 - 2^6 - 2^4 - 1
+// Finite field over P.
 export const P = 2n ** 256n - 2n ** 32n - 977n;
 export const PRIME_ORDER =
   2n ** 256n - 432420386565659656852420866394968145599n;
