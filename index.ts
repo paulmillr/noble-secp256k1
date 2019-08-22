@@ -2,8 +2,9 @@
 // https://www.secg.org/sec2-v2.pdf
 const A = 0n;
 const B = 7n;
-// Finite field over P.
+// 𝔽p
 export const P = 2n ** 256n - 2n ** 32n - 977n;
+// Subgroup order, cofactor is 1
 export const PRIME_ORDER =
   2n ** 256n - 432420386565659656852420866394968145599n;
 const PRIME_SIZE = 256;
@@ -231,15 +232,6 @@ function numberFromByteArrayLE(bytes: Uint8Array): bigint {
     value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(i));
   }
   return value;
-}
-
-function bitLength(n: bigint) {
-  let i = 0n;
-  while (n) {
-    n >>= 1n;
-    i++;
-  }
-  return i;
 }
 
 function mod(a: bigint, b: bigint): bigint {

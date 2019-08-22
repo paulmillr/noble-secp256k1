@@ -1,6 +1,6 @@
 # noble-secp256k1
 
-[secp256k1](https://en.bitcoin.it/wiki/Secp256k1), an elliptic curve that could be used for assymetric encryption and ECDSA signature scheme.
+[secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for assymetric encryption and ECDSA signature scheme.
 
 ### This library belongs to *noble* crypto
 
