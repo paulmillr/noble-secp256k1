@@ -17,6 +17,9 @@ export declare class Point {
     private compressedHex;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
+    add(other: Point): Point;
+    private double;
+    multiply(scalar: bigint): Point;
 }
 export declare class SignResult {
     r: bigint;

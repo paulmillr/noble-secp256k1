@@ -81,6 +81,44 @@ export class Point {
   toHex(isCompressed = false) {
     return isCompressed ? this.compressedHex() : this.uncompressedHex();
   }
+
+  add(other: Point): Point {
+    const a = this;
+    const b = other;
+    if (a.x === 0n && a.y === 0n) {
+      return b;
+    }
+    if (b.x === 0n && b.y === 0n) {
+      return a;
+    }
+    if (a.x === b.y && a.y == -b.y) {
+      return new Point(0n, 0n);
+    }
+    const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, P), P);
+    const x = mod(lamAdd * lamAdd - a.x - b.x, P);
+    const y = mod(lamAdd * (a.x - x) - a.y, P);
+    return new Point(x, y);
+  }
+
+  private double(): Point {
+    const a = this;
+    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
+    const x = mod(lam * lam - 2n * a.x, P);
+    const y = mod(lam * (a.x - x) - a.y, P);
+    return new Point(x, y);
+  }
+
+  multiply(scalar: bigint): Point {
+    const g = this;
+    let n = scalar;
+    let q = new Point(0n, 0n);
+    for (let db: Point = g; n > 0n; n >>= 1n, db = db.double()) {
+      if ((n & 1n) === 1n) {
+        q = q.add(db);
+      }
+    }
+    return q;
+  }
 }
 
 export class SignResult {
@@ -229,39 +267,6 @@ function modInverse(v: bigint, n: bigint): bigint {
   return mod(nm, n);
 }
 
-function add(a: Point, b: Point): Point {
-  if (a.x === 0n && a.y === 0n) {
-    return b;
-  }
-  if (b.x === 0n && b.y === 0n) {
-    return a;
-  }
-  if (a.x === b.y && a.y == -b.y) {
-    return new Point(0n, 0n);
-  }
-  const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, P), P);
-  const x = mod(lamAdd * lamAdd - a.x - b.x, P);
-  const y = mod(lamAdd * (a.x - x) - a.y, P);
-  return new Point(x, y);
-}
-
-function double(a: Point): Point {
-  const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
-  const x = mod(lam * lam - 2n * a.x, P);
-  const y = mod(lam * (a.x - x) - a.y, P);
-  return new Point(x, y);
-}
-
-function multiple(g: Point, n: bigint): Point {
-  let q = new Point(0n, 0n);
-  for (let db = g; n > 0n; n >>= 1n, db = double(db)) {
-    if ((n & 1n) === 1n) {
-      q = add(q, db);
-    }
-  }
-  return q;
-}
-
 function truncateHash(hash: string | Uint8Array): bigint {
   hash = typeof hash === "string" ? hash : arrayToHex(hash);
   let msg = BigInt(`0x${hash || "0"}`);
@@ -349,9 +354,9 @@ export function recoverPublicKey(
   const rInv = modInverse(sign.r, PRIME_ORDER);
   const s1 = mod((PRIME_ORDER - message) * rInv, P);
   const s2 = mod(sign.s * rInv, P);
-  const point1 = multiple(BASE_POINT, s1);
-  const point2 = multiple(publicKey, s2);
-  return add(point1, point2);
+  const point1 = BASE_POINT.multiply(s1);
+  const point2 = publicKey.multiply(s2);
+  return point1.add(point2);
 }
 
 export function getPublicKey(privateKey: Uint8Array, isCompressed?: boolean): Uint8Array;
@@ -359,7 +364,7 @@ export function getPublicKey(privateKey: string, isCompressed?: boolean): string
 export function getPublicKey(privateKey: bigint | number, isCompressed?: boolean): Point;
 export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKey {
   const number = normalizePrivateKey(privateKey);
-  const point = multiple(BASE_POINT, number);
+  const point = BASE_POINT.multiply(number);
   return normalizePoint(point, privateKey, isCompressed);
 }
 
@@ -384,7 +389,7 @@ export function sign(
   const number = normalizePrivateKey(privateKey);
   k = BigInt(k);
   const message = truncateHash(hash);
-  const q = multiple(BASE_POINT, k);
+  const q = BASE_POINT.multiply(k);
   const r = mod(q.x, PRIME_ORDER);
   let s = mod(modInverse(k, PRIME_ORDER) * (message + r * number), PRIME_ORDER);
   let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
@@ -402,8 +407,8 @@ export function verify(signature: Signature, hash: Hex, publicKey: PubKey): bool
   const point = normalizePublicKey(publicKey);
   const sign = normalizeSignature(signature);
   const w = modInverse(sign.s, PRIME_ORDER);
-  const point1 = multiple(BASE_POINT, mod(message * w, PRIME_ORDER));
-  const point2 = multiple(point, mod(sign.r * w, PRIME_ORDER));
-  const { x } = add(point1, point2);
+  const point1 = BASE_POINT.multiply(mod(message * w, PRIME_ORDER));
+  const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
+  const { x } = point1.add(point2);
   return x === sign.r;
 }

@@ -67,6 +67,41 @@ class Point {
     toHex(isCompressed = false) {
         return isCompressed ? this.compressedHex() : this.uncompressedHex();
     }
+    add(other) {
+        const a = this;
+        const b = other;
+        if (a.x === 0n && a.y === 0n) {
+            return b;
+        }
+        if (b.x === 0n && b.y === 0n) {
+            return a;
+        }
+        if (a.x === b.y && a.y == -b.y) {
+            return new Point(0n, 0n);
+        }
+        const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, exports.P), exports.P);
+        const x = mod(lamAdd * lamAdd - a.x - b.x, exports.P);
+        const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
+        return new Point(x, y);
+    }
+    double() {
+        const a = this;
+        const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
+        const x = mod(lam * lam - 2n * a.x, exports.P);
+        const y = mod(lam * (a.x - x) - a.y, exports.P);
+        return new Point(x, y);
+    }
+    multiply(scalar) {
+        const g = this;
+        let n = scalar;
+        let q = new Point(0n, 0n);
+        for (let db = g; n > 0n; n >>= 1n, db = db.double()) {
+            if ((n & 1n) === 1n) {
+                q = q.add(db);
+            }
+        }
+        return q;
+    }
 }
 exports.Point = Point;
 class SignResult {
@@ -193,36 +228,6 @@ function modInverse(v, n) {
     }
     return mod(nm, n);
 }
-function add(a, b) {
-    if (a.x === 0n && a.y === 0n) {
-        return b;
-    }
-    if (b.x === 0n && b.y === 0n) {
-        return a;
-    }
-    if (a.x === b.y && a.y == -b.y) {
-        return new Point(0n, 0n);
-    }
-    const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, exports.P), exports.P);
-    const x = mod(lamAdd * lamAdd - a.x - b.x, exports.P);
-    const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
-    return new Point(x, y);
-}
-function double(a) {
-    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
-    const x = mod(lam * lam - 2n * a.x, exports.P);
-    const y = mod(lam * (a.x - x) - a.y, exports.P);
-    return new Point(x, y);
-}
-function multiple(g, n) {
-    let q = new Point(0n, 0n);
-    for (let db = g; n > 0n; n >>= 1n, db = double(db)) {
-        if ((n & 1n) === 1n) {
-            q = add(q, db);
-        }
-    }
-    return q;
-}
 function truncateHash(hash) {
     hash = typeof hash === "string" ? hash : arrayToHex(hash);
     let msg = BigInt(`0x${hash || "0"}`);
@@ -291,14 +296,14 @@ function recoverPublicKey(hash, signature, recovery) {
     const rInv = modInverse(sign.r, exports.PRIME_ORDER);
     const s1 = mod((exports.PRIME_ORDER - message) * rInv, exports.P);
     const s2 = mod(sign.s * rInv, exports.P);
-    const point1 = multiple(exports.BASE_POINT, s1);
-    const point2 = multiple(publicKey, s2);
-    return add(point1, point2);
+    const point1 = exports.BASE_POINT.multiply(s1);
+    const point2 = publicKey.multiply(s2);
+    return point1.add(point2);
 }
 exports.recoverPublicKey = recoverPublicKey;
 function getPublicKey(privateKey, isCompressed) {
     const number = normalizePrivateKey(privateKey);
-    const point = multiple(exports.BASE_POINT, number);
+    const point = exports.BASE_POINT.multiply(number);
     return normalizePoint(point, privateKey, isCompressed);
 }
 exports.getPublicKey = getPublicKey;
@@ -306,7 +311,7 @@ function sign(hash, privateKey, { k = getRandomValue(5), recovered, canonical } 
     const number = normalizePrivateKey(privateKey);
     k = BigInt(k);
     const message = truncateHash(hash);
-    const q = multiple(exports.BASE_POINT, k);
+    const q = exports.BASE_POINT.multiply(k);
     const r = mod(q.x, exports.PRIME_ORDER);
     let s = mod(modInverse(k, exports.PRIME_ORDER) * (message + r * number), exports.PRIME_ORDER);
     let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
@@ -324,9 +329,9 @@ function verify(signature, hash, publicKey) {
     const point = normalizePublicKey(publicKey);
     const sign = normalizeSignature(signature);
     const w = modInverse(sign.s, exports.PRIME_ORDER);
-    const point1 = multiple(exports.BASE_POINT, mod(message * w, exports.PRIME_ORDER));
-    const point2 = multiple(point, mod(sign.r * w, exports.PRIME_ORDER));
-    const { x } = add(point1, point2);
+    const point1 = exports.BASE_POINT.multiply(mod(message * w, exports.PRIME_ORDER));
+    const point2 = point.multiply(mod(sign.r * w, exports.PRIME_ORDER));
+    const { x } = point1.add(point2);
     return x === sign.r;
 }
 exports.verify = verify;

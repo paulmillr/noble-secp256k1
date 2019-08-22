@@ -98,6 +98,8 @@ secp256k1.Point {
   // Compressed elliptic curve point representation
   static fromHex(hex: Uint8Array | string);
   toHex(): string;
+  add(other: Point): Point;
+  multiply(scalar: bigint): Point;
 }
 secp256k1.SignResult {
   constructor(r: bigint, s: bigint);
