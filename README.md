@@ -38,6 +38,13 @@ const isMessageSigned = secp256k1.verify(signature, MESSAGE_HASH, publicKey);
 
 ## API
 
+- [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
+- [`sign(hash)`](#signhash)
+- [`verify(signature, hash)`](#verifysignature-hash)
+- [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
+- [Helpers](#helpers)
+
+##### `getPublicKey(privateKey)`
 ```typescript
 function getPublicKey(privateKey: Uint8Array, isCompressed?: false): Uint8Array;
 function getPublicKey(privateKey: string, isCompressed?: false): string;
@@ -48,6 +55,7 @@ function getPublicKey(privateKey: bigint): Point;
   integer. The result is another `Point(x, y)` which we will by default encode to hex Uint8Array.
 `isCompressed` (default is `false`) determines whether the output should contain `y` coordinate of the point.
 
+##### `sign(hash)`
 ```typescript
 function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Uint8Array;
 function sign(hash: string, privateKey: string | bigint, opts?: Options): string;
@@ -60,6 +68,7 @@ function sign(hash: string, privateKey: string | bigint, opts?: Options): string
 - `options?.canonical: boolean` - determines whether a signature `s` should be sorted by half prime order
 - Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`.
 
+##### `verify(signature, hash)`
 ```typescript
 function verify(signature: Uint8Array | string | SignResult, hash: Uint8Array | string): boolean
 ```
@@ -68,6 +77,7 @@ function verify(signature: Uint8Array | string | SignResult, hash: Uint8Array | 
 - `publicKey: string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
+##### `recoverPublicKey(hash, signature, recovery)`
 ```typescript
 function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): Point | null
 ```
@@ -78,7 +88,7 @@ function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): Po
   integer. The result is another `Point(x, y)` which we will by default encode to hex Uint8Array.
   If signature is invalid - function will return `null` as result.
 
-The library also exports helpers:
+##### Helpers
 
 ```typescript
 // 𝔽p
