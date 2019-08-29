@@ -133,4 +133,4 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 ## License
 
-MIT (c) Paul Miller (https://paulmillr.com), see LICENSE file.
+MIT (c) Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
