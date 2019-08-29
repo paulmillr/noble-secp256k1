@@ -40,7 +40,7 @@ const isMessageSigned = secp256k1.verify(signature, MESSAGE_HASH, publicKey);
 ## API
 
 - [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
-- [`sign(hash)`](#signhash)
+- [`sign(hash, privateKey)`](#signhash-privatekey)
 - [`verify(signature, hash)`](#verifysignature-hash)
 - [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
 - [Helpers](#helpers)
@@ -56,7 +56,7 @@ function getPublicKey(privateKey: bigint): Point;
   integer. The result is another `Point(x, y)` which we will by default encode to hex Uint8Array.
 `isCompressed` (default is `false`) determines whether the output should contain `y` coordinate of the point.
 
-##### `sign(hash)`
+##### `sign(hash, privateKey)`
 ```typescript
 function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Uint8Array;
 function sign(hash: string, privateKey: string | bigint, opts?: Options): string;
