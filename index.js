@@ -197,14 +197,6 @@ function numberFromByteArrayLE(bytes) {
     }
     return value;
 }
-function bitLength(n) {
-    let i = 0n;
-    while (n) {
-        n >>= 1n;
-        i++;
-    }
-    return i;
-}
 function mod(a, b) {
     const result = a % b;
     return result >= 0 ? result : b + result;
