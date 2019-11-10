@@ -171,7 +171,8 @@ if (typeof window == "object" && "crypto" in window) {
     return array;
   };
 } else if (typeof process === "object" && "node" in process.versions) {
-  const { randomBytes } = require("crypto");
+  const req = require;
+  const { randomBytes } = req("crypto");
   secureRandom = (bytesLength: number): Uint8Array => {
     const b: Buffer = randomBytes(bytesLength);
     return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
