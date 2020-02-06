@@ -92,15 +92,25 @@ class Point {
         return new Point(x, y);
     }
     multiply(scalar) {
-        const g = this;
         let n = scalar;
-        let q = new Point(0n, 0n);
-        for (let db = g; n > 0n; n >>= 1n, db = db.double()) {
-            if ((n & 1n) === 1n) {
-                q = q.add(db);
+        let pow2 = new Point(this.x, this.y);
+        let res = new Point(0n, 0n);
+        let fake = new Point(0n, 0n);
+        for (let power = 0; power <= 256; power++) {
+            let multiplied = false;
+            if (n > 0n) {
+                if ((n & 1n) === 1n) {
+                    res = res.add(pow2);
+                    multiplied = true;
+                }
+                n >>= 1n;
             }
+            if (!multiplied) {
+                fake = fake.add(pow2);
+            }
+            pow2 = pow2.double();
         }
-        return q;
+        return res;
     }
 }
 exports.Point = Point;
