@@ -25,11 +25,11 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/jest": "^24.9.1",
+    "@types/jest": "^25",
     "@types/node": "^12.12.26",
     "fast-check": "^1.22.1",
-    "jest": "^24.9.0",
-    "ts-jest": "^24.3.0",
+    "jest": "^25.1.0",
+    "ts-jest": "^25.2.0",
     "typescript": "^3.7.5"
   },
   "keywords": [
