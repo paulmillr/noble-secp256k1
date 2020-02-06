@@ -25,12 +25,12 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/jest": "^24.0.21",
-    "@types/node": "^12.12.5",
-    "fast-check": "^1.18.1",
+    "@types/jest": "^24.9.1",
+    "@types/node": "^12.12.26",
+    "fast-check": "^1.22.1",
     "jest": "^24.9.0",
-    "ts-jest": "^24.1.0",
-    "typescript": "^3.6.4"
+    "ts-jest": "^24.3.0",
+    "typescript": "^3.7.5"
   },
   "keywords": [
     "secp256k1",
