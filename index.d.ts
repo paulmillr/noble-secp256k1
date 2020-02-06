@@ -13,13 +13,15 @@ export declare class Point {
     private static isValidPoint;
     private static fromUncompressedHex;
     static fromHex(hash: Hex): Point;
+    static fromPrivateKey(privateKey: PrivKey): Point;
+    static fromSignature(hash: Hex, signature: Signature, recovery: number | bigint): Point | undefined;
     private uncompressedHex;
     private compressedHex;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
     add(other: Point): Point;
     private double;
-    multiply(scalar: bigint): Point;
+    multiply(scalar: number | bigint | Uint8Array): Point;
 }
 export declare class SignResult {
     r: bigint;
@@ -31,10 +33,10 @@ export declare class SignResult {
     toHex(): string;
 }
 export declare const BASE_POINT: Point;
-export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: bigint): Point | null;
-export declare function getPublicKey(privateKey: Uint8Array, isCompressed?: boolean): Uint8Array;
+export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: number | bigint): Uint8Array | undefined;
+export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
-export declare function getPublicKey(privateKey: bigint | number, isCompressed?: boolean): Point;
+export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array;
 declare type Options = {
     recovered: true;
     canonical?: true;

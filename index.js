@@ -14,7 +14,7 @@ class Point {
         this.y = y;
     }
     static fromCompressedHex(bytes) {
-        const x = numberFromByteArray(bytes.slice(1));
+        const x = arrayToNumber(bytes.slice(1));
         const sqrY = mod(x ** 3n + A * x + B, exports.P);
         let y = powMod(sqrY, (exports.P + 1n) / 4n, exports.P);
         const isFirstByteOdd = (bytes[0] & 1) === 1;
@@ -37,8 +37,8 @@ class Point {
             actualSqrY2 === expectedSqrY2);
     }
     static fromUncompressedHex(bytes) {
-        const x = numberFromByteArray(bytes.slice(1, 33));
-        const y = numberFromByteArray(bytes.slice(33));
+        const x = arrayToNumber(bytes.slice(1, 33));
+        const y = arrayToNumber(bytes.slice(33));
         if (!this.isValidPoint(x, y)) {
             throw new Error("secp256k1: Point is not on elliptic curve");
         }
@@ -49,6 +49,32 @@ class Point {
         return bytes[0] === 0x4
             ? this.fromUncompressedHex(bytes)
             : this.fromCompressedHex(bytes);
+    }
+    static fromPrivateKey(privateKey) {
+        return exports.BASE_POINT.multiply(normalizePrivateKey(privateKey));
+    }
+    static fromSignature(hash, signature, recovery) {
+        recovery = BigInt(recovery);
+        const sign = normalizeSignature(signature);
+        const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
+        if (sign.r === 0n || sign.s === 0n) {
+            return;
+        }
+        let publicKeyX = sign.r;
+        if (recovery >> 1n) {
+            if (publicKeyX >= SUBPN) {
+                return;
+            }
+            publicKeyX = sign.r + exports.PRIME_ORDER;
+        }
+        const compresedHex = `$0{2n + (recovery & 1n)}${publicKeyX.toString(16)}`;
+        const publicKey = Point.fromHex(compresedHex);
+        const rInv = modInverse(sign.r, exports.PRIME_ORDER);
+        const s1 = mod((exports.PRIME_ORDER - message) * rInv, exports.P);
+        const s2 = mod(sign.s * rInv, exports.P);
+        const point1 = exports.BASE_POINT.multiply(s1);
+        const point2 = publicKey.multiply(s2);
+        return point1.add(point2);
     }
     uncompressedHex() {
         const yHex = this.y.toString(16).padStart(64, "0");
@@ -92,7 +118,8 @@ class Point {
         return new Point(x, y);
     }
     multiply(scalar) {
-        let n = scalar;
+        let n = scalar instanceof Uint8Array ?
+            arrayToNumber(scalar) : BigInt(scalar);
         let pow2 = new Point(this.x, this.y);
         let res = new Point(0n, 0n);
         let fake = new Point(0n, 0n);
@@ -164,7 +191,7 @@ else {
     throw new Error("The environment doesn't have cryptographically secure random function");
 }
 function getRandomValue(bytesLength) {
-    return numberFromByteArrayLE(secureRandom(bytesLength));
+    return arrayLEToNumber(secureRandom(bytesLength));
 }
 function powMod(x, power, order) {
     let res = 1n;
@@ -194,14 +221,14 @@ function hexToArray(hash) {
 function hexToNumber(hex) {
     return BigInt(`0x${hex}`);
 }
-function numberFromByteArray(bytes) {
+function arrayToNumber(bytes) {
     let value = 0n;
     for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
         value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
     }
     return value;
 }
-function numberFromByteArrayLE(bytes) {
+function arrayLEToNumber(bytes) {
     let value = 0n;
     for (let i = 0; i < bytes.length; i++) {
         value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(i));
@@ -257,7 +284,7 @@ function normalizePrivateKey(privateKey) {
         throw new Error("Private key is invalid. It should be less than 257 bit or contain valid hex string");
     }
     if (privateKey instanceof Uint8Array) {
-        return numberFromByteArray(privateKey);
+        return arrayToNumber(privateKey);
     }
     if (typeof privateKey === "string") {
         return hexToNumber(privateKey);
@@ -267,49 +294,29 @@ function normalizePrivateKey(privateKey) {
 function normalizePublicKey(publicKey) {
     return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
-function normalizePoint(point, privateKey, isCompressed = false) {
-    if (privateKey instanceof Uint8Array) {
-        return point.toRawBytes(isCompressed);
-    }
-    if (typeof privateKey === "string") {
-        return point.toHex(isCompressed);
-    }
-    return point;
-}
 function normalizeSignature(signature) {
     return signature instanceof SignResult
         ? signature
         : SignResult.fromHex(signature);
 }
 function recoverPublicKey(hash, signature, recovery) {
-    const sign = normalizeSignature(signature);
-    const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
-    if (sign.r === 0n || sign.s === 0n) {
-        return null;
-    }
-    let publicKeyX = sign.r;
-    if (recovery >> 1n) {
-        if (publicKeyX >= SUBPN) {
-            return null;
-        }
-        publicKeyX = sign.r + exports.PRIME_ORDER;
-    }
-    const compresedHex = `$0{2n + (recovery & 1n)}${publicKeyX.toString(16)}`;
-    const publicKey = Point.fromHex(compresedHex);
-    const rInv = modInverse(sign.r, exports.PRIME_ORDER);
-    const s1 = mod((exports.PRIME_ORDER - message) * rInv, exports.P);
-    const s2 = mod(sign.s * rInv, exports.P);
-    const point1 = exports.BASE_POINT.multiply(s1);
-    const point2 = publicKey.multiply(s2);
-    return point1.add(point2);
+    const point = Point.fromSignature(hash, signature, recovery);
+    return point && point.toRawBytes();
 }
 exports.recoverPublicKey = recoverPublicKey;
 function getPublicKey(privateKey, isCompressed) {
-    const number = normalizePrivateKey(privateKey);
-    const point = exports.BASE_POINT.multiply(number);
-    return normalizePoint(point, privateKey, isCompressed);
+    const point = Point.fromPrivateKey(privateKey);
+    if (typeof privateKey === "string") {
+        return point.toHex(isCompressed);
+    }
+    return point.toRawBytes(isCompressed);
 }
 exports.getPublicKey = getPublicKey;
+function getSharedSecret(privateA, publicB) {
+    const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
+    return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
+}
+exports.getSharedSecret = getSharedSecret;
 function sign(hash, privateKey, { k = getRandomValue(5), recovered, canonical } = {}) {
     const number = normalizePrivateKey(privateKey);
     k = BigInt(k);
