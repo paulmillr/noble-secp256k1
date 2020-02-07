@@ -120,24 +120,24 @@ class Point {
     multiply(scalar) {
         let n = scalar instanceof Uint8Array ?
             arrayToNumber(scalar) : BigInt(scalar);
-        let pow2 = new Point(this.x, this.y);
-        let res = new Point(0n, 0n);
-        let fake = new Point(0n, 0n);
-        for (let power = 0; power <= 256; power++) {
-            let multiplied = false;
-            if (n > 0n) {
+        let Q = new Point(0n, 0n);
+        let F = new Point(this.x, this.y);
+        let P = this;
+        for (let bit = 0; bit <= 256; bit++) {
+            let added = false;
+            if (n > 0) {
                 if ((n & 1n) === 1n) {
-                    res = res.add(pow2);
-                    multiplied = true;
+                    Q = Q.add(P);
+                    added = true;
                 }
                 n >>= 1n;
             }
-            if (!multiplied) {
-                fake = fake.add(pow2);
+            if (!added) {
+                F = F.add(P);
             }
-            pow2 = pow2.double();
+            P = P.double();
         }
-        return res;
+        return Q;
     }
 }
 exports.Point = Point;

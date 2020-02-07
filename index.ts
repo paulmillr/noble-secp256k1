@@ -148,37 +148,34 @@ export class Point {
   // Since koblitz curves do not support Montgomery ladder,
   // we emulate constant-time by multiplying to every power of 2.
   multiply(scalar: number | bigint | Uint8Array): Point {
-    let n: bigint = scalar instanceof Uint8Array ?
+    let n = scalar instanceof Uint8Array ?
       arrayToNumber(scalar) : BigInt(scalar);
+    let Q = new Point(0n, 0n);
+    // Fake point.
+    let F = new Point(this.x, this.y);
 
-    let pow2 = new Point(this.x, this.y);
-    let res = new Point(0n, 0n);
-    let fake = new Point(0n, 0n);
+    let P: Point = this;
+    for (let bit = 0; bit <= 256; bit++) {
+      let added = false;
 
-    for (let power = 0; power <= 256; power++) {
-      let multiplied = false;
-
-      if (n > 0n) {
+      if (n > 0) {
         if ((n & 1n) === 1n) {
-          res = res.add(pow2);
-          multiplied = true;
+          Q = Q.add(P);
+          added = true;
         }
         n >>= 1n;
       }
 
-      if (!multiplied) {
-        fake = fake.add(pow2);
+      if (!added) {
+        F = F.add(P);
       }
 
-      // To enable precomputes for 2x speedup:
-      // powers2 = import('precomputes.ts'); // Top of the file.
-      // pow2 = powers2[power];
-      pow2 = pow2.double();
+      P = P.double();
     }
-
-    return res;
+    return Q;
   }
 }
+
 
 export class SignResult {
   constructor(public r: bigint, public s: bigint) {}
