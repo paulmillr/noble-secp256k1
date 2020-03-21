@@ -20,6 +20,9 @@ export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
   private static fromCompressedHex(bytes: Uint8Array) {
+    if (bytes.length !== 33) {
+      throw new Error(`Point.fromCompressedHex expects 66 bytes, not ${bytes.length * 2}`);
+    }
     const x = arrayToNumber(bytes.slice(1));
     const sqrY = mod(x ** 3n + A * x + B, P);
     let y = powMod(sqrY, (P + 1n) / 4n, P);
@@ -28,10 +31,16 @@ export class Point {
     if (isFirstByteOdd !== isYOdd) {
       y = mod(-y, P);
     }
+    if (!Point.isValidPoint(x, y)) {
+      throw new Error("secp256k1: Point is not on elliptic curve");
+    }
     return new Point(x, y);
   }
 
-  private static isValidPoint(x: bigint, y: bigint) {
+  static isValidPoint(x: bigint, y: bigint) {
+    if (x === 0n || y === 0n || x >= P || y >= P) return false;
+
+    console.log('isValidPoint', x, y);
     const sqrY = y * y;
     const yEquivalence = x ** 3n + A * x + B;
     const actualSqrY1 = mod(sqrY, P);
@@ -47,6 +56,9 @@ export class Point {
   }
 
   private static fromUncompressedHex(bytes: Uint8Array) {
+    if (bytes.length !== 65) {
+      throw new Error(`Point.fromUncompressedHex expects 130 bytes, not ${bytes.length * 2}`);
+    }
     const x = arrayToNumber(bytes.slice(1, 33));
     const y = arrayToNumber(bytes.slice(33));
     if (!this.isValidPoint(x, y)) {
@@ -57,9 +69,10 @@ export class Point {
 
   static fromHex(hash: Hex) {
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
-    return bytes[0] === 0x4
-      ? this.fromUncompressedHex(bytes)
-      : this.fromCompressedHex(bytes);
+    const header = bytes[0]
+    if (header === 0x04) return this.fromUncompressedHex(bytes);
+    if (header === 0x02 || header === 0x03) return this.fromCompressedHex(bytes);
+    throw new TypeError('Point.fromHex: received invalid point');
   }
 
   static fromPrivateKey(privateKey: PrivKey) {
@@ -238,6 +251,31 @@ if (typeof window == "object" && "crypto" in window) {
   );
 }
 
+// HMAC-SHA256 implementation.
+let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
+
+if (typeof window == "object" && "crypto" in window) {
+  hmac = async (key: Uint8Array, message: Uint8Array) => {
+    const ckey = await window.crypto.subtle.importKey(
+      "raw", key,
+      {name: "HMAC", hash: {name: "SHA-256"}},
+      false, ["sign", "verify"]
+    );
+    const buffer = await window.crypto.subtle.sign("HMAC", ckey, message);
+    return new Uint8Array(buffer);
+  };
+} else if (typeof process === "object" && "node" in process.versions) {
+  const req = require;
+  const { createHmac } = req("crypto");
+  hmac = async (key: Uint8Array, message: Uint8Array) => {
+    const hash = createHmac("sha256", key);
+    hash.update(message);
+    return Uint8Array.from(hash.digest());
+  };
+} else {
+  throw new Error("The environment doesn't have hmac-sha256 function");
+}
+
 function getRandomValue(bytesLength: number): bigint {
   return arrayLEToNumber(secureRandom(bytesLength));
 }
@@ -272,6 +310,10 @@ function hexToArray(hash: string): Uint8Array {
 
 function hexToNumber(hex: string) {
   return BigInt(`0x${hex}`);
+}
+
+function numberToArray(number: bigint, length: number = 64) {
+  return hexToArray(number.toString(16).padStart(length, '0'));
 }
 
 function arrayToNumber(bytes: Uint8Array): bigint {
@@ -328,29 +370,95 @@ function truncateHash(hash: string | Uint8Array): bigint {
   return msg;
 }
 
-function isValidPrivateKey(privateKey: PrivKey): boolean {
-  if (privateKey instanceof Uint8Array) {
-    return privateKey.length <= 32;
+function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
+  const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
+  // console.log('concat', result.length);
+  for (let i = 0, pad = 0; i < args.length; i++) {
+    const arr = args[i];
+    result.set(arr, pad);
+    pad += arr.length;
   }
-  if (typeof privateKey === "string") {
-    return /^[0-9a-f]{0,64}$/i.test(privateKey);
+  return result;
+}
+
+// Deterministic k generation as per RFC6979.
+// https://tools.ietf.org/html/rfc6979#section-3.1
+async function deterministicK(hash: Uint8Array, privateKey: Uint8Array) {
+  const concat = concatTypedArrays;
+  // Step A is ignored, since we already provide hash instead of msg
+  const h1 = numberToArray(mod(arrayToNumber(hash), PRIME_ORDER));
+  const h1n = arrayToNumber(h1);
+  const pn = arrayToNumber(privateKey);
+
+  // Step B
+  let v = new Uint8Array(32).fill(1);
+  // Step C
+  let k = new Uint8Array(32).fill(0);
+
+  const b0 = Uint8Array.from([0x00]);
+  const b1 = Uint8Array.from([0x01]);
+  const x = privateKey;
+
+  // console.log('start', arrayToHex(h1), arrayToHex(x));
+
+  // Step D
+  k = await hmac(k, concat(v, b0, x, h1));
+  // console.log('d', arrayToHex(k));
+  // Step E
+  v = await hmac(k, v);
+  // console.log('e', arrayToHex(v));
+  // Step F
+  k = await hmac(k, concat(v, b1, x, h1));
+  // console.log('f', arrayToHex(k));
+  // Step G
+  v = await hmac(k, v);
+  // console.log('g', arrayToHex(v));
+
+  // Step H3, repeat until 1 < T < n - 1
+  for (let i = 0; i < 10000; i++) {
+    v = await hmac(k, v);
+    const T = arrayToNumber(v);
+    // console.log('try #', i, arrayToHex(numberToArray(T)));
+    if (isValidPrivateKey(T) && isValidK(T, h1n, pn)) return T;
+    k = await hmac(k, concat(v, b0));
+    v = await hmac(k, v);
   }
-  return privateKey.toString(16).length <= 64;
+
+  throw new TypeError('Too many k');
+  // return T;
+}
+
+function isValidPrivateKey(privateKey: bigint): boolean {
+  if (typeof privateKey !== 'bigint') {
+    throw new TypeError('isValidPrivateKey expects bigint');
+  }
+  return 0 < privateKey && privateKey < PRIME_ORDER;
+}
+
+function isValidK(k: bigint, msg: bigint, priv: bigint) {
+  const q = BASE_POINT.multiply(k);
+  const r = mod(q.x, PRIME_ORDER);
+  // console.log('isValidK', 1, r === 0n, k > r);
+  if (r === 0n || k > r) return false;
+  let s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
+  // console.log('isValidK', 2, s === 0n);
+  if (s === 0n) return false;
+  return true;
 }
 
 function normalizePrivateKey(privateKey: PrivKey): bigint {
-  if (!isValidPrivateKey(privateKey)) {
-    throw new Error(
-      "Private key is invalid. It should be less than 257 bit or contain valid hex string"
-    );
-  }
+  let key: bigint;
   if (privateKey instanceof Uint8Array) {
-    return arrayToNumber(privateKey);
+    key = arrayToNumber(privateKey);
+  } else if (typeof privateKey === "string") {
+    key = hexToNumber(privateKey);
+  } else {
+    key = BigInt(privateKey)
   }
-  if (typeof privateKey === "string") {
-    return hexToNumber(privateKey);
-  }
-  return BigInt(privateKey);
+  if (!isValidPrivateKey(key)) {
+    throw new Error("Private key is invalid. It should be less than PRIME_ORDER");
+  };
+  return key;
 }
 
 function normalizePublicKey(publicKey: PubKey): Point {
@@ -393,22 +501,25 @@ type Options = {
 
 type OptionsWithK = Partial<Options>;
 
-export function sign(hash: string, privateKey: PrivKey, opts: Options): [string, bigint];
-export function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, bigint];
-export function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
-export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
-export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
-export function sign(
+// export function sign(hash: string, privateKey: PrivKey, opts: Options): [string, bigint];
+// export function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, bigint];
+// export function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
+// export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+// export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+export async function sign(
   hash: Hex,
   privateKey: PrivKey,
-  { k = getRandomValue(5), recovered, canonical }: OptionsWithK = {}
-): Hex | [Hex, bigint] {
-  const number = normalizePrivateKey(privateKey);
-  k = BigInt(k);
-  const message = truncateHash(hash);
+  { k = undefined, recovered, canonical }: OptionsWithK = {}
+): Promise<Hex | [Hex, bigint]> {
+  const priv = normalizePrivateKey(privateKey);
+  // k = BigInt(k);
+  const arr = typeof hash === 'string' ? hexToArray(hash) : hash;
+  k = await deterministicK(arr, numberToArray(priv));
   const q = BASE_POINT.multiply(k);
   const r = mod(q.x, PRIME_ORDER);
-  let s = mod(modInverse(k, PRIME_ORDER) * (message + r * number), PRIME_ORDER);
+
+  const msg = truncateHash(hash);
+  let s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
   let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
   if (s > HIGH_NUMBER && canonical) {
     s = PRIME_ORDER - s;
@@ -420,11 +531,11 @@ export function sign(
 }
 
 export function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean {
-  const message = truncateHash(hash);
+  const msg = truncateHash(hash);
   const point = normalizePublicKey(publicKey);
   const sign = normalizeSignature(signature);
   const w = modInverse(sign.s, PRIME_ORDER);
-  const point1 = BASE_POINT.multiply(mod(message * w, PRIME_ORDER));
+  const point1 = BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
   const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
   const { x } = point1.add(point2);
   return x === sign.r;

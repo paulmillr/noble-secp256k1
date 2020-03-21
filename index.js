@@ -14,6 +14,9 @@ class Point {
         this.y = y;
     }
     static fromCompressedHex(bytes) {
+        if (bytes.length !== 33) {
+            throw new Error(`Point.fromCompressedHex expects 66 bytes, not ${bytes.length * 2}`);
+        }
         const x = arrayToNumber(bytes.slice(1));
         const sqrY = mod(x ** 3n + A * x + B, exports.P);
         let y = powMod(sqrY, (exports.P + 1n) / 4n, exports.P);
@@ -22,9 +25,15 @@ class Point {
         if (isFirstByteOdd !== isYOdd) {
             y = mod(-y, exports.P);
         }
+        if (!Point.isValidPoint(x, y)) {
+            throw new Error("secp256k1: Point is not on elliptic curve");
+        }
         return new Point(x, y);
     }
     static isValidPoint(x, y) {
+        if (x === 0n || y === 0n || x >= exports.P || y >= exports.P)
+            return false;
+        console.log('isValidPoint', x, y);
         const sqrY = y * y;
         const yEquivalence = x ** 3n + A * x + B;
         const actualSqrY1 = mod(sqrY, exports.P);
@@ -37,6 +46,9 @@ class Point {
             actualSqrY2 === expectedSqrY2);
     }
     static fromUncompressedHex(bytes) {
+        if (bytes.length !== 65) {
+            throw new Error(`Point.fromUncompressedHex expects 130 bytes, not ${bytes.length * 2}`);
+        }
         const x = arrayToNumber(bytes.slice(1, 33));
         const y = arrayToNumber(bytes.slice(33));
         if (!this.isValidPoint(x, y)) {
@@ -46,9 +58,12 @@ class Point {
     }
     static fromHex(hash) {
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
-        return bytes[0] === 0x4
-            ? this.fromUncompressedHex(bytes)
-            : this.fromCompressedHex(bytes);
+        const header = bytes[0];
+        if (header === 0x04)
+            return this.fromUncompressedHex(bytes);
+        if (header === 0x02 || header === 0x03)
+            return this.fromCompressedHex(bytes);
+        throw new TypeError('Point.fromHex: received invalid point');
     }
     static fromPrivateKey(privateKey) {
         return exports.BASE_POINT.multiply(normalizePrivateKey(privateKey));
@@ -190,6 +205,26 @@ else if (typeof process === "object" && "node" in process.versions) {
 else {
     throw new Error("The environment doesn't have cryptographically secure random function");
 }
+let hmac;
+if (typeof window == "object" && "crypto" in window) {
+    hmac = async (key, message) => {
+        const ckey = await window.crypto.subtle.importKey("raw", key, { name: "HMAC", hash: { name: "SHA-256" } }, false, ["sign", "verify"]);
+        const buffer = await window.crypto.subtle.sign("HMAC", ckey, message);
+        return new Uint8Array(buffer);
+    };
+}
+else if (typeof process === "object" && "node" in process.versions) {
+    const req = require;
+    const { createHmac } = req("crypto");
+    hmac = async (key, message) => {
+        const hash = createHmac("sha256", key);
+        hash.update(message);
+        return Uint8Array.from(hash.digest());
+    };
+}
+else {
+    throw new Error("The environment doesn't have hmac-sha256 function");
+}
 function getRandomValue(bytesLength) {
     return arrayLEToNumber(secureRandom(bytesLength));
 }
@@ -220,6 +255,9 @@ function hexToArray(hash) {
 }
 function hexToNumber(hex) {
     return BigInt(`0x${hex}`);
+}
+function numberToArray(number, length = 64) {
+    return hexToArray(number.toString(16).padStart(length, '0'));
 }
 function arrayToNumber(bytes) {
     let value = 0n;
@@ -270,26 +308,71 @@ function truncateHash(hash) {
     }
     return msg;
 }
+function concatTypedArrays(...args) {
+    const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
+    for (let i = 0, pad = 0; i < args.length; i++) {
+        const arr = args[i];
+        result.set(arr, pad);
+        pad += arr.length;
+    }
+    return result;
+}
+async function deterministicK(hash, privateKey) {
+    const concat = concatTypedArrays;
+    const h1 = numberToArray(mod(arrayToNumber(hash), exports.PRIME_ORDER));
+    const h1n = arrayToNumber(h1);
+    const pn = arrayToNumber(privateKey);
+    let v = new Uint8Array(32).fill(1);
+    let k = new Uint8Array(32).fill(0);
+    const b0 = Uint8Array.from([0x00]);
+    const b1 = Uint8Array.from([0x01]);
+    const x = privateKey;
+    k = await hmac(k, concat(v, b0, x, h1));
+    v = await hmac(k, v);
+    k = await hmac(k, concat(v, b1, x, h1));
+    v = await hmac(k, v);
+    for (let i = 0; i < 10000; i++) {
+        v = await hmac(k, v);
+        const T = arrayToNumber(v);
+        if (isValidPrivateKey(T) && isValidK(T, h1n, pn))
+            return T;
+        k = await hmac(k, concat(v, b0));
+        v = await hmac(k, v);
+    }
+    throw new TypeError('Too many k');
+}
 function isValidPrivateKey(privateKey) {
-    if (privateKey instanceof Uint8Array) {
-        return privateKey.length <= 32;
+    if (typeof privateKey !== 'bigint') {
+        throw new TypeError('isValidPrivateKey expects bigint');
     }
-    if (typeof privateKey === "string") {
-        return /^[0-9a-f]{0,64}$/i.test(privateKey);
-    }
-    return privateKey.toString(16).length <= 64;
+    return 0 < privateKey && privateKey < exports.PRIME_ORDER;
+}
+function isValidK(k, msg, priv) {
+    const q = exports.BASE_POINT.multiply(k);
+    const r = mod(q.x, exports.PRIME_ORDER);
+    if (r === 0n || k > r)
+        return false;
+    let s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
+    if (s === 0n)
+        return false;
+    return true;
 }
 function normalizePrivateKey(privateKey) {
-    if (!isValidPrivateKey(privateKey)) {
-        throw new Error("Private key is invalid. It should be less than 257 bit or contain valid hex string");
-    }
+    let key;
     if (privateKey instanceof Uint8Array) {
-        return arrayToNumber(privateKey);
+        key = arrayToNumber(privateKey);
     }
-    if (typeof privateKey === "string") {
-        return hexToNumber(privateKey);
+    else if (typeof privateKey === "string") {
+        key = hexToNumber(privateKey);
     }
-    return BigInt(privateKey);
+    else {
+        key = BigInt(privateKey);
+    }
+    if (!isValidPrivateKey(key)) {
+        throw new Error("Private key is invalid. It should be less than PRIME_ORDER");
+    }
+    ;
+    return key;
 }
 function normalizePublicKey(publicKey) {
     return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
@@ -317,13 +400,14 @@ function getSharedSecret(privateA, publicB) {
     return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
-function sign(hash, privateKey, { k = getRandomValue(5), recovered, canonical } = {}) {
-    const number = normalizePrivateKey(privateKey);
-    k = BigInt(k);
-    const message = truncateHash(hash);
+async function sign(hash, privateKey, { k = undefined, recovered, canonical } = {}) {
+    const priv = normalizePrivateKey(privateKey);
+    const arr = typeof hash === 'string' ? hexToArray(hash) : hash;
+    k = await deterministicK(arr, numberToArray(priv));
     const q = exports.BASE_POINT.multiply(k);
     const r = mod(q.x, exports.PRIME_ORDER);
-    let s = mod(modInverse(k, exports.PRIME_ORDER) * (message + r * number), exports.PRIME_ORDER);
+    const msg = truncateHash(hash);
+    let s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
     let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
     if (s > HIGH_NUMBER && canonical) {
         s = exports.PRIME_ORDER - s;
@@ -335,11 +419,11 @@ function sign(hash, privateKey, { k = getRandomValue(5), recovered, canonical } 
 }
 exports.sign = sign;
 function verify(signature, hash, publicKey) {
-    const message = truncateHash(hash);
+    const msg = truncateHash(hash);
     const point = normalizePublicKey(publicKey);
     const sign = normalizeSignature(signature);
     const w = modInverse(sign.s, exports.PRIME_ORDER);
-    const point1 = exports.BASE_POINT.multiply(mod(message * w, exports.PRIME_ORDER));
+    const point1 = exports.BASE_POINT.multiply(mod(msg * w, exports.PRIME_ORDER));
     const point2 = point.multiply(mod(sign.r * w, exports.PRIME_ORDER));
     const { x } = point1.add(point2);
     return x === sign.r;

@@ -10,7 +10,7 @@ export declare class Point {
     y: bigint;
     constructor(x: bigint, y: bigint);
     private static fromCompressedHex;
-    private static isValidPoint;
+    static isValidPoint(x: bigint, y: bigint): boolean;
     private static fromUncompressedHex;
     static fromHex(hash: Hex): Point;
     static fromPrivateKey(privateKey: PrivKey): Point;
@@ -43,10 +43,6 @@ declare type Options = {
     k?: number | bigint;
 };
 declare type OptionsWithK = Partial<Options>;
-export declare function sign(hash: string, privateKey: PrivKey, opts: Options): [string, bigint];
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, bigint];
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
-export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
-export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+export declare function sign(hash: Hex, privateKey: PrivKey, { k, recovered, canonical }?: OptionsWithK): Promise<Hex | [Hex, bigint]>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean;
 export {};
