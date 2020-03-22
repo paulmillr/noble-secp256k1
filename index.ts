@@ -161,6 +161,10 @@ export class Point {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
     let n = BigInt(scalar);
+    if (!isValidPrivateKey(n)) {
+      throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+    }
+
     let Q = new Point(0n, 0n);
     // Fake point.
     let F = new Point(this.x, this.y);
@@ -396,13 +400,12 @@ type QRS = [Point, bigint, bigint];
 
 // Deterministic k generation as per RFC6979.
 // https://tools.ietf.org/html/rfc6979#section-3.1
-async function deterministicK(hash: Uint8Array, privateKey: Uint8Array) {
-  const concat = concatTypedArrays;
+async function deterministicK(hash: Hex, privateKey: bigint) {
   // Step A is ignored, since we already provide hash instead of msg
-  const h1 = hexToArray(pad64(arrayToNumber(hash)));
-  const x = hexToArray(pad64(arrayToNumber(privateKey)));
+  const num = typeof hash === 'string' ? hexToNumber(hash) : arrayToNumber(hash);
+  const h1 = hexToArray(pad64(num));
+  const x = hexToArray(pad64(privateKey));
   const h1n = arrayToNumber(h1);
-  const pn = arrayToNumber(privateKey);
 
   // Step B
   let v = new Uint8Array(32).fill(1);
@@ -414,6 +417,7 @@ async function deterministicK(hash: Uint8Array, privateKey: Uint8Array) {
   // const x = privateKey;
 
   // console.log('start', arrayToHex(h1), arrayToHex(x));
+  const concat = concatTypedArrays;
 
   // Step D
   k = await hmac(k, concat(v, b0, x, h1));
@@ -425,18 +429,18 @@ async function deterministicK(hash: Uint8Array, privateKey: Uint8Array) {
   v = await hmac(k, v);
 
   // Step H3, repeat until 1 < T < n - 1
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < 1000; i++) {
     v = await hmac(k, v);
     const T = arrayToNumber(v);
     let qrs: QRS;
-    if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, pn)!) ) {
+    if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!) ) {
       return qrs;
     }
     k = await hmac(k, concat(v, b0));
     v = await hmac(k, v);
   }
 
-  throw new TypeError('secp256k1: Tried 10,000 k values for sign(), all were invalid');
+  throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 
 function isValidPrivateKey(privateKey: bigint): boolean {
@@ -459,9 +463,6 @@ function normalizePrivateKey(privateKey: PrivKey): bigint {
     key = hexToNumber(privateKey);
   } else {
     key = BigInt(privateKey);
-  }
-  if (!isValidPrivateKey(key)) {
-    throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
   }
   return key;
 }
@@ -501,27 +502,25 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array 
   return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
 }
 
-type Options = {
-  recovered?: true;
-  canonical?: true;
-};
+type OptionsWithRecovered = {recovered: true; canonical?: true};
+type OptionsWithoutRecovered = {recovered?: false; canonical?: true};
+type Options = {recovered?: boolean; canonical?: true};
 
-// type OptionsWithK = Partial<Options>;
-
-export async function sign(hash: string, privateKey: PrivKey, opts: Options): Promise<[string, number]>;
-export async function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): Promise<[Uint8Array, number]>;
-export async function sign(hash: Uint8Array, privateKey: PrivKey, opts?: Options): Promise<Uint8Array>;
-export async function sign(hash: string, privateKey: PrivKey, opts?: Options): Promise<string>;
-export async function sign(hash: string, privateKey: PrivKey, opts?: Options): Promise<string>;
+export async function sign(hash: string, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[string, number]>;
+export async function sign(hash: Uint8Array, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[Uint8Array, number]>;
+export async function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<Uint8Array>;
+export async function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
+export async function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
 export async function sign(
   hash: Hex,
   privateKey: PrivKey,
   { recovered, canonical }: Options = {}
 ): Promise<Hex | [Hex, number]> {
   const priv = normalizePrivateKey(privateKey);
-
-  const msgh = typeof hash === 'string' ? hexToArray(hash) : hash;
-  const [q, r, s] = await deterministicK(msgh, hexToArray(numberToHex(priv)));
+  if (!isValidPrivateKey(priv)) {
+    throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+  }
+  const [q, r, s] = await deterministicK(hash, priv);
 
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
   let adjustedS = s;
@@ -543,4 +542,10 @@ export function verify(signature: Signature, hash: Hex, publicKey: PubKey): bool
   const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
   const point3 = point1.add(point2);
   return point3.x === sign.r;
+}
+
+export const utils = {
+  isValidPrivateKey(privateKey: PrivKey) {
+    return isValidPrivateKey(normalizePrivateKey(privateKey));
+  }
 }

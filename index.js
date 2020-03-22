@@ -142,6 +142,9 @@ class Point {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
         let n = BigInt(scalar);
+        if (!isValidPrivateKey(n)) {
+            throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+        }
         let Q = new Point(0n, 0n);
         let F = new Point(this.x, this.y);
         let P = this;
@@ -327,30 +330,30 @@ function concatTypedArrays(...args) {
     return result;
 }
 async function deterministicK(hash, privateKey) {
-    const concat = concatTypedArrays;
-    const h1 = hexToArray(pad64(arrayToNumber(hash)));
-    const x = hexToArray(pad64(arrayToNumber(privateKey)));
+    const num = typeof hash === 'string' ? hexToNumber(hash) : arrayToNumber(hash);
+    const h1 = hexToArray(pad64(num));
+    const x = hexToArray(pad64(privateKey));
     const h1n = arrayToNumber(h1);
-    const pn = arrayToNumber(privateKey);
     let v = new Uint8Array(32).fill(1);
     let k = new Uint8Array(32).fill(0);
     const b0 = Uint8Array.from([0x00]);
     const b1 = Uint8Array.from([0x01]);
+    const concat = concatTypedArrays;
     k = await hmac(k, concat(v, b0, x, h1));
     v = await hmac(k, v);
     k = await hmac(k, concat(v, b1, x, h1));
     v = await hmac(k, v);
-    for (let i = 0; i < 10000; i++) {
+    for (let i = 0; i < 1000; i++) {
         v = await hmac(k, v);
         const T = arrayToNumber(v);
         let qrs;
-        if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, pn))) {
+        if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey))) {
             return qrs;
         }
         k = await hmac(k, concat(v, b0));
         v = await hmac(k, v);
     }
-    throw new TypeError('secp256k1: Tried 10,000 k values for sign(), all were invalid');
+    throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 function isValidPrivateKey(privateKey) {
     return 0 < privateKey && privateKey < exports.PRIME_ORDER;
@@ -373,9 +376,6 @@ function normalizePrivateKey(privateKey) {
     }
     else {
         key = BigInt(privateKey);
-    }
-    if (!isValidPrivateKey(key)) {
-        throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
     return key;
 }
@@ -405,8 +405,10 @@ function getSharedSecret(privateA, publicB) {
 exports.getSharedSecret = getSharedSecret;
 async function sign(hash, privateKey, { recovered, canonical } = {}) {
     const priv = normalizePrivateKey(privateKey);
-    const msgh = typeof hash === 'string' ? hexToArray(hash) : hash;
-    const [q, r, s] = await deterministicK(msgh, hexToArray(numberToHex(priv)));
+    if (!isValidPrivateKey(priv)) {
+        throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+    }
+    const [q, r, s] = await deterministicK(hash, priv);
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
     if (s > HIGH_NUMBER && canonical) {
@@ -429,3 +431,8 @@ function verify(signature, hash, publicKey) {
     return point3.x === sign.r;
 }
 exports.verify = verify;
+exports.utils = {
+    isValidPrivateKey(privateKey) {
+        return isValidPrivateKey(normalizePrivateKey(privateKey));
+    }
+};

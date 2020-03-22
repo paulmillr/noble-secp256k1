@@ -33,14 +33,21 @@ export declare function recoverPublicKey(hash: Hex, signature: Signature, recove
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array;
-declare type Options = {
-    recovered?: true;
+declare type OptionsWithRecovered = {
+    recovered: true;
     canonical?: true;
 };
-export declare function sign(hash: string, privateKey: PrivKey, opts: Options): Promise<[string, number]>;
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): Promise<[Uint8Array, number]>;
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts?: Options): Promise<Uint8Array>;
-export declare function sign(hash: string, privateKey: PrivKey, opts?: Options): Promise<string>;
-export declare function sign(hash: string, privateKey: PrivKey, opts?: Options): Promise<string>;
+declare type OptionsWithoutRecovered = {
+    recovered?: false;
+    canonical?: true;
+};
+export declare function sign(hash: string, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[string, number]>;
+export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[Uint8Array, number]>;
+export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<Uint8Array>;
+export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
+export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean;
+export declare const utils: {
+    isValidPrivateKey(privateKey: PrivKey): boolean;
+};
 export {};
