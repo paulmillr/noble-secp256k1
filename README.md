@@ -72,13 +72,13 @@ To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
 
 ##### `sign(hash, privateKey)`
 ```typescript
-function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Uint8Array;
-function sign(hash: string, privateKey: string | bigint, opts?: Options): string;
-function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): [Uint8Array | string, number];
+function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Promise<Uint8Array>;
+function sign(hash: string, privateKey: string | bigint, opts?: Options): Promise<string>;
+function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Promise<[Uint8Array | string, number]>;
 
 ```
 
-Generates deterministic ECDSA signature as per RFC 6979.
+Generates deterministic ECDSA signature as per RFC 6979. Asynchronous, so use `await`.
 
 - `hash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
