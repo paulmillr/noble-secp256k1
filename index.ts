@@ -248,15 +248,8 @@ export const BASE_POINT = new Point(
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
-let secureRandom = (bytesLength: number) => new Uint8Array(bytesLength);
 
 if (typeof window == 'object' && 'crypto' in window) {
-  secureRandom = (bytesLength: number): Uint8Array => {
-    const array = new Uint8Array(bytesLength);
-    window.crypto.getRandomValues(array);
-    return array;
-  };
-
   hmac = async (key: Uint8Array, message: Uint8Array) => {
     const ckey = await window.crypto.subtle.importKey(
       'raw',
@@ -270,11 +263,7 @@ if (typeof window == 'object' && 'crypto' in window) {
   };
 } else if (typeof process === 'object' && 'node' in process.versions) {
   const req = require;
-  const { randomBytes, createHmac } = req('crypto');
-  secureRandom = (bytesLength: number): Uint8Array => {
-    const b: Buffer = randomBytes(bytesLength);
-    return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-  };
+  const { createHmac } = req('crypto');
 
   hmac = async (key: Uint8Array, message: Uint8Array) => {
     const hash = createHmac('sha256', key);
@@ -283,9 +272,6 @@ if (typeof window == 'object' && 'crypto' in window) {
   };
 } else {
   throw new Error("The environment doesn't have hmac-sha256 function");
-  // throw new Error(
-  //   "The environment doesn't have cryptographically secure random function"
-  // );
 }
 
 function powMod(x: bigint, power: bigint, order: bigint) {
@@ -369,10 +355,6 @@ function modInverse(v: bigint, n: bigint): bigint {
   return mod(nm, n);
 }
 
-function getRandomNumber(bytesLength = 32): bigint {
-  return arrayToNumber(secureRandom(bytesLength));
-}
-
 function truncateHash(hash: string | Uint8Array): bigint {
   hash = typeof hash === 'string' ? hash : arrayToHex(hash);
   let msg = hexToNumber(hash || '0');
@@ -399,8 +381,9 @@ function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
 type QRS = [Point, bigint, bigint];
 
 // Deterministic k generation as per RFC6979.
+// Generates k, and then calculates Q & Signature {r, s} based on it.
 // https://tools.ietf.org/html/rfc6979#section-3.1
-async function deterministicK(hash: Hex, privateKey: bigint) {
+async function getQRSrfc6979(hash: Hex, privateKey: bigint) {
   // Step A is ignored, since we already provide hash instead of msg
   const num = typeof hash === 'string' ? hexToNumber(hash) : arrayToNumber(hash);
   const h1 = hexToArray(pad64(num));
@@ -520,7 +503,9 @@ export async function sign(
   if (!isValidPrivateKey(priv)) {
     throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
   }
-  const [q, r, s] = await deterministicK(hash, priv);
+  // We are using deterministic signature scheme
+  // instead of letting user specify random `k`.
+  const [q, r, s] = await getQRSrfc6979(hash, priv);
 
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
   let adjustedS = s;

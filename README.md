@@ -2,7 +2,7 @@
 
 [secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for assymetric encryption, ECDH key agreement protocol and ECDSA signature scheme.
 
-Algorithmically resistant to timing attacks.
+Algorithmically resistant to timing attacks. With tens of thousands test vectors.
 
 ### This library belongs to *noble* crypto
 
@@ -74,13 +74,17 @@ To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
 ```typescript
 function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): Uint8Array;
 function sign(hash: string, privateKey: string | bigint, opts?: Options): string;
+function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, opts?: Options): [Uint8Array | string, number];
+
 ```
+
+Generates deterministic ECDSA signature as per RFC 6979.
+
 - `hash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format
-- `options?.k: number | bigint` - random seed. Default is one from `crypto.getRandomValues()`. **Must be cryptographically secure**, which means `Math.random()` won't work.
-- `options?.recovered: boolean` - determines whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
-- `options?.canonical: boolean` - determines whether a signature `s` should be sorted by half prime order
+- `options?.recovered: boolean = false` - determines whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
+- `options?.canonical: boolean = false` - determines whether a signature `s` should be no more than 1/2 prime order
 - Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`.
 
 ##### `verify(signature, hash)`
@@ -139,11 +143,9 @@ secp256k1.SignResult {
   constructor(r: bigint, s: bigint);
   // DER encoded ECDSA signature
   static fromHex(hex: Uint8Array | string);
-  toHex()
+  toHex(): string;
 }
 ```
-
-There is an option to have 2x speed-up by precomputing powers of two. Use `generate-precomputes` script & include the result in index.ts.
 
 ## Security
 

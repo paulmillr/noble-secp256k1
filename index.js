@@ -210,13 +210,7 @@ class SignResult {
 exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
 let hmac;
-let secureRandom = (bytesLength) => new Uint8Array(bytesLength);
 if (typeof window == 'object' && 'crypto' in window) {
-    secureRandom = (bytesLength) => {
-        const array = new Uint8Array(bytesLength);
-        window.crypto.getRandomValues(array);
-        return array;
-    };
     hmac = async (key, message) => {
         const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
         const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
@@ -225,11 +219,7 @@ if (typeof window == 'object' && 'crypto' in window) {
 }
 else if (typeof process === 'object' && 'node' in process.versions) {
     const req = require;
-    const { randomBytes, createHmac } = req('crypto');
-    secureRandom = (bytesLength) => {
-        const b = randomBytes(bytesLength);
-        return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-    };
+    const { createHmac } = req('crypto');
     hmac = async (key, message) => {
         const hash = createHmac('sha256', key);
         hash.update(message);
@@ -305,9 +295,6 @@ function modInverse(v, n) {
     }
     return mod(nm, n);
 }
-function getRandomNumber(bytesLength = 32) {
-    return arrayToNumber(secureRandom(bytesLength));
-}
 function truncateHash(hash) {
     hash = typeof hash === 'string' ? hash : arrayToHex(hash);
     let msg = hexToNumber(hash || '0');
@@ -329,7 +316,7 @@ function concatTypedArrays(...args) {
     }
     return result;
 }
-async function deterministicK(hash, privateKey) {
+async function getQRSrfc6979(hash, privateKey) {
     const num = typeof hash === 'string' ? hexToNumber(hash) : arrayToNumber(hash);
     const h1 = hexToArray(pad64(num));
     const x = hexToArray(pad64(privateKey));
@@ -408,7 +395,7 @@ async function sign(hash, privateKey, { recovered, canonical } = {}) {
     if (!isValidPrivateKey(priv)) {
         throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
-    const [q, r, s] = await deterministicK(hash, priv);
+    const [q, r, s] = await getQRSrfc6979(hash, priv);
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
     if (s > HIGH_NUMBER && canonical) {
