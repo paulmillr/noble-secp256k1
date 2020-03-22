@@ -21,7 +21,7 @@ export class Point {
 
   private static fromCompressedHex(bytes: Uint8Array) {
     if (bytes.length !== 33) {
-      throw new Error(`Point.fromCompressedHex expects 66 bytes, not ${bytes.length * 2}`);
+      throw new TypeError(`Point.fromCompressedHex expects 66 bytes, not ${bytes.length * 2}`);
     }
     const x = arrayToNumber(bytes.slice(1));
     const sqrY = mod(x ** 3n + A * x + B, P);
@@ -32,7 +32,7 @@ export class Point {
       y = mod(-y, P);
     }
     if (!Point.isValidPoint(x, y)) {
-      throw new Error("secp256k1: Point is not on elliptic curve");
+      throw new TypeError("secp256k1: Point is not on elliptic curve");
     }
     return new Point(x, y);
   }
@@ -40,7 +40,6 @@ export class Point {
   static isValidPoint(x: bigint, y: bigint) {
     if (x === 0n || y === 0n || x >= P || y >= P) return false;
 
-    console.log('isValidPoint', x, y);
     const sqrY = y * y;
     const yEquivalence = x ** 3n + A * x + B;
     const actualSqrY1 = mod(sqrY, P);
@@ -57,12 +56,12 @@ export class Point {
 
   private static fromUncompressedHex(bytes: Uint8Array) {
     if (bytes.length !== 65) {
-      throw new Error(`Point.fromUncompressedHex expects 130 bytes, not ${bytes.length * 2}`);
+      throw new TypeError(`Point.fromUncompressedHex expects 130 bytes, not ${bytes.length * 2}`);
     }
     const x = arrayToNumber(bytes.slice(1, 33));
     const y = arrayToNumber(bytes.slice(33));
     if (!this.isValidPoint(x, y)) {
-      throw new Error("secp256k1: Point is not on elliptic curve");
+      throw new TypeError("secp256k1: Point is not on elliptic curve");
     }
     return new Point(x, y);
   }
@@ -140,8 +139,17 @@ export class Point {
     if (b.x === 0n && b.y === 0n) {
       return a;
     }
-    if (a.x === b.y && a.y == -b.y) {
+    if (a.x === b.y && a.y === -b.y) {
       return new Point(0n, 0n);
+    }
+    if (a.x === b.x) {
+      if (a.y === b.y) {
+        return this.double();
+      } else {
+        // Point at undefined.
+        throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
+        // return undefined;
+      }
     }
     const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, P), P);
     const x = mod(lamAdd * lamAdd - a.x - b.x, P);
@@ -372,7 +380,6 @@ function truncateHash(hash: string | Uint8Array): bigint {
 
 function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
   const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-  // console.log('concat', result.length);
   for (let i = 0, pad = 0; i < args.length; i++) {
     const arr = args[i];
     result.set(arr, pad);
@@ -453,10 +460,10 @@ function normalizePrivateKey(privateKey: PrivKey): bigint {
   } else if (typeof privateKey === "string") {
     key = hexToNumber(privateKey);
   } else {
-    key = BigInt(privateKey)
+    key = BigInt(privateKey);
   }
   if (!isValidPrivateKey(key)) {
-    throw new Error("Private key is invalid. It should be less than PRIME_ORDER");
+    throw new Error("Private key is invalid. Expected 0 < key < PRIME_ORDER");
   };
   return key;
 }

@@ -5,7 +5,8 @@
     "module": "commonjs",
     "noImplicitAny": true,
     "removeComments": true,
-    "preserveConstEnums": true
+    "preserveConstEnums": true,
+    "resolveJsonModule": true
   },
   "include": ["./*.ts"],
   "exclude": ["node_modules", "index.test.ts"]

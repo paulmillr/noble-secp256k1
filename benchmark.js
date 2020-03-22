@@ -11,7 +11,6 @@ console.time('getPublicKey 1 bit');
 secp.getPublicKey(1n);
 console.timeEnd('getPublicKey 1 bit');
 
-console.log(secp.getPublicKey(0, true));
 console.log(secp.getPublicKey(1, true));
 console.log(secp.getPublicKey(6, true));
 // Uint8Array(33) [
