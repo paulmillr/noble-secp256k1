@@ -10,43 +10,44 @@ export declare class Point {
     y: bigint;
     constructor(x: bigint, y: bigint);
     private static fromCompressedHex;
-    private static isValidPoint;
+    static isValidPoint(x: bigint, y: bigint): boolean;
     private static fromUncompressedHex;
     static fromHex(hash: Hex): Point;
     static fromPrivateKey(privateKey: PrivKey): Point;
-    static fromSignature(hash: Hex, signature: Signature, recovery: number | bigint): Point | undefined;
-    private uncompressedHex;
-    private compressedHex;
+    static fromSignature(hash: Hex, signature: Signature, recovery: number): Point | undefined;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
     add(other: Point): Point;
     private double;
-    multiply(scalar: number | bigint | Uint8Array): Point;
+    multiply(scalar: number | bigint): Point;
 }
 export declare class SignResult {
     r: bigint;
     s: bigint;
     constructor(r: bigint, s: bigint);
     static fromHex(hex: Hex): SignResult;
-    private formatLength;
-    private formatNumberToHex;
-    toHex(): string;
+    toHex(compressed?: boolean): string;
 }
 export declare const BASE_POINT: Point;
-export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: number | bigint): Uint8Array | undefined;
+export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: number): Uint8Array | undefined;
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array;
-declare type Options = {
+declare type OptionsWithRecovered = {
     recovered: true;
     canonical?: true;
-    k?: number | bigint;
 };
-declare type OptionsWithK = Partial<Options>;
-export declare function sign(hash: string, privateKey: PrivKey, opts: Options): [string, bigint];
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, bigint];
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
-export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
-export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
+declare type OptionsWithoutRecovered = {
+    recovered?: false;
+    canonical?: true;
+};
+export declare function sign(hash: string, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[string, number]>;
+export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[Uint8Array, number]>;
+export declare function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<Uint8Array>;
+export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
+export declare function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean;
+export declare const utils: {
+    isValidPrivateKey(privateKey: PrivKey): boolean;
+};
 export {};

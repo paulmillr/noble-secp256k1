@@ -1,12 +1,13 @@
 {
   "compilerOptions": {
     "strict": true,
-    "target": "esnext",
+    "target": "es2020",
     "module": "commonjs",
     "noImplicitAny": true,
     "removeComments": true,
-    "preserveConstEnums": true
+    "preserveConstEnums": true,
+    "resolveJsonModule": true
   },
-  "include": ["./*.ts"],
-  "exclude": ["node_modules", "index.test.ts"]
+  "include": ["*.ts"],
+  "exclude": ["node_modules"]
 }
