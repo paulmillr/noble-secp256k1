@@ -15,7 +15,7 @@ class Point {
     }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
-            throw new TypeError(`Point.fromCompressedHex expects 66 bytes, not ${bytes.length * 2}`);
+            throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
         }
         const x = arrayToNumber(bytes.slice(1));
         const sqrY = mod(x ** 3n + A * x + B, exports.P);
@@ -26,7 +26,7 @@ class Point {
             y = mod(-y, exports.P);
         }
         if (!Point.isValidPoint(x, y)) {
-            throw new TypeError("secp256k1: Point is not on elliptic curve");
+            throw new TypeError("Point.fromHex: Point is not on elliptic curve");
         }
         return new Point(x, y);
     }
@@ -46,42 +46,42 @@ class Point {
     }
     static fromUncompressedHex(bytes) {
         if (bytes.length !== 65) {
-            throw new TypeError(`Point.fromUncompressedHex expects 130 bytes, not ${bytes.length * 2}`);
+            throw new TypeError(`Point.fromHex: uncompressed expects 130 bytes, not ${bytes.length * 2}`);
         }
         const x = arrayToNumber(bytes.slice(1, 33));
         const y = arrayToNumber(bytes.slice(33));
         if (!this.isValidPoint(x, y)) {
-            throw new TypeError("secp256k1: Point is not on elliptic curve");
+            throw new TypeError("Point.fromHex: Point is not on elliptic curve");
         }
         return new Point(x, y);
     }
     static fromHex(hash) {
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const header = bytes[0];
-        if (header === 0x04)
-            return this.fromUncompressedHex(bytes);
         if (header === 0x02 || header === 0x03)
             return this.fromCompressedHex(bytes);
+        if (header === 0x04)
+            return this.fromUncompressedHex(bytes);
         throw new TypeError('Point.fromHex: received invalid point');
     }
     static fromPrivateKey(privateKey) {
         return exports.BASE_POINT.multiply(normalizePrivateKey(privateKey));
     }
     static fromSignature(hash, signature, recovery) {
-        recovery = BigInt(recovery);
+        recovery = Number(recovery);
         const sign = normalizeSignature(signature);
         const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
         if (sign.r === 0n || sign.s === 0n) {
             return;
         }
         let publicKeyX = sign.r;
-        if (recovery >> 1n) {
+        if (recovery >> 1) {
             if (publicKeyX >= SUBPN) {
                 return;
             }
             publicKeyX = sign.r + exports.PRIME_ORDER;
         }
-        const compresedHex = `$0{2n + (recovery & 1n)}${publicKeyX.toString(16)}`;
+        const compresedHex = `0${2 + (recovery & 1)}${pad64(publicKeyX)}`;
         const publicKey = Point.fromHex(compresedHex);
         const rInv = modInverse(sign.r, exports.PRIME_ORDER);
         const s1 = mod((exports.PRIME_ORDER - message) * rInv, exports.P);
@@ -90,24 +90,22 @@ class Point {
         const point2 = publicKey.multiply(s2);
         return point1.add(point2);
     }
-    uncompressedHex() {
-        const yHex = this.y.toString(16).padStart(64, "0");
-        const xHex = this.x.toString(16).padStart(64, "0");
-        return `04${xHex}${yHex}`;
-    }
-    compressedHex() {
-        let hex = this.x.toString(16).padStart(64, "0");
-        const head = this.y & 1n ? "03" : "02";
-        return `${head}${hex}`;
-    }
     toRawBytes(isCompressed = false) {
-        const hex = this.toHex(isCompressed);
-        return hexToArray(hex);
+        return hexToArray(this.toHex(isCompressed));
     }
     toHex(isCompressed = false) {
-        return isCompressed ? this.compressedHex() : this.uncompressedHex();
+        const x = pad64(this.x);
+        if (isCompressed) {
+            return `${this.y & 1n ? '03' : '02'}${x}`;
+        }
+        else {
+            return `04${x}${pad64(this.y)}`;
+        }
     }
     add(other) {
+        if (!(other instanceof Point)) {
+            throw new TypeError('Point#add: expected Point');
+        }
         const a = this;
         const b = other;
         if (a.x === 0n && a.y === 0n) {
@@ -140,8 +138,10 @@ class Point {
         return new Point(x, y);
     }
     multiply(scalar) {
-        let n = scalar instanceof Uint8Array ?
-            arrayToNumber(scalar) : BigInt(scalar);
+        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+            throw new TypeError('Point#multiply: expected number or bigint');
+        }
+        let n = BigInt(scalar);
         let Q = new Point(0n, 0n);
         let F = new Point(this.x, this.y);
         let P = this;
@@ -169,25 +169,24 @@ class SignResult {
         this.s = s;
     }
     static fromHex(hex) {
-        const hash = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
-        const rLength = parseInt(`${hash[6]}${hash[7]}`, 16) * 2;
-        const r = BigInt(`0x${hash.substr(8, rLength)}`);
-        const s = BigInt(`0x${hash.slice(12 + rLength)}`);
+        const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
+        if (typeof str !== 'string')
+            throw new TypeError(({}).toString.call(hex));
+        const rLength = Number.parseInt(str.slice(6, 8), 16) * 2;
+        const rLengthEnd = 8 + rLength;
+        const r = hexToNumber(str.slice(8, rLengthEnd));
+        const sLength = Number.parseInt(str.slice(rLengthEnd, rLengthEnd + 2), 16) * 2;
+        const sLengthStart = rLengthEnd + 2;
+        const sLengthEnd = sLengthStart + sLength;
+        const s = hexToNumber(str.slice(sLengthStart, sLengthEnd));
         return new SignResult(r, s);
     }
-    formatLength(hex) {
-        return (hex.length / 2).toString(16).padStart(2, "0");
-    }
-    formatNumberToHex(num) {
-        const res = num.toString(16);
-        return res.length & 1 ? `0${res}` : res;
-    }
     toHex() {
-        const rHex = `00${this.formatNumberToHex(this.r)}`;
-        const sHex = this.formatNumberToHex(this.s);
-        const rLen = this.formatLength(rHex);
-        const sLen = this.formatLength(sHex);
-        const length = this.formatNumberToHex(rHex.length / 2 + sHex.length / 2 + 4);
+        const rHex = `00${numberToHex(this.r)}`;
+        const sHex = numberToHex(this.s);
+        const rLen = numberToHex(rHex.length / 2);
+        const sLen = numberToHex(sHex.length / 2);
+        const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
         return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
     }
 }
@@ -232,9 +231,6 @@ else if (typeof process === "object" && "node" in process.versions) {
 else {
     throw new Error("The environment doesn't have hmac-sha256 function");
 }
-function getRandomValue(bytesLength) {
-    return arrayLEToNumber(secureRandom(bytesLength));
-}
 function powMod(x, power, order) {
     let res = 1n;
     while (power > 0) {
@@ -247,38 +243,36 @@ function powMod(x, power, order) {
     return res;
 }
 function arrayToHex(uint8a) {
-    return Array.from(uint8a)
-        .map(c => c.toString(16).padStart(2, "0"))
-        .join("");
-}
-function hexToArray(hash) {
-    hash = hash.length & 1 ? `0${hash}` : hash;
-    const len = hash.length;
-    const result = new Uint8Array(len / 2);
-    for (let i = 0, j = 0; i < len - 1; i += 2, j++) {
-        result[j] = parseInt(hash[i] + hash[i + 1], 16);
+    let hex = '';
+    for (let i = 0; i < uint8a.length; i++) {
+        hex += uint8a[i].toString(16).padStart(2, '0');
     }
-    return result;
+    return hex;
+}
+function numberToHex(num) {
+    const hex = num.toString(16);
+    return hex.length & 1 ? `0${hex}` : hex;
 }
 function hexToNumber(hex) {
+    if (typeof hex !== 'string') {
+        throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
+    }
     return BigInt(`0x${hex}`);
 }
-function numberToArray(number, length = 64) {
-    return hexToArray(number.toString(16).padStart(length, '0'));
+function hexToArray(hex) {
+    hex = hex.length & 1 ? `0${hex}` : hex;
+    const array = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < array.length; i++) {
+        let j = i * 2;
+        array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
+    }
+    return array;
 }
 function arrayToNumber(bytes) {
-    let value = 0n;
-    for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
-        value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
-    }
-    return value;
+    return hexToNumber(arrayToHex(bytes));
 }
-function arrayLEToNumber(bytes) {
-    let value = 0n;
-    for (let i = 0; i < bytes.length; i++) {
-        value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(i));
-    }
-    return value;
+function pad64(num) {
+    return num.toString(16).padStart(64, '0');
 }
 function mod(a, b) {
     const result = a % b;
@@ -303,9 +297,12 @@ function modInverse(v, n) {
     }
     return mod(nm, n);
 }
+function getRandomNumber(bytesLength = 32) {
+    return arrayToNumber(secureRandom(bytesLength));
+}
 function truncateHash(hash) {
     hash = typeof hash === "string" ? hash : arrayToHex(hash);
-    let msg = BigInt(`0x${hash || "0"}`);
+    let msg = hexToNumber(hash || '0');
     const delta = (hash.length / 2) * 8 - PRIME_SIZE;
     if (delta > 0) {
         msg = msg >> BigInt(delta);
@@ -326,7 +323,7 @@ function concatTypedArrays(...args) {
 }
 async function deterministicK(hash, privateKey) {
     const concat = concatTypedArrays;
-    const h1 = numberToArray(mod(arrayToNumber(hash), exports.PRIME_ORDER));
+    const h1 = hexToArray(pad64(mod(arrayToNumber(hash), exports.PRIME_ORDER)));
     const h1n = arrayToNumber(h1);
     const pn = arrayToNumber(privateKey);
     let v = new Uint8Array(32).fill(1);
@@ -349,9 +346,6 @@ async function deterministicK(hash, privateKey) {
     throw new TypeError('Too many k');
 }
 function isValidPrivateKey(privateKey) {
-    if (typeof privateKey !== 'bigint') {
-        throw new TypeError('isValidPrivateKey expects bigint');
-    }
     return 0 < privateKey && privateKey < exports.PRIME_ORDER;
 }
 function isValidK(k, msg, priv) {
@@ -407,18 +401,16 @@ function getSharedSecret(privateA, publicB) {
     return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
-async function sign(hash, privateKey, { k = undefined, recovered, canonical } = {}) {
+function sign(hash, privateKey, { k = getRandomNumber(), recovered, canonical } = {}) {
     const priv = normalizePrivateKey(privateKey);
-    const arr = typeof hash === 'string' ? hexToArray(hash) : hash;
-    k = await deterministicK(arr, numberToArray(priv));
     const q = exports.BASE_POINT.multiply(k);
     const r = mod(q.x, exports.PRIME_ORDER);
     const msg = truncateHash(hash);
     let s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
-    let recovery = (q.x === r ? 0n : 2n) | (q.y & 1n);
+    let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     if (s > HIGH_NUMBER && canonical) {
         s = exports.PRIME_ORDER - s;
-        recovery ^= 1n;
+        recovery ^= 1;
     }
     const res = new SignResult(r, s).toHex();
     const hashed = hash instanceof Uint8Array ? hexToArray(res) : res;
@@ -427,12 +419,12 @@ async function sign(hash, privateKey, { k = undefined, recovered, canonical } = 
 exports.sign = sign;
 function verify(signature, hash, publicKey) {
     const msg = truncateHash(hash);
-    const point = normalizePublicKey(publicKey);
     const sign = normalizeSignature(signature);
+    const point = normalizePublicKey(publicKey);
     const w = modInverse(sign.s, exports.PRIME_ORDER);
     const point1 = exports.BASE_POINT.multiply(mod(msg * w, exports.PRIME_ORDER));
     const point2 = point.multiply(mod(sign.r * w, exports.PRIME_ORDER));
-    const { x } = point1.add(point2);
-    return x === sign.r;
+    const point3 = point1.add(point2);
+    return point3.x === sign.r;
 }
 exports.verify = verify;

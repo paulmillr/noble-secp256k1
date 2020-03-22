@@ -43,128 +43,130 @@ const toLEHex = (n: number | bigint) =>
     .join("");
 
 describe("secp256k1", () => {
-  // it("should verify just signed message", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.hexa(),
-  //       fc.bigInt(1n, secp256k1.PRIME_ORDER),
-  //       (message, privateKey) => {
-  //         const signature = secp256k1.sign(message, privateKey);
-  //         const publicKey = secp256k1.Point.fromPrivateKey(privateKey).toHex(true);
-  //         expect(publicKey.length).toBe(66);
-  //         expect(secp256k1.verify(signature, message, publicKey)).toBe(true);
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should not verify sign with wrong message", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.hexa(),
-  //       fc.hexa(),
-  //       fc.bigInt(1n, secp256k1.PRIME_ORDER),
-  //       (message, wrongMessage, privateKey) => {
-  //         const signature = secp256k1.sign(message, privateKey);
-  //         const publicKey = secp256k1.getPublicKey(privateKey);
-  //         expect(secp256k1.verify(signature, wrongMessage, publicKey)).toBe(
-  //           message === wrongMessage
-  //         );
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should decode right encoded point with compresed hex", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.bigUint(secp256k1.PRIME_ORDER),
-  //       fc.integer(2, 3),
-  //       (x, prefix) => {
-  //         const compresedHex = `0${prefix}${toLEHex(x)}`;
-  //         const point = secp256k1.Point.fromHex(compresedHex);
-  //         expect(point.toHex(true)).toBe(compresedHex);
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should decode right encoded signature with hex", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.bigUint(secp256k1.PRIME_ORDER),
-  //       fc.bigUint(secp256k1.PRIME_ORDER),
-  //       (r, s) => {
-  //         const signature = new secp256k1.SignResult(r, s);
-  //         const hex = signature.toHex();
-  //         expect(SignResult.fromHex(hex)).toEqual(signature);
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should resove valid curve point", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.bigUint(secp256k1.PRIME_ORDER),
-  //       fc.integer(2, 3),
-  //       (x, prefix) => {
-  //         const compresedHex = `0${prefix}${toLEHex(x)}`;
-  //         const point = secp256k1.Point.fromHex(compresedHex);
-  //         const uncompressedHex = point.toHex();
-  //         expect(secp256k1.Point.fromHex(uncompressedHex)).toEqual(point);
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should reject invalid curve point", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.bigUint(secp256k1.PRIME_ORDER),
-  //       fc.integer(2, 3),
-  //       (x, prefix) => {
-  //         const compresedHex = `0${prefix}${toLEHex(x)}`;
-  //         const point = secp256k1.Point.fromHex(compresedHex);
-  //         point.x = secp256k1.PRIME_ORDER + 6n;
-  //         const uncompressedHex = point.toHex();
-  //         expect(() => secp256k1.Point.fromHex(uncompressedHex)).toThrow(
-  //           new Error("secp256k1: Point is not on elliptic curve")
-  //         );
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should recovery public key from recovery bit", () => {
-  //   fc.assert(
-  //     fc.property(
-  //       fc.hexa(),
-  //       fc.bigInt(1n, secp256k1.PRIME_ORDER),
-  //       (message, privateKey) => {
-  //         const [signature, recovery] = secp256k1.sign(message, privateKey, { recovered: true });
-  //         const recoveredPublicKey = secp256k1.recoverPublicKey(message, signature, recovery);
-  //         const publicKey = secp256k1.getPublicKey(privateKey);
-  //         expect(recoveredPublicKey).not.toBe(null);
-  //         expect(secp256k1.verify(signature, message, publicKey)).toBe(true);
-  //       }
-  //     )
-  //   );
-  // });
-  // it("should sign and verify", () => {
-  //   const signature = secp256k1.sign(MESSAGE, PRIVATE_KEY);
-  //   const publicKey = secp256k1.getPublicKey(PRIVATE_KEY, true);
-  //   expect(publicKey.length).toBe(66);
-  //   expect(secp256k1.verify(signature, MESSAGE, publicKey)).toBe(true);
-  // });
-  // it("should not verify signature with wrong public key", () => {
-  //   const signature = secp256k1.sign(MESSAGE, PRIVATE_KEY);
-  //   const publicKey = secp256k1.Point.fromPrivateKey(12).toHex(true);
-  //   expect(publicKey.length).toBe(66);
-  //   expect(secp256k1.verify(signature, MESSAGE, publicKey)).toBe(false);
-  // });
-  // it("should not verify signature with wrong hash", () => {
-  //   const signature = secp256k1.sign(MESSAGE, PRIVATE_KEY);
-  //   const publicKey = secp256k1.getPublicKey(PRIVATE_KEY, true);
-  //   expect(publicKey.length).toBe(66);
-  //   expect(secp256k1.verify(signature, WRONG_MESSAGE, publicKey)).toBe(false);
-  // });
+  it("should verify just signed message", () => {
+    fc.assert(
+      fc.property(
+        fc.hexaString(32, 32),
+        fc.bigInt(1n, secp256k1.PRIME_ORDER),
+        (message, privateKey) => {
+          const signature = secp256k1.sign(message, privateKey);
+          const publicKey = secp256k1.Point.fromPrivateKey(privateKey).toHex(true);
+          expect(publicKey.length).toBe(66);
+          console.log('verify', signature, message, publicKey);
+          expect(secp256k1.verify(signature, message, publicKey)).toBeTruthy();
+        }
+      )
+    );
+  });
+  it("should not verify sign with wrong message", () => {
+    fc.assert(
+      fc.property(
+        fc.hexa(),
+        fc.hexa(),
+        fc.bigInt(1n, secp256k1.PRIME_ORDER),
+        (message, wrongMessage, privateKey) => {
+          const signature = secp256k1.sign(message, privateKey);
+          const publicKey = secp256k1.getPublicKey(privateKey);
+          expect(secp256k1.verify(signature, wrongMessage, publicKey)).toBe(
+            message === wrongMessage
+          );
+        }
+      )
+    );
+  });
+  it("should decode right encoded point with compresed hex", () => {
+    fc.assert(
+      fc.property(
+        fc.bigUint(secp256k1.PRIME_ORDER),
+        fc.integer(2, 3),
+        (x, prefix) => {
+          const compresedHex = `0${prefix}${toLEHex(x)}`;
+          const point = secp256k1.Point.fromHex(compresedHex);
+          expect(point.toHex(true)).toBe(compresedHex);
+        }
+      )
+    );
+  });
+  it("should decode right encoded signature with hex", () => {
+    fc.assert(
+      fc.property(
+        fc.bigUint(secp256k1.PRIME_ORDER),
+        fc.bigUint(secp256k1.PRIME_ORDER),
+        (r, s) => {
+          const signature = new secp256k1.SignResult(r, s);
+          const hex = signature.toHex();
+          expect(SignResult.fromHex(hex)).toEqual(signature);
+        }
+      )
+    );
+  });
+  it("should resove valid curve point", () => {
+    fc.assert(
+      fc.property(
+        fc.bigUint(secp256k1.PRIME_ORDER),
+        fc.integer(2, 3),
+        (x, prefix) => {
+          const compresedHex = `0${prefix}${toLEHex(x)}`;
+          const point = secp256k1.Point.fromHex(compresedHex);
+          const uncompressedHex = point.toHex();
+          expect(secp256k1.Point.fromHex(uncompressedHex)).toEqual(point);
+        }
+      )
+    );
+  });
+  it("should reject invalid curve point", () => {
+    fc.assert(
+      fc.property(
+        fc.bigUint(secp256k1.PRIME_ORDER),
+        fc.integer(2, 3),
+        (x, prefix) => {
+          const compresedHex = `0${prefix}${toLEHex(x)}`;
+          const point = secp256k1.Point.fromHex(compresedHex);
+          point.x = secp256k1.PRIME_ORDER + 6n;
+          const uncompressedHex = point.toHex();
+          expect(() => secp256k1.Point.fromHex(uncompressedHex)).toThrow(
+            new TypeError("Point.fromHex: Point is not on elliptic curve")
+          );
+        }
+      )
+    );
+  });
+  it("should recovery public key from recovery bit", () => {
+    fc.assert(
+      fc.property(
+        fc.hexa(),
+        fc.bigInt(1n, secp256k1.PRIME_ORDER),
+        (message, privateKey) => {
+          const [signature, recovery] = secp256k1.sign(message, privateKey, { recovered: true });
+          const recoveredPublicKey = secp256k1.recoverPublicKey(message, signature, recovery);
+          const publicKey = secp256k1.getPublicKey(privateKey);
+          expect(recoveredPublicKey).not.toBe(null);
+          expect(secp256k1.verify(signature, message, publicKey)).toBe(true);
+        }
+      )
+    );
+  });
+  it("should sign and verify", () => {
+    const signature = secp256k1.sign(MESSAGE, PRIVATE_KEY);
+    const publicKey = secp256k1.getPublicKey(PRIVATE_KEY, true);
+    expect(publicKey.length).toBe(66);
+    expect(secp256k1.verify(signature, MESSAGE, publicKey)).toBe(true);
+  });
+  it("should not verify signature with wrong public key", () => {
+    const signature = secp256k1.sign(MESSAGE, PRIVATE_KEY);
+    const publicKey = secp256k1.Point.fromPrivateKey(12).toHex(true);
+    expect(publicKey.length).toBe(66);
+    expect(secp256k1.verify(signature, MESSAGE, publicKey)).toBe(false);
+  });
+  it("should not verify signature with wrong hash", () => {
+    const signature = secp256k1.sign(MESSAGE, PRIVATE_KEY);
+    const publicKey = secp256k1.getPublicKey(PRIVATE_KEY, true);
+    expect(publicKey.length).toBe(66);
+    // console.log('verify', signature, WRONG_MESSAGE, publicKey)
+    expect(secp256k1.verify(signature, WRONG_MESSAGE, publicKey)).toBe(false);
+  });
 
-  it('getPublicKey', () => {
+  it.skip('getPublicKey', () => {
     for (const vector of privates.valid.isPrivate) {
       const {d, expected, description} = vector;
       if (expected) {
@@ -187,19 +189,6 @@ describe("secp256k1", () => {
       }
     });
 
-    it('#add(other)', () => {
-      for (const vector of points.valid.pointAdd) {
-        const {P, Q, expected, description} = vector;
-        let p = secp256k1.Point.fromHex(P);
-        let q = secp256k1.Point.fromHex(Q);
-        if (expected) {
-          expect(p.add(q).toHex(true)).toBe(expected);
-        } else {
-          expect(() => p.add(q).toHex(true)).toThrowError();
-        }
-      }
-    });
-
     it('.fromPrivateKey()', () => {
       for (const vector of points.valid.pointFromScalar) {
         const {d, expected} = vector;
@@ -216,6 +205,31 @@ describe("secp256k1", () => {
         expect(p.toHex(compress)).toBe(expected);
       }
     });
+
+    it('#add(other)', () => {
+      for (const vector of points.valid.pointAdd) {
+        const {P, Q, expected, description} = vector;
+        let p = secp256k1.Point.fromHex(P);
+        let q = secp256k1.Point.fromHex(Q);
+        if (expected) {
+          expect(p.add(q).toHex(true)).toBe(expected);
+        } else {
+          expect(() => p.add(q).toHex(true)).toThrowError();
+        }
+      }
+    });
+
+    // it.only('#multiply(privateKey)', () => {
+    //   for (const vector of points.valid.pointMultiply) {
+    //     const {P, d, expected, description} = vector;
+    //     let p = secp256k1.Point.fromHex(P);
+    //     if (expected) {
+    //       expect(p.multiply(d)).toBe(expected);
+    //     } else {
+    //       expect(() => p.multiply(d)).toThrowError();
+    //     }
+    //   }
+    // });
   });
 
 
