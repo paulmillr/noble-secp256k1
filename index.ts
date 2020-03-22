@@ -5,8 +5,7 @@ const B = 7n;
 // 𝔽p
 export const P = 2n ** 256n - 2n ** 32n - 977n;
 // Subgroup order, cofactor is 1
-export const PRIME_ORDER =
-  2n ** 256n - 432420386565659656852420866394968145599n;
+export const PRIME_ORDER = 2n ** 256n - 432420386565659656852420866394968145599n;
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
@@ -32,7 +31,7 @@ export class Point {
       y = mod(-y, P);
     }
     if (!Point.isValidPoint(x, y)) {
-      throw new TypeError("Point.fromHex: Point is not on elliptic curve");
+      throw new TypeError('Point.fromHex: Point is not on elliptic curve');
     }
     return new Point(x, y);
   }
@@ -61,14 +60,14 @@ export class Point {
     const x = arrayToNumber(bytes.slice(1, 33));
     const y = arrayToNumber(bytes.slice(33));
     if (!this.isValidPoint(x, y)) {
-      throw new TypeError("Point.fromHex: Point is not on elliptic curve");
+      throw new TypeError('Point.fromHex: Point is not on elliptic curve');
     }
     return new Point(x, y);
   }
 
   static fromHex(hash: Hex) {
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
-    const header = bytes[0]
+    const header = bytes[0];
     if (header === 0x02 || header === 0x03) return this.fromCompressedHex(bytes);
     if (header === 0x04) return this.fromUncompressedHex(bytes);
     throw new TypeError('Point.fromHex: received invalid point');
@@ -78,16 +77,10 @@ export class Point {
     return BASE_POINT.multiply(normalizePrivateKey(privateKey));
   }
 
-  static fromSignature(
-    hash: Hex,
-    signature: Signature,
-    recovery: number
-  ): Point | undefined {
+  static fromSignature(hash: Hex, signature: Signature, recovery: number): Point | undefined {
     recovery = Number(recovery);
     const sign = normalizeSignature(signature);
-    const message = truncateHash(
-      typeof hash === "string" ? hexToArray(hash) : hash
-    );
+    const message = truncateHash(typeof hash === 'string' ? hexToArray(hash) : hash);
     if (sign.r === 0n || sign.s === 0n) {
       return;
     }
@@ -206,7 +199,7 @@ export class SignResult {
   static fromHex(hex: Hex) {
     // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
     const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
-    if (typeof str !== 'string') throw new TypeError(({}).toString.call(hex));
+    if (typeof str !== 'string') throw new TypeError({}.toString.call(hex));
 
     const check1 = str.slice(0, 2);
     const length = parseByte(str.slice(2, 4));
@@ -237,9 +230,7 @@ export class SignResult {
     const sHex = numberToHex(this.s);
     const rLen = numberToHex(rHex.length / 2);
     const sLen = numberToHex(sHex.length / 2);
-    const length = numberToHex(
-      rHex.length / 2 + sHex.length / 2 + 4
-    );
+    const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
   }
 }
@@ -254,7 +245,7 @@ export const BASE_POINT = new Point(
 let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
 let secureRandom = (bytesLength: number) => new Uint8Array(bytesLength);
 
-if (typeof window == "object" && "crypto" in window) {
+if (typeof window == 'object' && 'crypto' in window) {
   secureRandom = (bytesLength: number): Uint8Array => {
     const array = new Uint8Array(bytesLength);
     window.crypto.getRandomValues(array);
@@ -263,23 +254,25 @@ if (typeof window == "object" && "crypto" in window) {
 
   hmac = async (key: Uint8Array, message: Uint8Array) => {
     const ckey = await window.crypto.subtle.importKey(
-      "raw", key,
-      {name: "HMAC", hash: {name: "SHA-256"}},
-      false, ["sign", "verify"]
+      'raw',
+      key,
+      { name: 'HMAC', hash: { name: 'SHA-256' } },
+      false,
+      ['sign', 'verify']
     );
-    const buffer = await window.crypto.subtle.sign("HMAC", ckey, message);
+    const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
     return new Uint8Array(buffer);
   };
-} else if (typeof process === "object" && "node" in process.versions) {
+} else if (typeof process === 'object' && 'node' in process.versions) {
   const req = require;
-  const { randomBytes, createHmac } = req("crypto");
+  const { randomBytes, createHmac } = req('crypto');
   secureRandom = (bytesLength: number): Uint8Array => {
     const b: Buffer = randomBytes(bytesLength);
     return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
   };
 
   hmac = async (key: Uint8Array, message: Uint8Array) => {
-    const hash = createHmac("sha256", key);
+    const hash = createHmac('sha256', key);
     hash.update(message);
     return Uint8Array.from(hash.digest());
   };
@@ -376,7 +369,7 @@ function getRandomNumber(bytesLength = 32): bigint {
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
-  hash = typeof hash === "string" ? hash : arrayToHex(hash);
+  hash = typeof hash === 'string' ? hash : arrayToHex(hash);
   // hash = hash.padEnd(64, '0')
   let msg = hexToNumber(hash || '0');
   const delta = (hash.length / 2) * 8 - PRIME_SIZE;
@@ -463,14 +456,14 @@ function normalizePrivateKey(privateKey: PrivKey): bigint {
   let key: bigint;
   if (privateKey instanceof Uint8Array) {
     key = arrayToNumber(privateKey);
-  } else if (typeof privateKey === "string") {
+  } else if (typeof privateKey === 'string') {
     key = hexToNumber(privateKey);
   } else {
     key = BigInt(privateKey);
   }
   if (!isValidPrivateKey(key)) {
-    throw new Error("Private key is invalid. Expected 0 < key < PRIME_ORDER");
-  };
+    throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+  }
   return key;
 }
 
@@ -479,23 +472,26 @@ function normalizePublicKey(publicKey: PubKey): Point {
 }
 
 function normalizeSignature(signature: Signature): SignResult {
-  return signature instanceof SignResult
-    ? signature
-    : SignResult.fromHex(signature);
+  return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
 
 export function recoverPublicKey(
-  hash: Hex, signature: Signature, recovery: number
+  hash: Hex,
+  signature: Signature,
+  recovery: number
 ): Uint8Array | undefined {
   const point = Point.fromSignature(hash, signature, recovery);
   return point && point.toRawBytes();
 }
 
-export function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
+export function getPublicKey(
+  privateKey: Uint8Array | bigint | number,
+  isCompressed?: boolean
+): Uint8Array;
 export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKey {
   const point = Point.fromPrivateKey(privateKey);
-  if (typeof privateKey === "string") {
+  if (typeof privateKey === 'string') {
     return point.toHex(isCompressed);
   }
   return point.toRawBytes(isCompressed);
