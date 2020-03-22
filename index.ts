@@ -100,6 +100,7 @@ export class Point {
     }
 
     const compresedHex = `0${2 + (recovery & 1)}${pad64(publicKeyX)}`;
+    // const compresedHex = `$0{2n + (recovery & 1n)}${publicKeyX.toString(16)}`;
     const publicKey = Point.fromHex(compresedHex);
     const rInv = modInverse(sign.r, PRIME_ORDER);
     const s1 = mod((PRIME_ORDER - message) * rInv, P);
@@ -193,28 +194,44 @@ export class Point {
   }
 }
 
+function parseByte(str: string) {
+  return Number.parseInt(str, 16) * 2;
+}
 
 export class SignResult {
   constructor(public r: bigint, public s: bigint) {}
 
+  // DER encoded ECDSA signature
+  // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromHex(hex: Hex) {
+    // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
     const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
     if (typeof str !== 'string') throw new TypeError(({}).toString.call(hex));
 
-    const rLength = Number.parseInt(str.slice(6, 8), 16) * 2;
-    const rLengthEnd = 8 + rLength;
-    const r = hexToNumber(str.slice(8, rLengthEnd));
+    const check1 = str.slice(0, 2);
+    const length = parseByte(str.slice(2, 4));
+    const check2 = str.slice(4, 6);
+    if (check1 !== '30' || length !== str.length - 4 || check2 !== '02') {
+      throw new Error('SignResult.fromHex: Invalid signature');
+    }
 
-    const sLength = Number.parseInt(str.slice(rLengthEnd, rLengthEnd + 2), 16) * 2;
-    const sLengthStart = rLengthEnd + 2;
-    const sLengthEnd = sLengthStart + sLength;
-    const s = hexToNumber(str.slice(sLengthStart, sLengthEnd));
+    // r
+    const rLen = parseByte(str.slice(6, 8));
+    const rEnd = 8 + rLen;
+    const r = hexToNumber(str.slice(8, rEnd));
+
+    // s
+    const check3 = str.slice(rEnd, rEnd + 2);
+    if (check3 !== '02') {
+      throw new Error('SignResult.fromHex: Invalid signature');
+    }
+    const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
+    const sStart = rEnd + 4;
+    const s = hexToNumber(str.slice(sStart, sStart + sLen));
 
     return new SignResult(r, s);
   }
 
-  // DER encoded ECDSA signature
-  // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   toHex() {
     const rHex = `00${numberToHex(this.r)}`;
     const sHex = numberToHex(this.s);
@@ -233,6 +250,8 @@ export const BASE_POINT = new Point(
   32670510020758816978083085130507043184471273380659243275938904335757337482424n
 );
 
+// HMAC-SHA256 implementation.
+let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
 let secureRandom = (bytesLength: number) => new Uint8Array(bytesLength);
 
 if (typeof window == "object" && "crypto" in window) {
@@ -241,23 +260,7 @@ if (typeof window == "object" && "crypto" in window) {
     window.crypto.getRandomValues(array);
     return array;
   };
-} else if (typeof process === "object" && "node" in process.versions) {
-  const req = require;
-  const { randomBytes } = req("crypto");
-  secureRandom = (bytesLength: number): Uint8Array => {
-    const b: Buffer = randomBytes(bytesLength);
-    return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-  };
-} else {
-  throw new Error(
-    "The environment doesn't have cryptographically secure random function"
-  );
-}
 
-// HMAC-SHA256 implementation.
-let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
-
-if (typeof window == "object" && "crypto" in window) {
   hmac = async (key: Uint8Array, message: Uint8Array) => {
     const ckey = await window.crypto.subtle.importKey(
       "raw", key,
@@ -269,7 +272,12 @@ if (typeof window == "object" && "crypto" in window) {
   };
 } else if (typeof process === "object" && "node" in process.versions) {
   const req = require;
-  const { createHmac } = req("crypto");
+  const { randomBytes, createHmac } = req("crypto");
+  secureRandom = (bytesLength: number): Uint8Array => {
+    const b: Buffer = randomBytes(bytesLength);
+    return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  };
+
   hmac = async (key: Uint8Array, message: Uint8Array) => {
     const hash = createHmac("sha256", key);
     hash.update(message);
@@ -277,6 +285,9 @@ if (typeof window == "object" && "crypto" in window) {
   };
 } else {
   throw new Error("The environment doesn't have hmac-sha256 function");
+  // throw new Error(
+  //   "The environment doesn't have cryptographically secure random function"
+  // );
 }
 
 function powMod(x: bigint, power: bigint, order: bigint) {
@@ -442,10 +453,8 @@ function isValidPrivateKey(privateKey: bigint): boolean {
 function isValidK(k: bigint, msg: bigint, priv: bigint) {
   const q = BASE_POINT.multiply(k);
   const r = mod(q.x, PRIME_ORDER);
-  // console.log('isValidK', 1, r === 0n, k > r);
   if (r === 0n || k > r) return false;
   let s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
-  // console.log('isValidK', 2, s === 0n);
   if (s === 0n) return false;
   return true;
 }
@@ -539,6 +548,5 @@ export function verify(signature: Signature, hash: Hex, publicKey: PubKey): bool
   const point1 = BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
   const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
   const point3 = point1.add(point2);
-  // console.log({msg, sign, point, point3});
   return point3.x === sign.r;
 }

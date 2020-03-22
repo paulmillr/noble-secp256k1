@@ -163,6 +163,9 @@ class Point {
     }
 }
 exports.Point = Point;
+function parseByte(str) {
+    return Number.parseInt(str, 16) * 2;
+}
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -172,13 +175,22 @@ class SignResult {
         const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
         if (typeof str !== 'string')
             throw new TypeError(({}).toString.call(hex));
-        const rLength = Number.parseInt(str.slice(6, 8), 16) * 2;
-        const rLengthEnd = 8 + rLength;
-        const r = hexToNumber(str.slice(8, rLengthEnd));
-        const sLength = Number.parseInt(str.slice(rLengthEnd, rLengthEnd + 2), 16) * 2;
-        const sLengthStart = rLengthEnd + 2;
-        const sLengthEnd = sLengthStart + sLength;
-        const s = hexToNumber(str.slice(sLengthStart, sLengthEnd));
+        const check1 = str.slice(0, 2);
+        const length = parseByte(str.slice(2, 4));
+        const check2 = str.slice(4, 6);
+        if (check1 !== '30' || length !== str.length - 4 || check2 !== '02') {
+            throw new Error('SignResult.fromHex: Invalid signature');
+        }
+        const rLen = parseByte(str.slice(6, 8));
+        const rEnd = 8 + rLen;
+        const r = hexToNumber(str.slice(8, rEnd));
+        const check3 = str.slice(rEnd, rEnd + 2);
+        if (check3 !== '02') {
+            throw new Error('SignResult.fromHex: Invalid signature');
+        }
+        const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
+        const sStart = rEnd + 4;
+        const s = hexToNumber(str.slice(sStart, sStart + sLen));
         return new SignResult(r, s);
     }
     toHex() {
@@ -192,6 +204,7 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
+let hmac;
 let secureRandom = (bytesLength) => new Uint8Array(bytesLength);
 if (typeof window == "object" && "crypto" in window) {
     secureRandom = (bytesLength) => {
@@ -199,20 +212,6 @@ if (typeof window == "object" && "crypto" in window) {
         window.crypto.getRandomValues(array);
         return array;
     };
-}
-else if (typeof process === "object" && "node" in process.versions) {
-    const req = require;
-    const { randomBytes } = req("crypto");
-    secureRandom = (bytesLength) => {
-        const b = randomBytes(bytesLength);
-        return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-    };
-}
-else {
-    throw new Error("The environment doesn't have cryptographically secure random function");
-}
-let hmac;
-if (typeof window == "object" && "crypto" in window) {
     hmac = async (key, message) => {
         const ckey = await window.crypto.subtle.importKey("raw", key, { name: "HMAC", hash: { name: "SHA-256" } }, false, ["sign", "verify"]);
         const buffer = await window.crypto.subtle.sign("HMAC", ckey, message);
@@ -221,7 +220,11 @@ if (typeof window == "object" && "crypto" in window) {
 }
 else if (typeof process === "object" && "node" in process.versions) {
     const req = require;
-    const { createHmac } = req("crypto");
+    const { randomBytes, createHmac } = req("crypto");
+    secureRandom = (bytesLength) => {
+        const b = randomBytes(bytesLength);
+        return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+    };
     hmac = async (key, message) => {
         const hash = createHmac("sha256", key);
         hash.update(message);
