@@ -433,7 +433,7 @@ async function deterministicK(hash: Hex, privateKey: bigint) {
     v = await hmac(k, v);
     const T = arrayToNumber(v);
     let qrs: QRS;
-    if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!) ) {
+    if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!)) {
       return qrs;
     }
     k = await hmac(k, concat(v, b0));
@@ -502,19 +502,19 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array 
   return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
 }
 
-type OptionsWithRecovered = {recovered: true; canonical?: true};
-type OptionsWithoutRecovered = {recovered?: false; canonical?: true};
-type Options = {recovered?: boolean; canonical?: true};
+type OptsRecovered = { recovered: true; canonical?: true };
+type OptsNoRecovered = { recovered?: false; canonical?: true };
+type Opts = { recovered?: boolean; canonical?: true };
 
-export async function sign(hash: string, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[string, number]>;
-export async function sign(hash: Uint8Array, privateKey: PrivKey, opts: OptionsWithRecovered): Promise<[Uint8Array, number]>;
-export async function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<Uint8Array>;
-export async function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
-export async function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithoutRecovered): Promise<string>;
+export async function sign(hash: string, privateKey: PrivKey, opts: OptsRecovered): Promise<[string, number]>;
+export async function sign(hash: Uint8Array, privateKey: PrivKey, opts: OptsRecovered): Promise<[Uint8Array, number]>;
+export async function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<Uint8Array>;
+export async function sign(hash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
+export async function sign(hash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
 export async function sign(
   hash: Hex,
   privateKey: PrivKey,
-  { recovered, canonical }: Options = {}
+  { recovered, canonical }: Opts = {}
 ): Promise<Hex | [Hex, number]> {
   const priv = normalizePrivateKey(privateKey);
   if (!isValidPrivateKey(priv)) {
@@ -548,4 +548,4 @@ export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
   }
-}
+};
