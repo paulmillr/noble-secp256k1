@@ -225,9 +225,10 @@ export class SignResult {
     return new SignResult(r, s);
   }
 
-  toHex() {
-    const rHex = `00${numberToHex(this.r)}`;
-    const sHex = numberToHex(this.s);
+  toHex(compressed = false) {
+    const rHex = numberToHex(this.r); //.padStart(64, '0');
+    const sHex = numberToHex(this.s); //.padStart(64, '0');
+    if (compressed) return sHex;
     const rLen = numberToHex(rHex.length / 2);
     const sLen = numberToHex(sHex.length / 2);
     const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
@@ -370,7 +371,6 @@ function getRandomNumber(bytesLength = 32): bigint {
 
 function truncateHash(hash: string | Uint8Array): bigint {
   hash = typeof hash === 'string' ? hash : arrayToHex(hash);
-  // hash = hash.padEnd(64, '0')
   let msg = hexToNumber(hash || '0');
   const delta = (hash.length / 2) * 8 - PRIME_SIZE;
   if (delta > 0) {
@@ -392,12 +392,15 @@ function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
   return result;
 }
 
+type QRS = [Point, bigint, bigint];
+
 // Deterministic k generation as per RFC6979.
 // https://tools.ietf.org/html/rfc6979#section-3.1
 async function deterministicK(hash: Uint8Array, privateKey: Uint8Array) {
   const concat = concatTypedArrays;
   // Step A is ignored, since we already provide hash instead of msg
-  const h1 = hexToArray(pad64(mod(arrayToNumber(hash), PRIME_ORDER)));
+  const h1 = hexToArray(pad64(arrayToNumber(hash)));
+  const x = hexToArray(pad64(arrayToNumber(privateKey)));
   const h1n = arrayToNumber(h1);
   const pn = arrayToNumber(privateKey);
 
@@ -408,48 +411,44 @@ async function deterministicK(hash: Uint8Array, privateKey: Uint8Array) {
 
   const b0 = Uint8Array.from([0x00]);
   const b1 = Uint8Array.from([0x01]);
-  const x = privateKey;
+  // const x = privateKey;
 
   // console.log('start', arrayToHex(h1), arrayToHex(x));
 
   // Step D
   k = await hmac(k, concat(v, b0, x, h1));
-  // console.log('d', arrayToHex(k));
   // Step E
   v = await hmac(k, v);
-  // console.log('e', arrayToHex(v));
   // Step F
   k = await hmac(k, concat(v, b1, x, h1));
-  // console.log('f', arrayToHex(k));
   // Step G
   v = await hmac(k, v);
-  // console.log('g', arrayToHex(v));
 
   // Step H3, repeat until 1 < T < n - 1
   for (let i = 0; i < 10000; i++) {
     v = await hmac(k, v);
     const T = arrayToNumber(v);
-    // console.log('try #', i, arrayToHex(numberToArray(T)));
-    if (isValidPrivateKey(T) && isValidK(T, h1n, pn)) return T;
+    let qrs: QRS;
+    if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, pn)!) ) {
+      return qrs;
+    }
     k = await hmac(k, concat(v, b0));
     v = await hmac(k, v);
   }
 
-  throw new TypeError('Too many k');
-  // return T;
+  throw new TypeError('secp256k1: Tried 10,000 k values for sign(), all were invalid');
 }
 
 function isValidPrivateKey(privateKey: bigint): boolean {
   return 0 < privateKey && privateKey < PRIME_ORDER;
 }
 
-function isValidK(k: bigint, msg: bigint, priv: bigint) {
+function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
   const q = BASE_POINT.multiply(k);
   const r = mod(q.x, PRIME_ORDER);
-  if (r === 0n || k > r) return false;
-  let s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
-  if (s === 0n) return false;
-  return true;
+  const s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
+  if (r === 0n || s === 0n) return;
+  return [q, r, s];
 }
 
 function normalizePrivateKey(privateKey: PrivKey): bigint {
@@ -503,35 +502,34 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array 
 }
 
 type Options = {
-  recovered: true;
+  recovered?: true;
   canonical?: true;
-  k?: bigint;
 };
 
-type OptionsWithK = Partial<Options>;
+// type OptionsWithK = Partial<Options>;
 
-export function sign(hash: string, privateKey: PrivKey, opts: Options): [string, number];
-export function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): [Uint8Array, number];
-export function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptionsWithK): Uint8Array;
-export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
-export function sign(hash: string, privateKey: PrivKey, opts?: OptionsWithK): string;
-export function sign(
+export async function sign(hash: string, privateKey: PrivKey, opts: Options): Promise<[string, number]>;
+export async function sign(hash: Uint8Array, privateKey: PrivKey, opts: Options): Promise<[Uint8Array, number]>;
+export async function sign(hash: Uint8Array, privateKey: PrivKey, opts?: Options): Promise<Uint8Array>;
+export async function sign(hash: string, privateKey: PrivKey, opts?: Options): Promise<string>;
+export async function sign(hash: string, privateKey: PrivKey, opts?: Options): Promise<string>;
+export async function sign(
   hash: Hex,
   privateKey: PrivKey,
-  { k = getRandomNumber(), recovered, canonical }: OptionsWithK = {}
-): Hex | [Hex, number] {
+  { recovered, canonical }: Options = {}
+): Promise<Hex | [Hex, number]> {
   const priv = normalizePrivateKey(privateKey);
 
-  const q = BASE_POINT.multiply(k);
-  const r = mod(q.x, PRIME_ORDER);
-  const msg = truncateHash(hash);
-  let s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
+  const msgh = typeof hash === 'string' ? hexToArray(hash) : hash;
+  const [q, r, s] = await deterministicK(msgh, hexToArray(numberToHex(priv)));
+
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
+  let adjustedS = s;
   if (s > HIGH_NUMBER && canonical) {
-    s = PRIME_ORDER - s;
+    adjustedS = PRIME_ORDER - s;
     recovery ^= 1;
   }
-  const res = new SignResult(r, s).toHex();
+  const res = new SignResult(r, adjustedS).toHex();
   const hashed = hash instanceof Uint8Array ? hexToArray(res) : res;
   return recovered ? [hashed, recovery] : hashed;
 }

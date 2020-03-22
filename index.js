@@ -26,7 +26,7 @@ class Point {
             y = mod(-y, exports.P);
         }
         if (!Point.isValidPoint(x, y)) {
-            throw new TypeError("Point.fromHex: Point is not on elliptic curve");
+            throw new TypeError('Point.fromHex: Point is not on elliptic curve');
         }
         return new Point(x, y);
     }
@@ -51,7 +51,7 @@ class Point {
         const x = arrayToNumber(bytes.slice(1, 33));
         const y = arrayToNumber(bytes.slice(33));
         if (!this.isValidPoint(x, y)) {
-            throw new TypeError("Point.fromHex: Point is not on elliptic curve");
+            throw new TypeError('Point.fromHex: Point is not on elliptic curve');
         }
         return new Point(x, y);
     }
@@ -70,7 +70,7 @@ class Point {
     static fromSignature(hash, signature, recovery) {
         recovery = Number(recovery);
         const sign = normalizeSignature(signature);
-        const message = truncateHash(typeof hash === "string" ? hexToArray(hash) : hash);
+        const message = truncateHash(typeof hash === 'string' ? hexToArray(hash) : hash);
         if (sign.r === 0n || sign.s === 0n) {
             return;
         }
@@ -174,7 +174,7 @@ class SignResult {
     static fromHex(hex) {
         const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
         if (typeof str !== 'string')
-            throw new TypeError(({}).toString.call(hex));
+            throw new TypeError({}.toString.call(hex));
         const check1 = str.slice(0, 2);
         const length = parseByte(str.slice(2, 4));
         const check2 = str.slice(4, 6);
@@ -193,9 +193,11 @@ class SignResult {
         const s = hexToNumber(str.slice(sStart, sStart + sLen));
         return new SignResult(r, s);
     }
-    toHex() {
-        const rHex = `00${numberToHex(this.r)}`;
+    toHex(compressed = false) {
+        const rHex = numberToHex(this.r);
         const sHex = numberToHex(this.s);
+        if (compressed)
+            return sHex;
         const rLen = numberToHex(rHex.length / 2);
         const sLen = numberToHex(sHex.length / 2);
         const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
@@ -206,27 +208,27 @@ exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
 let hmac;
 let secureRandom = (bytesLength) => new Uint8Array(bytesLength);
-if (typeof window == "object" && "crypto" in window) {
+if (typeof window == 'object' && 'crypto' in window) {
     secureRandom = (bytesLength) => {
         const array = new Uint8Array(bytesLength);
         window.crypto.getRandomValues(array);
         return array;
     };
     hmac = async (key, message) => {
-        const ckey = await window.crypto.subtle.importKey("raw", key, { name: "HMAC", hash: { name: "SHA-256" } }, false, ["sign", "verify"]);
-        const buffer = await window.crypto.subtle.sign("HMAC", ckey, message);
+        const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
+        const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
         return new Uint8Array(buffer);
     };
 }
-else if (typeof process === "object" && "node" in process.versions) {
+else if (typeof process === 'object' && 'node' in process.versions) {
     const req = require;
-    const { randomBytes, createHmac } = req("crypto");
+    const { randomBytes, createHmac } = req('crypto');
     secureRandom = (bytesLength) => {
         const b = randomBytes(bytesLength);
         return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
     };
     hmac = async (key, message) => {
-        const hash = createHmac("sha256", key);
+        const hash = createHmac('sha256', key);
         hash.update(message);
         return Uint8Array.from(hash.digest());
     };
@@ -304,7 +306,7 @@ function getRandomNumber(bytesLength = 32) {
     return arrayToNumber(secureRandom(bytesLength));
 }
 function truncateHash(hash) {
-    hash = typeof hash === "string" ? hash : arrayToHex(hash);
+    hash = typeof hash === 'string' ? hash : arrayToHex(hash);
     let msg = hexToNumber(hash || '0');
     const delta = (hash.length / 2) * 8 - PRIME_SIZE;
     if (delta > 0) {
@@ -326,14 +328,14 @@ function concatTypedArrays(...args) {
 }
 async function deterministicK(hash, privateKey) {
     const concat = concatTypedArrays;
-    const h1 = hexToArray(pad64(mod(arrayToNumber(hash), exports.PRIME_ORDER)));
+    const h1 = hexToArray(pad64(arrayToNumber(hash)));
+    const x = hexToArray(pad64(arrayToNumber(privateKey)));
     const h1n = arrayToNumber(h1);
     const pn = arrayToNumber(privateKey);
     let v = new Uint8Array(32).fill(1);
     let k = new Uint8Array(32).fill(0);
     const b0 = Uint8Array.from([0x00]);
     const b1 = Uint8Array.from([0x01]);
-    const x = privateKey;
     k = await hmac(k, concat(v, b0, x, h1));
     v = await hmac(k, v);
     k = await hmac(k, concat(v, b1, x, h1));
@@ -341,50 +343,47 @@ async function deterministicK(hash, privateKey) {
     for (let i = 0; i < 10000; i++) {
         v = await hmac(k, v);
         const T = arrayToNumber(v);
-        if (isValidPrivateKey(T) && isValidK(T, h1n, pn))
-            return T;
+        let qrs;
+        if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, pn))) {
+            return qrs;
+        }
         k = await hmac(k, concat(v, b0));
         v = await hmac(k, v);
     }
-    throw new TypeError('Too many k');
+    throw new TypeError('secp256k1: Tried 10,000 k values for sign(), all were invalid');
 }
 function isValidPrivateKey(privateKey) {
     return 0 < privateKey && privateKey < exports.PRIME_ORDER;
 }
-function isValidK(k, msg, priv) {
+function calcQRSFromK(k, msg, priv) {
     const q = exports.BASE_POINT.multiply(k);
     const r = mod(q.x, exports.PRIME_ORDER);
-    if (r === 0n || k > r)
-        return false;
-    let s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
-    if (s === 0n)
-        return false;
-    return true;
+    const s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
+    if (r === 0n || s === 0n)
+        return;
+    return [q, r, s];
 }
 function normalizePrivateKey(privateKey) {
     let key;
     if (privateKey instanceof Uint8Array) {
         key = arrayToNumber(privateKey);
     }
-    else if (typeof privateKey === "string") {
+    else if (typeof privateKey === 'string') {
         key = hexToNumber(privateKey);
     }
     else {
         key = BigInt(privateKey);
     }
     if (!isValidPrivateKey(key)) {
-        throw new Error("Private key is invalid. Expected 0 < key < PRIME_ORDER");
+        throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
-    ;
     return key;
 }
 function normalizePublicKey(publicKey) {
     return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
 function normalizeSignature(signature) {
-    return signature instanceof SignResult
-        ? signature
-        : SignResult.fromHex(signature);
+    return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
 function recoverPublicKey(hash, signature, recovery) {
     const point = Point.fromSignature(hash, signature, recovery);
@@ -393,7 +392,7 @@ function recoverPublicKey(hash, signature, recovery) {
 exports.recoverPublicKey = recoverPublicKey;
 function getPublicKey(privateKey, isCompressed) {
     const point = Point.fromPrivateKey(privateKey);
-    if (typeof privateKey === "string") {
+    if (typeof privateKey === 'string') {
         return point.toHex(isCompressed);
     }
     return point.toRawBytes(isCompressed);
@@ -404,18 +403,17 @@ function getSharedSecret(privateA, publicB) {
     return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
-function sign(hash, privateKey, { k = getRandomNumber(), recovered, canonical } = {}) {
+async function sign(hash, privateKey, { recovered, canonical } = {}) {
     const priv = normalizePrivateKey(privateKey);
-    const q = exports.BASE_POINT.multiply(k);
-    const r = mod(q.x, exports.PRIME_ORDER);
-    const msg = truncateHash(hash);
-    let s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
+    const msgh = typeof hash === 'string' ? hexToArray(hash) : hash;
+    const [q, r, s] = await deterministicK(msgh, hexToArray(numberToHex(priv)));
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
+    let adjustedS = s;
     if (s > HIGH_NUMBER && canonical) {
-        s = exports.PRIME_ORDER - s;
+        adjustedS = exports.PRIME_ORDER - s;
         recovery ^= 1;
     }
-    const res = new SignResult(r, s).toHex();
+    const res = new SignResult(r, adjustedS).toHex();
     const hashed = hash instanceof Uint8Array ? hexToArray(res) : res;
     return recovered ? [hashed, recovery] : hashed;
 }
