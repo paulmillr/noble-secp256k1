@@ -18,20 +18,20 @@ type Signature = Uint8Array | string | SignResult;
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
+  // A point on curve is valid if it conforms to equation
+  // y**2 = x**3 + ax + b
   static isValidPoint(x: bigint, y: bigint) {
     if (x === 0n || y === 0n || x >= P || y >= P) return false;
 
     const sqrY = y * y;
     const yEquivalence = x ** 3n + A * x + B;
-    const actualSqrY1 = mod(sqrY, P);
-    const actualSqrY2 = mod(-sqrY, P);
-    const expectedSqrY1 = mod(yEquivalence, P);
-    const expectedSqrY2 = mod(-yEquivalence, P);
+    const left1 = mod(sqrY, P);
+    const left2 = mod(-sqrY, P);
+    const right1 = mod(yEquivalence, P);
+    const right2 = mod(-yEquivalence, P);
     return (
-      actualSqrY1 === expectedSqrY1 ||
-      actualSqrY1 === expectedSqrY2 ||
-      actualSqrY2 === expectedSqrY1 ||
-      actualSqrY2 === expectedSqrY2
+      left1 === right1 || left1 === right2 ||
+      left2 === right1 || left2 === right2
     );
   }
 
@@ -73,34 +73,30 @@ export class Point {
     throw new TypeError('Point.fromHex: received invalid point');
   }
 
+  static fromX(x: bigint) {
+
+  }
+
   static fromPrivateKey(privateKey: PrivKey) {
     return BASE_POINT.multiply(normalizePrivateKey(privateKey));
   }
 
-  static fromSignature(hash: Hex, signature: Signature, recovery: number): Point | undefined {
-    recovery = Number(recovery);
+  // Recovers public key from ECDSA signature.
+  // TODO: Ensure proper hash length
+  // Uses following formula:
+  // Q = (r ** -1)(sP - hG)
+  // https://crypto.stackexchange.com/questions/60218
+  static fromSignature(msgHash: Hex, signature: Signature, recovery: number): Point | undefined {
     const sign = normalizeSignature(signature);
-    const message = truncateHash(typeof hash === 'string' ? hexToArray(hash) : hash);
-    if (sign.r === 0n || sign.s === 0n) {
-      return;
-    }
-    let publicKeyX = sign.r;
-    if (recovery >> 1) {
-      if (publicKeyX >= SUBPN) {
-        return;
-      }
-      publicKeyX = sign.r + PRIME_ORDER;
-    }
-
-    const compresedHex = `0${2 + (recovery & 1)}${pad64(publicKeyX)}`;
-    // const compresedHex = `$0{2n + (recovery & 1n)}${publicKeyX.toString(16)}`;
-    const publicKey = Point.fromHex(compresedHex);
-    const rInv = modInverse(sign.r, PRIME_ORDER);
-    const s1 = mod((PRIME_ORDER - message) * rInv, P);
-    const s2 = mod(sign.s * rInv, P);
-    const point1 = BASE_POINT.multiply(s1);
-    const point2 = publicKey.multiply(s2);
-    return point1.add(point2);
+    const { r, s } = sign;
+    if (r === 0n || s === 0n) return;
+    const rinv = modInverse(r, PRIME_ORDER);
+    const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
+    const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
+    const sP = P_.multiply(s);
+    const hG = BASE_POINT.multiply(h).negate();
+    const Q = sP.add(hG).multiply(rinv);
+    return Q;
   }
 
   toRawBytes(isCompressed = false) {
@@ -396,12 +392,8 @@ async function getQRSrfc6979(hash: Hex, privateKey: bigint) {
   let v = new Uint8Array(32).fill(1);
   // Step C
   let k = new Uint8Array(32).fill(0);
-
   const b0 = Uint8Array.from([0x00]);
   const b1 = Uint8Array.from([0x01]);
-  // const x = privateKey;
-
-  // console.log('start', arrayToHex(h1), arrayToHex(x));
   const concat = concatTypedArrays;
 
   // Step D
@@ -464,9 +456,10 @@ export function recoverPublicKey(
   hash: Hex,
   signature: Signature,
   recovery: number
-): Uint8Array | undefined {
+): Hex | undefined {
   const point = Point.fromSignature(hash, signature, recovery);
-  return point && point.toRawBytes();
+  if (!point) return;
+  return typeof hash === 'string' ? point.toHex() : point.toRawBytes();
 }
 
 export function getPublicKey(

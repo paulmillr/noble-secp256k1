@@ -13,8 +13,9 @@ export declare class Point {
     private static fromCompressedHex;
     private static fromUncompressedHex;
     static fromHex(hash: Hex): Point;
+    static fromX(x: bigint): void;
     static fromPrivateKey(privateKey: PrivKey): Point;
-    static fromSignature(hash: Hex, signature: Signature, recovery: number): Point | undefined;
+    static fromSignature(msgHash: Hex, signature: Signature, recovery: number): Point | undefined;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
     negate(): Point;
@@ -30,7 +31,7 @@ export declare class SignResult {
     toHex(compressed?: boolean): string;
 }
 export declare const BASE_POINT: Point;
-export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: number): Uint8Array | undefined;
+export declare function recoverPublicKey(hash: Hex, signature: Signature, recovery: number): Hex | undefined;
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string;

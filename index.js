@@ -18,14 +18,12 @@ class Point {
             return false;
         const sqrY = y * y;
         const yEquivalence = x ** 3n + A * x + B;
-        const actualSqrY1 = mod(sqrY, exports.P);
-        const actualSqrY2 = mod(-sqrY, exports.P);
-        const expectedSqrY1 = mod(yEquivalence, exports.P);
-        const expectedSqrY2 = mod(-yEquivalence, exports.P);
-        return (actualSqrY1 === expectedSqrY1 ||
-            actualSqrY1 === expectedSqrY2 ||
-            actualSqrY2 === expectedSqrY1 ||
-            actualSqrY2 === expectedSqrY2);
+        const left1 = mod(sqrY, exports.P);
+        const left2 = mod(-sqrY, exports.P);
+        const right1 = mod(yEquivalence, exports.P);
+        const right2 = mod(-yEquivalence, exports.P);
+        return (left1 === right1 || left1 === right2 ||
+            left2 === right1 || left2 === right2);
     }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
@@ -64,31 +62,23 @@ class Point {
             return this.fromUncompressedHex(bytes);
         throw new TypeError('Point.fromHex: received invalid point');
     }
+    static fromX(x) {
+    }
     static fromPrivateKey(privateKey) {
         return exports.BASE_POINT.multiply(normalizePrivateKey(privateKey));
     }
-    static fromSignature(hash, signature, recovery) {
-        recovery = Number(recovery);
+    static fromSignature(msgHash, signature, recovery) {
         const sign = normalizeSignature(signature);
-        const message = truncateHash(typeof hash === 'string' ? hexToArray(hash) : hash);
-        if (sign.r === 0n || sign.s === 0n) {
+        const { r, s } = sign;
+        if (r === 0n || s === 0n)
             return;
-        }
-        let publicKeyX = sign.r;
-        if (recovery >> 1) {
-            if (publicKeyX >= SUBPN) {
-                return;
-            }
-            publicKeyX = sign.r + exports.PRIME_ORDER;
-        }
-        const compresedHex = `0${2 + (recovery & 1)}${pad64(publicKeyX)}`;
-        const publicKey = Point.fromHex(compresedHex);
-        const rInv = modInverse(sign.r, exports.PRIME_ORDER);
-        const s1 = mod((exports.PRIME_ORDER - message) * rInv, exports.P);
-        const s2 = mod(sign.s * rInv, exports.P);
-        const point1 = exports.BASE_POINT.multiply(s1);
-        const point2 = publicKey.multiply(s2);
-        return point1.add(point2);
+        const rinv = modInverse(r, exports.PRIME_ORDER);
+        const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
+        const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
+        const sP = P_.multiply(s);
+        const hG = exports.BASE_POINT.multiply(h).negate();
+        const Q = sP.add(hG).multiply(rinv);
+        return Q;
     }
     toRawBytes(isCompressed = false) {
         return hexToArray(this.toHex(isCompressed));
@@ -376,7 +366,9 @@ function normalizeSignature(signature) {
 }
 function recoverPublicKey(hash, signature, recovery) {
     const point = Point.fromSignature(hash, signature, recovery);
-    return point && point.toRawBytes();
+    if (!point)
+        return;
+    return typeof hash === 'string' ? point.toHex() : point.toRawBytes();
 }
 exports.recoverPublicKey = recoverPublicKey;
 function getPublicKey(privateKey, isCompressed) {

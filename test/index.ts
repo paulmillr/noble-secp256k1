@@ -73,7 +73,7 @@ describe('secp256k1', () => {
       }
     });
 
-    it('.toHex() roundtrip', () => {
+    it('#toHex() roundtrip', () => {
       fc.assert(
         fc.property(fc.bigInt(1n, MAX_PRIVATE_KEY), x => {
           const point1 = secp256k1.Point.fromPrivateKey(x);
@@ -181,19 +181,17 @@ describe('secp256k1', () => {
   });
 
   describe('.recoverPublicKey()', () => {
-    it('should recover public key from recovery bit', () => {
-      fc.assert(
-        fc.asyncProperty(fc.hexa(), fc.bigInt(1n, MAX_PRIVATE_KEY), async (message, privateKey) => {
-          const publicKey = secp256k1.getPublicKey(privateKey);
-          const [signature, recovery] = await secp256k1.sign(message, privateKey, {
-            recovered: true
-          });
-          const recoveredPubkey = secp256k1.recoverPublicKey(message, signature, recovery);
-          expect(recoveredPubkey).not.toBe(null);
-          expect(recoveredPubkey).toBe(publicKey);
-          expect(secp256k1.verify(signature, message, publicKey)).toBe(true);
-        })
-      );
+    it('should recover public key from recovery bit', async () => {
+      const message = 'deadbeef';
+      const privateKey = 123456789n;
+      const publicKey = secp256k1.getPublicKey(privateKey.toString(16));
+      const [signature, recovery] = await secp256k1.sign(message, privateKey, {
+        recovered: true
+      });
+      const recoveredPubkey = secp256k1.recoverPublicKey(message, signature, recovery);
+      expect(recoveredPubkey).not.toBe(null);
+      expect(recoveredPubkey).toBe(publicKey);
+      expect(secp256k1.verify(signature, message, publicKey)).toBe(true);
     });
   });
 
