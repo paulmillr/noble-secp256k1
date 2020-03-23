@@ -52,8 +52,8 @@ class Point {
         }
         return new Point(x, y);
     }
-    static fromHex(hash) {
-        const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+    static fromHex(hex) {
+        const bytes = hex instanceof Uint8Array ? hex : hexToArray(hex);
         const header = bytes[0];
         if (header === 0x02 || header === 0x03)
             return this.fromCompressedHex(bytes);
@@ -305,8 +305,8 @@ function concatTypedArrays(...args) {
     }
     return result;
 }
-async function getQRSrfc6979(hash, privateKey) {
-    const num = typeof hash === 'string' ? hexToNumber(hash) : arrayToNumber(hash);
+async function getQRSrfc6979(msgHash, privateKey) {
+    const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
     const h1 = hexToArray(pad64(num));
     const x = hexToArray(pad64(privateKey));
     const h1n = arrayToNumber(h1);
@@ -361,11 +361,11 @@ function normalizePublicKey(publicKey) {
 function normalizeSignature(signature) {
     return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
-function recoverPublicKey(hash, signature, recovery) {
-    const point = Point.fromSignature(hash, signature, recovery);
+function recoverPublicKey(msgHash, signature, recovery) {
+    const point = Point.fromSignature(msgHash, signature, recovery);
     if (!point)
         return;
-    return typeof hash === 'string' ? point.toHex() : point.toRawBytes();
+    return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 exports.recoverPublicKey = recoverPublicKey;
 function getPublicKey(privateKey, isCompressed) {
@@ -383,12 +383,12 @@ function getSharedSecret(privateA, publicB) {
     return returnHex ? shared.toHex() : shared.toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
-async function sign(hash, privateKey, { recovered, canonical } = {}) {
+async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
     const priv = normalizePrivateKey(privateKey);
     if (!isValidPrivateKey(priv)) {
         throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
-    const [q, r, s] = await getQRSrfc6979(hash, priv);
+    const [q, r, s] = await getQRSrfc6979(msgHash, priv);
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
     if (s > HIGH_NUMBER && canonical) {
@@ -396,12 +396,12 @@ async function sign(hash, privateKey, { recovered, canonical } = {}) {
         recovery ^= 1;
     }
     const res = new SignResult(r, adjustedS).toHex();
-    const hashed = hash instanceof Uint8Array ? hexToArray(res) : res;
+    const hashed = msgHash instanceof Uint8Array ? hexToArray(res) : res;
     return recovered ? [hashed, recovery] : hashed;
 }
 exports.sign = sign;
-function verify(signature, hash, publicKey) {
-    const msg = truncateHash(hash);
+function verify(signature, msgHash, publicKey) {
+    const msg = truncateHash(msgHash);
     const sign = normalizeSignature(signature);
     const point = normalizePublicKey(publicKey);
     const w = modInverse(sign.s, exports.PRIME_ORDER);

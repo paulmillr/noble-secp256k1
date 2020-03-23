@@ -62,8 +62,8 @@ export class Point {
     return new Point(x, y);
   }
 
-  static fromHex(hash: Hex) {
-    const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+  static fromHex(hex: Hex) {
+    const bytes = hex instanceof Uint8Array ? hex : hexToArray(hex);
     const header = bytes[0];
     if (header === 0x02 || header === 0x03) return this.fromCompressedHex(bytes);
     if (header === 0x04) return this.fromUncompressedHex(bytes);
@@ -374,9 +374,9 @@ type QRS = [Point, bigint, bigint];
 // Deterministic k generation as per RFC6979.
 // Generates k, and then calculates Q & Signature {r, s} based on it.
 // https://tools.ietf.org/html/rfc6979#section-3.1
-async function getQRSrfc6979(hash: Hex, privateKey: bigint) {
+async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   // Step A is ignored, since we already provide hash instead of msg
-  const num = typeof hash === 'string' ? hexToNumber(hash) : arrayToNumber(hash);
+  const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
   const h1 = hexToArray(pad64(num));
   const x = hexToArray(pad64(privateKey));
   const h1n = arrayToNumber(h1);
@@ -446,23 +446,23 @@ function normalizeSignature(signature: Signature): SignResult {
 }
 
 export function recoverPublicKey(
-  hash: string,
+  msgHash: string,
   signature: string,
   recovery: number
 ): string | undefined;
 export function recoverPublicKey(
-  hash: Uint8Array,
+  msgHash: Uint8Array,
   signature: Uint8Array,
   recovery: number
 ): Uint8Array | undefined;
 export function recoverPublicKey(
-  hash: Hex,
+  msgHash: Hex,
   signature: Signature,
   recovery: number
 ): Hex | undefined {
-  const point = Point.fromSignature(hash, signature, recovery);
+  const point = Point.fromSignature(msgHash, signature, recovery);
   if (!point) return;
-  return typeof hash === 'string' ? point.toHex() : point.toRawBytes();
+  return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 
 export function getPublicKey(
@@ -490,32 +490,32 @@ type OptsNoRecovered = { recovered?: false; canonical?: true };
 type Opts = { recovered?: boolean; canonical?: true };
 
 export async function sign(
-  hash: Uint8Array,
+  msgHash: Uint8Array,
   privateKey: PrivKey,
   opts: OptsRecovered
 ): Promise<[Uint8Array, number]>;
 export async function sign(
-  hash: string,
+  msgHash: string,
   privateKey: PrivKey,
   opts: OptsRecovered
 ): Promise<[string, number]>;
 export async function sign(
-  hash: Uint8Array,
+  msgHash: Uint8Array,
   privateKey: PrivKey,
   opts?: OptsNoRecovered
 ): Promise<Uint8Array>;
 export async function sign(
-  hash: string,
+  msgHash: string,
   privateKey: PrivKey,
   opts?: OptsNoRecovered
 ): Promise<string>;
 export async function sign(
-  hash: string,
+  msgHash: string,
   privateKey: PrivKey,
   opts?: OptsNoRecovered
 ): Promise<string>;
 export async function sign(
-  hash: Hex,
+  msgHash: Hex,
   privateKey: PrivKey,
   { recovered, canonical }: Opts = {}
 ): Promise<Hex | [Hex, number]> {
@@ -525,7 +525,7 @@ export async function sign(
   }
   // We are using deterministic signature scheme
   // instead of letting user specify random `k`.
-  const [q, r, s] = await getQRSrfc6979(hash, priv);
+  const [q, r, s] = await getQRSrfc6979(msgHash, priv);
 
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
   let adjustedS = s;
@@ -534,12 +534,12 @@ export async function sign(
     recovery ^= 1;
   }
   const res = new SignResult(r, adjustedS).toHex();
-  const hashed = hash instanceof Uint8Array ? hexToArray(res) : res;
+  const hashed = msgHash instanceof Uint8Array ? hexToArray(res) : res;
   return recovered ? [hashed, recovery] : hashed;
 }
 
-export function verify(signature: Signature, hash: Hex, publicKey: PubKey): boolean {
-  const msg = truncateHash(hash);
+export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean {
+  const msg = truncateHash(msgHash);
   const sign = normalizeSignature(signature);
   const point = normalizePublicKey(publicKey);
   const w = modInverse(sign.s, PRIME_ORDER);
