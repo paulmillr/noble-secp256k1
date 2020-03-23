@@ -18,27 +18,20 @@ const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.
 // function hash(message: string) {
 //   return sha256(new TextEncoder().encode(message));
 // }
-function hexToNumber(hex: string): bigint {
-  if (typeof hex !== 'string') {
-    throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
-  }
-  // Big Endian
-  return BigInt(`0x${hex}`);
-}
 
 const MAX_PRIVATE_KEY = secp256k1.PRIME_ORDER - 1n;
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 
-const toLEHex = (n: number | bigint) =>
-  n
-    .toString(16)
-    .padStart(64, '0')
-    .replace(/\w\w/gi, a => `${a},`)
-    .split(',')
-    .reverse()
-    .slice(1)
-    .join('');
+// const toLEHex = (n: number | bigint) =>
+//   n
+//     .toString(16)
+//     .padStart(64, '0')
+//     .replace(/\w\w/gi, a => `${a},`)
+//     .split(',')
+//     .reverse()
+//     .slice(1)
+//     .join('');
 
 describe('secp256k1', () => {
   it('.getPublicKey()', () => {
@@ -55,7 +48,7 @@ describe('secp256k1', () => {
   describe('Point', () => {
     it('.isValidPoint()', () => {
       for (const vector of points.valid.isPoint) {
-        const { P, expected, description } = vector;
+        const { P, expected } = vector;
         if (expected) {
           secp256k1.Point.fromHex(P);
         } else {
@@ -112,7 +105,7 @@ describe('secp256k1', () => {
         return BigInt(`0x${hex}`);
       }
       for (const vector of points.valid.pointMultiply) {
-        const { P, d, expected, description } = vector;
+        const { P, d, expected } = vector;
         const p = secp256k1.Point.fromHex(P);
         if (expected) {
           expect(p.multiply(hexToNumber(d)).toHex(true)).toBe(expected);
@@ -124,7 +117,7 @@ describe('secp256k1', () => {
       }
 
       for (const vector of points.invalid.pointMultiply) {
-        const { P, d, description } = vector;
+        const { P, d } = vector;
         expect(() => {
           const p = secp256k1.Point.fromHex(P);
           p.multiply(hexToNumber(d)).toHex(true);
@@ -207,7 +200,7 @@ describe('secp256k1', () => {
   describe('utils', () => {
     it('isValidPrivateKey()', () => {
       for (const vector of privates.valid.isPrivate) {
-        const { d, expected, description } = vector;
+        const { d, expected } = vector;
         // const privateKey = hexToNumber(d);
         expect(secp256k1.utils.isValidPrivateKey(d)).toBe(expected);
       }
