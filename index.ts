@@ -29,10 +29,7 @@ export class Point {
     const left2 = mod(-sqrY, P);
     const right1 = mod(yEquivalence, P);
     const right2 = mod(-yEquivalence, P);
-    return (
-      left1 === right1 || left1 === right2 ||
-      left2 === right1 || left2 === right2
-    );
+    return left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
   }
 
   private static fromCompressedHex(bytes: Uint8Array) {
@@ -71,10 +68,6 @@ export class Point {
     if (header === 0x02 || header === 0x03) return this.fromCompressedHex(bytes);
     if (header === 0x04) return this.fromUncompressedHex(bytes);
     throw new TypeError('Point.fromHex: received invalid point');
-  }
-
-  static fromX(x: bigint) {
-
   }
 
   static fromPrivateKey(privateKey: PrivKey) {
@@ -452,6 +445,16 @@ function normalizeSignature(signature: Signature): SignResult {
   return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
 
+export function recoverPublicKey(
+  hash: string,
+  signature: string,
+  recovery: number
+): string | undefined;
+export function recoverPublicKey(
+  hash: Uint8Array,
+  signature: Uint8Array,
+  recovery: number
+): Uint8Array | undefined;
 export function recoverPublicKey(
   hash: Hex,
   signature: Signature,

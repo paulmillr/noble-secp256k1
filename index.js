@@ -22,8 +22,7 @@ class Point {
         const left2 = mod(-sqrY, exports.P);
         const right1 = mod(yEquivalence, exports.P);
         const right2 = mod(-yEquivalence, exports.P);
-        return (left1 === right1 || left1 === right2 ||
-            left2 === right1 || left2 === right2);
+        return left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
     }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
@@ -61,8 +60,6 @@ class Point {
         if (header === 0x04)
             return this.fromUncompressedHex(bytes);
         throw new TypeError('Point.fromHex: received invalid point');
-    }
-    static fromX(x) {
     }
     static fromPrivateKey(privateKey) {
         return exports.BASE_POINT.multiply(normalizePrivateKey(privateKey));
