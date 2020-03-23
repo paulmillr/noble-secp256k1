@@ -12,10 +12,12 @@ function bench(name, counts, callback) {
 // warm-up
 secp.getPublicKey('beef');
 
-bench('getPublicKey 1 bit', 100, () => {
+bench('getPublicKey 1 bit', 1, () => {
   secp.getPublicKey('01');
 });
 
-bench('getPublicKey 256 bit', 100, () => {
+console.profile('cpu');
+bench('getPublicKey 256 bit', 1, () => {
   secp.getPublicKey('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
 });
+console.profileEnd('cpu');

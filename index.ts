@@ -116,6 +116,10 @@ export class Point {
     }
   }
 
+  negate(): Point {
+    return new Point(this.x, P - this.y);
+  }
+
   add(other: Point): Point {
     if (!(other instanceof Point)) {
       throw new TypeError('Point#add: expected Point');
@@ -156,6 +160,11 @@ export class Point {
   // Constant time multiplication.
   // Since koblitz curves do not support Montgomery ladder,
   // we emulate constant-time by multiplying to every power of 2.
+  // We've tried a few different multiplication methods
+  // - method: 1-bit privkey / 256-bit privkey
+  // - double-and-add: 0.16ms / 23ms
+  // - double-and-add constant-time: 30ms
+  // - wNAF with w=4: 0.12ms / 18ms
   multiply(scalar: number | bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
@@ -166,13 +175,10 @@ export class Point {
     }
 
     let Q = new Point(0n, 0n);
-    // Fake point.
-    let F = new Point(this.x, this.y);
-
     let P: Point = this;
+    let F: Point = new Point(P.x, P.y); // Fake point for constant-timeness.
     for (let bit = 0; bit <= 256; bit++) {
       let added = false;
-
       if (n > 0) {
         if ((n & 1n) === 1n) {
           Q = Q.add(P);
@@ -180,11 +186,7 @@ export class Point {
         }
         n >>= 1n;
       }
-
-      if (!added) {
-        F = F.add(P);
-      }
-
+      if (!added) F = F.add(P);
       P = P.double();
     }
     return Q;

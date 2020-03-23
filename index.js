@@ -102,6 +102,9 @@ class Point {
             return `04${x}${pad64(this.y)}`;
         }
     }
+    negate() {
+        return new Point(this.x, exports.P - this.y);
+    }
     add(other) {
         if (!(other instanceof Point)) {
             throw new TypeError('Point#add: expected Point');
@@ -146,8 +149,8 @@ class Point {
             throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
         }
         let Q = new Point(0n, 0n);
-        let F = new Point(this.x, this.y);
         let P = this;
+        let F = new Point(P.x, P.y);
         for (let bit = 0; bit <= 256; bit++) {
             let added = false;
             if (n > 0) {
@@ -157,9 +160,8 @@ class Point {
                 }
                 n >>= 1n;
             }
-            if (!added) {
+            if (!added)
                 F = F.add(P);
-            }
             P = P.double();
         }
         return Q;
@@ -387,7 +389,9 @@ function getPublicKey(privateKey, isCompressed) {
 exports.getPublicKey = getPublicKey;
 function getSharedSecret(privateA, publicB) {
     const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
-    return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
+    const shared = point.multiply(normalizePrivateKey(privateA));
+    const returnHex = typeof privateA === 'string';
+    return returnHex ? shared.toHex() : shared.toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
 async function sign(hash, privateKey, { recovered, canonical } = {}) {

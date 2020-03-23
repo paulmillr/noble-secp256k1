@@ -7,7 +7,6 @@
     "removeComments": true,
     "preserveConstEnums": true,
     "resolveJsonModule": true,
-    "noUnusedLocals": true
   },
   "include": ["*.ts"],
   "exclude": ["node_modules"]
