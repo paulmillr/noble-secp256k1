@@ -480,9 +480,11 @@ export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKe
   return point.toRawBytes(isCompressed);
 }
 
-export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array {
+export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string {
   const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
-  return point.multiply(normalizePrivateKey(privateA)).toRawBytes();
+  const shared = point.multiply(normalizePrivateKey(privateA));
+  const returnHex = typeof privateA === 'string';
+  return returnHex ? shared.toHex() : shared.toRawBytes();
 }
 
 type OptsRecovered = { recovered: true; canonical?: true };
@@ -490,15 +492,15 @@ type OptsNoRecovered = { recovered?: false; canonical?: true };
 type Opts = { recovered?: boolean; canonical?: true };
 
 export async function sign(
-  hash: string,
-  privateKey: PrivKey,
-  opts: OptsRecovered
-): Promise<[string, number]>;
-export async function sign(
   hash: Uint8Array,
   privateKey: PrivKey,
   opts: OptsRecovered
 ): Promise<[Uint8Array, number]>;
+export async function sign(
+  hash: string,
+  privateKey: PrivKey,
+  opts: OptsRecovered
+): Promise<[string, number]>;
 export async function sign(
   hash: Uint8Array,
   privateKey: PrivKey,
