@@ -9,8 +9,8 @@ export declare class Point {
     x: bigint;
     y: bigint;
     constructor(x: bigint, y: bigint);
-    private static fromCompressedHex;
     static isValidPoint(x: bigint, y: bigint): boolean;
+    private static fromCompressedHex;
     private static fromUncompressedHex;
     static fromHex(hash: Hex): Point;
     static fromPrivateKey(privateKey: PrivKey): Point;

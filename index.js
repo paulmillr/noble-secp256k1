@@ -13,6 +13,20 @@ class Point {
         this.x = x;
         this.y = y;
     }
+    static isValidPoint(x, y) {
+        if (x === 0n || y === 0n || x >= exports.P || y >= exports.P)
+            return false;
+        const sqrY = y * y;
+        const yEquivalence = x ** 3n + A * x + B;
+        const actualSqrY1 = mod(sqrY, exports.P);
+        const actualSqrY2 = mod(-sqrY, exports.P);
+        const expectedSqrY1 = mod(yEquivalence, exports.P);
+        const expectedSqrY2 = mod(-yEquivalence, exports.P);
+        return (actualSqrY1 === expectedSqrY1 ||
+            actualSqrY1 === expectedSqrY2 ||
+            actualSqrY2 === expectedSqrY1 ||
+            actualSqrY2 === expectedSqrY2);
+    }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
             throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
@@ -29,20 +43,6 @@ class Point {
             throw new TypeError('Point.fromHex: Point is not on elliptic curve');
         }
         return new Point(x, y);
-    }
-    static isValidPoint(x, y) {
-        if (x === 0n || y === 0n || x >= exports.P || y >= exports.P)
-            return false;
-        const sqrY = y * y;
-        const yEquivalence = x ** 3n + A * x + B;
-        const actualSqrY1 = mod(sqrY, exports.P);
-        const actualSqrY2 = mod(-sqrY, exports.P);
-        const expectedSqrY1 = mod(yEquivalence, exports.P);
-        const expectedSqrY2 = mod(-yEquivalence, exports.P);
-        return (actualSqrY1 === expectedSqrY1 ||
-            actualSqrY1 === expectedSqrY2 ||
-            actualSqrY2 === expectedSqrY1 ||
-            actualSqrY2 === expectedSqrY2);
     }
     static fromUncompressedHex(bytes) {
         if (bytes.length !== 65) {

@@ -147,6 +147,13 @@ secp256k1.SignResult {
 }
 ```
 
+## Contributing
+
+1. Clone the repository.
+2. `npm install` to install build dependencies like TypeScript
+3. `npm run compile` to compile TypeScript code
+4. `npm run test` to run jest on `test/index.ts`
+
 ## Security
 
 Noble is production-ready & secure. Our goal is to have it audited by a good security expert.

@@ -18,6 +18,23 @@ type Signature = Uint8Array | string | SignResult;
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
+  static isValidPoint(x: bigint, y: bigint) {
+    if (x === 0n || y === 0n || x >= P || y >= P) return false;
+
+    const sqrY = y * y;
+    const yEquivalence = x ** 3n + A * x + B;
+    const actualSqrY1 = mod(sqrY, P);
+    const actualSqrY2 = mod(-sqrY, P);
+    const expectedSqrY1 = mod(yEquivalence, P);
+    const expectedSqrY2 = mod(-yEquivalence, P);
+    return (
+      actualSqrY1 === expectedSqrY1 ||
+      actualSqrY1 === expectedSqrY2 ||
+      actualSqrY2 === expectedSqrY1 ||
+      actualSqrY2 === expectedSqrY2
+    );
+  }
+
   private static fromCompressedHex(bytes: Uint8Array) {
     if (bytes.length !== 33) {
       throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
@@ -34,23 +51,6 @@ export class Point {
       throw new TypeError('Point.fromHex: Point is not on elliptic curve');
     }
     return new Point(x, y);
-  }
-
-  static isValidPoint(x: bigint, y: bigint) {
-    if (x === 0n || y === 0n || x >= P || y >= P) return false;
-
-    const sqrY = y * y;
-    const yEquivalence = x ** 3n + A * x + B;
-    const actualSqrY1 = mod(sqrY, P);
-    const actualSqrY2 = mod(-sqrY, P);
-    const expectedSqrY1 = mod(yEquivalence, P);
-    const expectedSqrY2 = mod(-yEquivalence, P);
-    return (
-      actualSqrY1 === expectedSqrY1 ||
-      actualSqrY1 === expectedSqrY2 ||
-      actualSqrY2 === expectedSqrY1 ||
-      actualSqrY2 === expectedSqrY2
-    );
   }
 
   private static fromUncompressedHex(bytes: Uint8Array) {
@@ -489,11 +489,31 @@ type OptsRecovered = { recovered: true; canonical?: true };
 type OptsNoRecovered = { recovered?: false; canonical?: true };
 type Opts = { recovered?: boolean; canonical?: true };
 
-export async function sign(hash: string, privateKey: PrivKey, opts: OptsRecovered): Promise<[string, number]>;
-export async function sign(hash: Uint8Array, privateKey: PrivKey, opts: OptsRecovered): Promise<[Uint8Array, number]>;
-export async function sign(hash: Uint8Array, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<Uint8Array>;
-export async function sign(hash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
-export async function sign(hash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
+export async function sign(
+  hash: string,
+  privateKey: PrivKey,
+  opts: OptsRecovered
+): Promise<[string, number]>;
+export async function sign(
+  hash: Uint8Array,
+  privateKey: PrivKey,
+  opts: OptsRecovered
+): Promise<[Uint8Array, number]>;
+export async function sign(
+  hash: Uint8Array,
+  privateKey: PrivKey,
+  opts?: OptsNoRecovered
+): Promise<Uint8Array>;
+export async function sign(
+  hash: string,
+  privateKey: PrivKey,
+  opts?: OptsNoRecovered
+): Promise<string>;
+export async function sign(
+  hash: string,
+  privateKey: PrivKey,
+  opts?: OptsNoRecovered
+): Promise<string>;
 export async function sign(
   hash: Hex,
   privateKey: PrivKey,
