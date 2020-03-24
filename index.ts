@@ -139,17 +139,6 @@ export class Point {
     return new Point(x, y);
   }
 
-  // Constant time multiplication.
-  // Since koblitz curves do not support Montgomery ladder,
-  // we emulate constant-time by multiplying to every power of 2.
-  // We've tried a few different multiplication methods
-  // method: 1-bit privkey / 256-bit privkey
-  // - double-and-add: 0.16ms / 23ms
-  // - double-and-add constant-time: 30ms
-  // - wNAF with w=4: 0.12ms / 18ms
-  // - powers of 2: 0.01ms / 7.7ms
-  // - powers of 2 constant-time: 14ms (using this)
-  // - powers of 2 constant-time custom point: 29ms (using this)
   private double(): Point {
     const a = this;
     const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
@@ -182,6 +171,12 @@ export class Point {
     return points;
   }
 
+  // Constant time multiplication.
+  // Benchmark of different methods for the reference:
+  // - windowed method (current): 4ms (30ms custom point), 75ms first start
+  // - powers of 2 constant-time: 14ms (30ms custom point), 35ms first start
+  // - double-and-add constant-time: 30ms
+  // - wNAF with w=4: 0.12ms - 18ms, non-constant
   multiply(scalar: bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
