@@ -20,8 +20,6 @@ type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
-const powersOf2: bigint[] = new Array(256);
-for (let i = 0n; i < 256n; i++) powersOf2[Number(i)] = 2n ** i;
 let BASE_POINT_DOUBLES: Point[];
 
 export class Point {
@@ -169,14 +167,14 @@ export class Point {
     let f = new Point(0n, 0n);
     const doubles = this.precomputeDoubles();
     for (let bit = 0; bit < 256; bit++) {
-      const pow = powersOf2[bit];
       const powPoint = doubles[bit];
-      const hasBit = (n & pow) === pow;
+      const hasBit = n & 1n;
       if (hasBit) {
         p = p.add(powPoint);
       } else {
         f = f.add(powPoint);
       }
+      n >>= 1n;
     }
     return p;
   }

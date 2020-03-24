@@ -11,9 +11,6 @@ function curve(x) {
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = exports.PRIME_ORDER >> 1n;
 const SUBPN = exports.P - exports.PRIME_ORDER;
-const powersOf2 = new Array(256);
-for (let i = 0n; i < 256n; i++)
-    powersOf2[Number(i)] = 2n ** i;
 let BASE_POINT_DOUBLES;
 class Point {
     constructor(x, y) {
@@ -139,15 +136,15 @@ class Point {
         let f = new Point(0n, 0n);
         const doubles = this.precomputeDoubles();
         for (let bit = 0; bit < 256; bit++) {
-            const pow = powersOf2[bit];
             const powPoint = doubles[bit];
-            const hasBit = (n & pow) === pow;
+            const hasBit = n & 1n;
             if (hasBit) {
                 p = p.add(powPoint);
             }
             else {
                 f = f.add(powPoint);
             }
+            n >>= 1n;
         }
         return p;
     }
