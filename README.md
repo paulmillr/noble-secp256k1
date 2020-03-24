@@ -82,7 +82,7 @@ function sign(msgHash: Uint8Array, privateKey: Uint8Array, opts?: Options): Prom
 
 ```
 
-Generates deterministic ECDSA signature as per RFC 6979. Asynchronous, so use `await`.
+Generates deterministic ECDSA signature as per RFC6979. Asynchronous, so use `await`.
 
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
