@@ -20,7 +20,7 @@ type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
-let BASE_POINT_DOUBLES: Point[];
+let BASE_POINT_PRECOMPUTES: Point[];
 
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
@@ -121,19 +121,14 @@ export class Point {
     }
     const a = this;
     const b = other;
-    if (a.x === 0n && a.y === 0n) {
-      return b;
-    }
-    if (b.x === 0n && b.y === 0n) {
-      return a;
-    }
-    if (a.x === b.y && a.y === -b.y) {
-      return new Point(0n, 0n);
-    }
+    if (a.isZero()) return b;
+    if (b.isZero()) return a;
+    if (a.x === b.y && a.y === -b.y) return ZERO_POINT;
     if (a.x === b.x) {
       if (a.y === b.y) {
         return this.double();
       } else {
+        // return ZERO_POINT;
         // Point at undefined.
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
@@ -144,41 +139,6 @@ export class Point {
     return new Point(x, y);
   }
 
-  // Constant time multiplication.
-  // Since koblitz curves do not support Montgomery ladder,
-  // we emulate constant-time by multiplying to every power of 2.
-  // We've tried a few different multiplication methods
-  // method: 1-bit privkey / 256-bit privkey
-  // - double-and-add: 0.16ms / 23ms
-  // - double-and-add constant-time: 30ms
-  // - wNAF with w=4: 0.12ms / 18ms
-  // - powers of 2: 0.01ms / 7.7ms
-  // - powers of 2 constant-time: 14ms (using this)
-  // - powers of 2 constant-time custom point: 29ms (using this)
-  multiply(scalar: number | bigint): Point {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    let n = BigInt(scalar);
-    if (!isValidPrivateKey(n)) {
-      throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
-    }
-    let p = new Point(0n, 0n);
-    let f = new Point(0n, 0n);
-    const doubles = this.precomputeDoubles();
-    for (let bit = 0; bit < 256; bit++) {
-      const powPoint = doubles[bit];
-      const hasBit = n & 1n;
-      if (hasBit) {
-        p = p.add(powPoint);
-      } else {
-        f = f.add(powPoint);
-      }
-      n >>= 1n;
-    }
-    return p;
-  }
-
   private double(): Point {
     const a = this;
     const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
@@ -187,18 +147,60 @@ export class Point {
     return new Point(x, y);
   }
 
-  // If it's base point, use existing precomputes.
-  // If it's custom point, calculate all multiplications from 0 to 256.
-  private precomputeDoubles(): Point[] {
-    let points = new Array(256);
-    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
-      if (BASE_POINT_DOUBLES) return BASE_POINT_DOUBLES;
-      points = BASE_POINT_DOUBLES = new Array(256);
+  private isZero() {
+    return this.x === 0n && this.y === 0n;
+  }
+
+  private precomputeWindow(W: number): Point[] {
+    let points: Point[] = new Array((2 ** W - 1) * W);
+    if (W === 4) {
+      if (BASE_POINT_PRECOMPUTES) return BASE_POINT_PRECOMPUTES;
+      points = BASE_POINT_PRECOMPUTES = [];
     }
-    for (let bit = 0, point: Point = this; bit < 256; bit++, point = point.double()) {
-      points[bit] = point;
+    let currPoint: Point = this;
+    let winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      let offset = currWin * winSize;
+      let point: Point = currPoint;
+      for (let i = 0; i < winSize; i++) {
+        points[offset + i] = point;
+        point = point.add(currPoint);
+      }
+      currPoint = point;
     }
     return points;
+  }
+
+  // Constant time multiplication.
+  // Benchmark of different methods for the reference:
+  // - windowed method (current): 4ms (30ms custom point), 75ms first start
+  // - powers of 2 constant-time: 14ms (30ms custom point), 35ms first start
+  // - double-and-add constant-time: 30ms
+  // - wNAF with w=4: 0.12ms - 18ms, non-constant
+  multiply(scalar: bigint): Point {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = BigInt(scalar);
+    if (!isValidPrivateKey(scalar)) {
+      throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+    }
+    let W = (this.x === BASE_POINT.x && this.y === BASE_POINT.y) ? 4 : 1;
+    const precomputes = this.precomputeWindow(W);
+    let p = ZERO_POINT;
+    let f = ZERO_POINT;
+    let winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      const offset = currWin * winSize;
+      const masked = Number(n & BigInt(winSize));
+      if (masked) {
+        p = p.add(precomputes[offset + masked - 1]);
+      } else {
+        f = f.add(precomputes[offset]);
+      }
+      n >>= BigInt(W);
+    }
+    return p;
   }
 }
 
@@ -256,6 +258,8 @@ export const BASE_POINT = new Point(
   55066263022277343669578718895168534326250603453777594175500187360389116729240n,
   32670510020758816978083085130507043184471273380659243275938904335757337482424n
 );
+
+const ZERO_POINT = new Point(0n, 0n);
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;

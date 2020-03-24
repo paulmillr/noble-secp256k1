@@ -11,7 +11,7 @@ function curve(x) {
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = exports.PRIME_ORDER >> 1n;
 const SUBPN = exports.P - exports.PRIME_ORDER;
-let BASE_POINT_DOUBLES;
+let BASE_POINT_PRECOMPUTES;
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -102,15 +102,12 @@ class Point {
         }
         const a = this;
         const b = other;
-        if (a.x === 0n && a.y === 0n) {
+        if (a.isZero())
             return b;
-        }
-        if (b.x === 0n && b.y === 0n) {
+        if (b.isZero())
             return a;
-        }
-        if (a.x === b.y && a.y === -b.y) {
-            return new Point(0n, 0n);
-        }
+        if (a.x === b.y && a.y === -b.y)
+            return ZERO_POINT;
         if (a.x === b.x) {
             if (a.y === b.y) {
                 return this.double();
@@ -124,30 +121,6 @@ class Point {
         const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
         return new Point(x, y);
     }
-    multiply(scalar) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-            throw new TypeError('Point#multiply: expected number or bigint');
-        }
-        let n = BigInt(scalar);
-        if (!isValidPrivateKey(n)) {
-            throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
-        }
-        let p = new Point(0n, 0n);
-        let f = new Point(0n, 0n);
-        const doubles = this.precomputeDoubles();
-        for (let bit = 0; bit < 256; bit++) {
-            const powPoint = doubles[bit];
-            const hasBit = n & 1n;
-            if (hasBit) {
-                p = p.add(powPoint);
-            }
-            else {
-                f = f.add(powPoint);
-            }
-            n >>= 1n;
-        }
-        return p;
-    }
     double() {
         const a = this;
         const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
@@ -155,17 +128,54 @@ class Point {
         const y = mod(lam * (a.x - x) - a.y, exports.P);
         return new Point(x, y);
     }
-    precomputeDoubles() {
-        let points = new Array(256);
-        if (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) {
-            if (BASE_POINT_DOUBLES)
-                return BASE_POINT_DOUBLES;
-            points = BASE_POINT_DOUBLES = new Array(256);
+    isZero() {
+        return this.x === 0n && this.y === 0n;
+    }
+    precomputeWindow(W) {
+        let points = new Array((2 ** W - 1) * W);
+        if (W === 4) {
+            if (BASE_POINT_PRECOMPUTES)
+                return BASE_POINT_PRECOMPUTES;
+            points = BASE_POINT_PRECOMPUTES = [];
         }
-        for (let bit = 0, point = this; bit < 256; bit++, point = point.double()) {
-            points[bit] = point;
+        let currPoint = this;
+        let winSize = 2 ** W - 1;
+        for (let currWin = 0; currWin < 256 / W; currWin++) {
+            let offset = currWin * winSize;
+            let point = currPoint;
+            for (let i = 0; i < winSize; i++) {
+                points[offset + i] = point;
+                point = point.add(currPoint);
+            }
+            currPoint = point;
         }
         return points;
+    }
+    multiply(scalar) {
+        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+            throw new TypeError('Point#multiply: expected number or bigint');
+        }
+        let n = BigInt(scalar);
+        if (!isValidPrivateKey(scalar)) {
+            throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+        }
+        let W = (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) ? 4 : 1;
+        const precomputes = this.precomputeWindow(W);
+        let p = ZERO_POINT;
+        let f = ZERO_POINT;
+        let winSize = 2 ** W - 1;
+        for (let currWin = 0; currWin < 256 / W; currWin++) {
+            const offset = currWin * winSize;
+            const masked = Number(n & BigInt(winSize));
+            if (masked) {
+                p = p.add(precomputes[offset + masked - 1]);
+            }
+            else {
+                f = f.add(precomputes[offset]);
+            }
+            n >>= BigInt(W);
+        }
+        return p;
     }
 }
 exports.Point = Point;
@@ -212,6 +222,7 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
+const ZERO_POINT = new Point(0n, 0n);
 let hmac;
 if (typeof window == 'object' && 'crypto' in window) {
     hmac = async (key, message) => {
