@@ -122,20 +122,14 @@ export class Point {
     }
     const a = this;
     const b = other;
-    if (a.x === 0n && a.y === 0n) {
-      return b;
-    }
-    if (b.x === 0n && b.y === 0n) {
-      return a;
-    }
-    if (a.x === b.y && a.y === -b.y) {
-      return new Point(0n, 0n);
-    }
+    if (a.isZero()) return b;
+    if (b.isZero()) return a;
+    if (a.x === b.y && a.y === -b.y) return ZERO_POINT;
     if (a.x === b.x) {
       if (a.y === b.y) {
         return this.double();
       } else {
-        // return new Point(0n, 0n);
+        // return ZERO_POINT;
         // Point at undefined.
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
@@ -157,30 +151,6 @@ export class Point {
   // - powers of 2: 0.01ms / 7.7ms
   // - powers of 2 constant-time: 14ms (using this)
   // - powers of 2 constant-time custom point: 29ms (using this)
-  pow(scalar: number | bigint): Point {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    let n = BigInt(scalar);
-    if (!isValidPrivateKey(n)) {
-      throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
-    }
-    let p = new Point(0n, 0n);
-    let f = new Point(0n, 0n);
-    const doubles = this.precomputeDoubles();
-    for (let bit = 0; bit < 256; bit++) {
-      const powPoint = doubles[bit];
-      const hasBit = n & 1n;
-      if (hasBit) {
-        p = p.add(powPoint);
-      } else {
-        f = f.add(powPoint);
-      }
-      n >>= 1n;
-    }
-    return p;
-  }
-
   private double(): Point {
     const a = this;
     const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
@@ -189,87 +159,50 @@ export class Point {
     return new Point(x, y);
   }
 
-  // If it's base point, use existing precomputes.
-  // If it's custom point, calculate all multiplications from 0 to 256.
-  private precomputeDoubles(): Point[] {
-    let points = new Array(256);
-    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
-      if (BASE_POINT_DOUBLES) return BASE_POINT_DOUBLES;
-      points = BASE_POINT_DOUBLES = new Array(256);
-    }
-    for (let bit = 0, point: Point = this; bit < 256; bit++, point = point.double()) {
-      points[bit] = point;
-    }
-    return points;
-  }
-
-  private precomputeChunks(W: number, doubles: Point[]): Point[] {
-    let points: Point[] = new Array(2 ** W * W);
-    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
-      if (BASE_POINT_CHUNKS) return BASE_POINT_CHUNKS;
-      points = BASE_POINT_CHUNKS = [];
-    }
-    for (let byte = 0; byte < 256 / W; byte++) {
-      // console.log(byte);
-      for (let i = 0; i < 2 ** W; i++) {
-        let n = i;
-        let point: Point = new Point(0n, 0n);
-        for (let bit = 0; bit < W; bit++) {
-          if (n & 1) point = point.add(doubles[byte * W + bit]);
-          n >>= 1;
-        }
-        points[byte * (2 ** W) + i] = point;
-      }
-    }
-    return points;
-  }
-
   private isZero() {
     return this.x === 0n && this.y === 0n;
   }
 
-  static precomputes: Point[];
+  private precomputeChunks(W: number): Point[] {
+    let points: Point[] = new Array((2 ** W - 1) * W);
+    if (W === 4) {
+      if (BASE_POINT_CHUNKS) return BASE_POINT_CHUNKS;
+      points = BASE_POINT_CHUNKS = [];
+    }
+    let currPoint: Point = this;
+    let winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      let offset = currWin * winSize;
+      let point: Point = currPoint;
+      for (let i = 0; i < winSize; i++) {
+        points[offset + i] = point;
+        point = point.add(currPoint);
+      }
+      currPoint = point;
+    }
+    return points;
+  }
 
   multiply(scalar: bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    scalar = BigInt(scalar);
+    let n = BigInt(scalar);
     if (!isValidPrivateKey(scalar)) {
       throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
-    const doubles = this.precomputeDoubles();
-    let precomputes;
-    let W = 1;
-    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
-      W = 4;
-      precomputes = this.precomputeChunks(W, doubles);
-    }
-    let n = scalar;
-    let p = new Point(0n, 0n);
-    let f = new Point(0n, 0n);
-    for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
-      if (precomputes) {
-        const w2 = (2 ** W);
-        const offset = w2 * byte_idx;
-        const mask = w2 - 1;
-        const masked = Number(n & BigInt(mask));
-        // console.log(offset, masked, mask);
-        const pcached = precomputes[offset + masked];
-        const fcached = precomputes[offset + masked ^ mask];
-        if (pcached.isZero()) {
-          f = f.add(fcached);
-        } else {
-          p = p.add(pcached);
-        }
+    let W = (this.x === BASE_POINT.x && this.y === BASE_POINT.y) ? 4 : 1;
+    const precomputes = this.precomputeChunks(W);
+    let p = ZERO_POINT;
+    let f = ZERO_POINT;
+    let winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      const offset = currWin * winSize;
+      const masked = Number(n & BigInt(winSize));
+      if (masked) {
+        p = p.add(precomputes[offset + masked - 1]);
       } else {
-        const powPoint = doubles[byte_idx];
-        const hasBit = n & 1n;
-        if (hasBit) {
-          p = p.add(powPoint);
-        } else {
-          f = f.add(powPoint);
-        }
+        f = f.add(precomputes[offset]);
       }
       n >>= BigInt(W);
     }
@@ -331,6 +264,8 @@ export const BASE_POINT = new Point(
   55066263022277343669578718895168534326250603453777594175500187360389116729240n,
   32670510020758816978083085130507043184471273380659243275938904335757337482424n
 );
+
+const ZERO_POINT = new Point(0n, 0n);
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;

@@ -103,15 +103,12 @@ class Point {
         }
         const a = this;
         const b = other;
-        if (a.x === 0n && a.y === 0n) {
+        if (a.isZero())
             return b;
-        }
-        if (b.x === 0n && b.y === 0n) {
+        if (b.isZero())
             return a;
-        }
-        if (a.x === b.y && a.y === -b.y) {
-            return new Point(0n, 0n);
-        }
+        if (a.x === b.y && a.y === -b.y)
+            return ZERO_POINT;
         if (a.x === b.x) {
             if (a.y === b.y) {
                 return this.double();
@@ -125,30 +122,6 @@ class Point {
         const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
         return new Point(x, y);
     }
-    pow(scalar) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-            throw new TypeError('Point#multiply: expected number or bigint');
-        }
-        let n = BigInt(scalar);
-        if (!isValidPrivateKey(n)) {
-            throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
-        }
-        let p = new Point(0n, 0n);
-        let f = new Point(0n, 0n);
-        const doubles = this.precomputeDoubles();
-        for (let bit = 0; bit < 256; bit++) {
-            const powPoint = doubles[bit];
-            const hasBit = n & 1n;
-            if (hasBit) {
-                p = p.add(powPoint);
-            }
-            else {
-                f = f.add(powPoint);
-            }
-            n >>= 1n;
-        }
-        return p;
-    }
     double() {
         const a = this;
         const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
@@ -156,84 +129,50 @@ class Point {
         const y = mod(lam * (a.x - x) - a.y, exports.P);
         return new Point(x, y);
     }
-    precomputeDoubles() {
-        let points = new Array(256);
-        if (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) {
-            if (BASE_POINT_DOUBLES)
-                return BASE_POINT_DOUBLES;
-            points = BASE_POINT_DOUBLES = new Array(256);
-        }
-        for (let bit = 0, point = this; bit < 256; bit++, point = point.double()) {
-            points[bit] = point;
-        }
-        return points;
+    isZero() {
+        return this.x === 0n && this.y === 0n;
     }
-    precomputeChunks(W, doubles) {
-        let points = new Array(2 ** W * W);
-        if (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) {
+    precomputeChunks(W) {
+        let points = new Array((2 ** W - 1) * W);
+        if (W === 4) {
             if (BASE_POINT_CHUNKS)
                 return BASE_POINT_CHUNKS;
             points = BASE_POINT_CHUNKS = [];
         }
-        for (let byte = 0; byte < 256 / W; byte++) {
-            for (let i = 0; i < 2 ** W; i++) {
-                let n = i;
-                let point = new Point(0n, 0n);
-                for (let bit = 0; bit < W; bit++) {
-                    if (n & 1)
-                        point = point.add(doubles[byte * W + bit]);
-                    n >>= 1;
-                }
-                points[byte * (2 ** W) + i] = point;
+        let currPoint = this;
+        let winSize = 2 ** W - 1;
+        for (let currWin = 0; currWin < 256 / W; currWin++) {
+            let offset = currWin * winSize;
+            let point = currPoint;
+            for (let i = 0; i < winSize; i++) {
+                points[offset + i] = point;
+                point = point.add(currPoint);
             }
+            currPoint = point;
         }
         return points;
-    }
-    isZero() {
-        return this.x === 0n && this.y === 0n;
     }
     multiply(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
-        scalar = BigInt(scalar);
+        let n = BigInt(scalar);
         if (!isValidPrivateKey(scalar)) {
             throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
         }
-        const doubles = this.precomputeDoubles();
-        let precomputes;
-        let W = 1;
-        if (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) {
-            W = 4;
-            precomputes = this.precomputeChunks(W, doubles);
-        }
-        let n = scalar;
-        let p = new Point(0n, 0n);
-        let f = new Point(0n, 0n);
-        for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
-            if (precomputes) {
-                const w2 = (2 ** W);
-                const offset = w2 * byte_idx;
-                const mask = w2 - 1;
-                const masked = Number(n & BigInt(mask));
-                const pcached = precomputes[offset + masked];
-                const fcached = precomputes[offset + masked ^ mask];
-                if (pcached.isZero()) {
-                    f = f.add(fcached);
-                }
-                else {
-                    p = p.add(pcached);
-                }
+        let W = (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) ? 4 : 1;
+        const precomputes = this.precomputeChunks(W);
+        let p = ZERO_POINT;
+        let f = ZERO_POINT;
+        let winSize = 2 ** W - 1;
+        for (let currWin = 0; currWin < 256 / W; currWin++) {
+            const offset = currWin * winSize;
+            const masked = Number(n & BigInt(winSize));
+            if (masked) {
+                p = p.add(precomputes[offset + masked - 1]);
             }
             else {
-                const powPoint = doubles[byte_idx];
-                const hasBit = n & 1n;
-                if (hasBit) {
-                    p = p.add(powPoint);
-                }
-                else {
-                    f = f.add(powPoint);
-                }
+                f = f.add(precomputes[offset]);
             }
             n >>= BigInt(W);
         }
@@ -284,6 +223,7 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
+const ZERO_POINT = new Point(0n, 0n);
 let hmac;
 if (typeof window == 'object' && 'crypto' in window) {
     hmac = async (key, message) => {
