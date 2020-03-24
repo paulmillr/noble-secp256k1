@@ -258,12 +258,10 @@ export class Point {
         const pcached = precomputes[offset + masked];
         const fcached = precomputes[offset + masked ^ mask];
         if (pcached.isZero()) {
-          f.add(fcached);
+          f = f.add(fcached);
         } else {
-          p.add(pcached);
+          p = p.add(pcached);
         }
-        p = p.add(pcached);
-        f = f.add(fcached);
       } else {
         const powPoint = doubles[byte_idx];
         const hasBit = n & 1n;
