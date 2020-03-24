@@ -21,7 +21,7 @@ export declare class Point {
     add(other: Point): Point;
     private double;
     private isZero;
-    private precomputeChunks;
+    private precomputeWindow;
     multiply(scalar: bigint): Point;
 }
 export declare class SignResult {

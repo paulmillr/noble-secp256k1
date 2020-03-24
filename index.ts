@@ -20,8 +20,7 @@ type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
-let BASE_POINT_DOUBLES: Point[];
-let BASE_POINT_CHUNKS: Point[];
+let BASE_POINT_PRECOMPUTES: Point[];
 
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
@@ -163,11 +162,11 @@ export class Point {
     return this.x === 0n && this.y === 0n;
   }
 
-  private precomputeChunks(W: number): Point[] {
+  private precomputeWindow(W: number): Point[] {
     let points: Point[] = new Array((2 ** W - 1) * W);
     if (W === 4) {
-      if (BASE_POINT_CHUNKS) return BASE_POINT_CHUNKS;
-      points = BASE_POINT_CHUNKS = [];
+      if (BASE_POINT_PRECOMPUTES) return BASE_POINT_PRECOMPUTES;
+      points = BASE_POINT_PRECOMPUTES = [];
     }
     let currPoint: Point = this;
     let winSize = 2 ** W - 1;
@@ -192,7 +191,7 @@ export class Point {
       throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
     let W = (this.x === BASE_POINT.x && this.y === BASE_POINT.y) ? 4 : 1;
-    const precomputes = this.precomputeChunks(W);
+    const precomputes = this.precomputeWindow(W);
     let p = ZERO_POINT;
     let f = ZERO_POINT;
     let winSize = 2 ** W - 1;

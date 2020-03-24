@@ -11,8 +11,7 @@ function curve(x) {
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = exports.PRIME_ORDER >> 1n;
 const SUBPN = exports.P - exports.PRIME_ORDER;
-let BASE_POINT_DOUBLES;
-let BASE_POINT_CHUNKS;
+let BASE_POINT_PRECOMPUTES;
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -132,12 +131,12 @@ class Point {
     isZero() {
         return this.x === 0n && this.y === 0n;
     }
-    precomputeChunks(W) {
+    precomputeWindow(W) {
         let points = new Array((2 ** W - 1) * W);
         if (W === 4) {
-            if (BASE_POINT_CHUNKS)
-                return BASE_POINT_CHUNKS;
-            points = BASE_POINT_CHUNKS = [];
+            if (BASE_POINT_PRECOMPUTES)
+                return BASE_POINT_PRECOMPUTES;
+            points = BASE_POINT_PRECOMPUTES = [];
         }
         let currPoint = this;
         let winSize = 2 ** W - 1;
@@ -161,7 +160,7 @@ class Point {
             throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
         }
         let W = (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) ? 4 : 1;
-        const precomputes = this.precomputeChunks(W);
+        const precomputes = this.precomputeWindow(W);
         let p = ZERO_POINT;
         let f = ZERO_POINT;
         let winSize = 2 ** W - 1;
