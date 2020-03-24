@@ -91,6 +91,7 @@ describe('secp256k1', () => {
         if (expected) {
           expect(p.add(q).toHex(true)).toBe(expected);
         } else {
+          // console.log(p, q);
           expect(() => p.add(q).toHex(true)).toThrowError();
         }
       }

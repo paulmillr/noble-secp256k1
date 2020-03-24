@@ -21,6 +21,7 @@ type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
 let BASE_POINT_DOUBLES: Point[];
+let BASE_POINT_CHUNKS: Point[];
 
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
@@ -134,6 +135,7 @@ export class Point {
       if (a.y === b.y) {
         return this.double();
       } else {
+        // return new Point(0n, 0n);
         // Point at undefined.
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
@@ -155,7 +157,7 @@ export class Point {
   // - powers of 2: 0.01ms / 7.7ms
   // - powers of 2 constant-time: 14ms (using this)
   // - powers of 2 constant-time custom point: 29ms (using this)
-  multiply(scalar: number | bigint): Point {
+  pow(scalar: number | bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
@@ -199,6 +201,81 @@ export class Point {
       points[bit] = point;
     }
     return points;
+  }
+
+  private precomputeChunks(W: number, doubles: Point[]): Point[] {
+    let points: Point[] = new Array(2 ** W * W);
+    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
+      if (BASE_POINT_CHUNKS) return BASE_POINT_CHUNKS;
+      points = BASE_POINT_CHUNKS = [];
+    }
+    for (let byte = 0; byte < 256 / W; byte++) {
+      // console.log(byte);
+      for (let i = 0; i < 2 ** W; i++) {
+        let n = i;
+        let point: Point = new Point(0n, 0n);
+        for (let bit = 0; bit < W; bit++) {
+          if (n & 1) point = point.add(doubles[byte * W + bit]);
+          n >>= 1;
+        }
+        points[byte * (2 ** W) + i] = point;
+      }
+    }
+    return points;
+  }
+
+  private isZero() {
+    return this.x === 0n && this.y === 0n;
+  }
+
+  static precomputes: Point[];
+
+  multiply(scalar: bigint): Point {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    scalar = BigInt(scalar);
+    if (!isValidPrivateKey(scalar)) {
+      throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+    }
+    const doubles = this.precomputeDoubles();
+    let precomputes;
+    let W = 1;
+    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
+      W = 4;
+      precomputes = this.precomputeChunks(W, doubles);
+    }
+    let n = scalar;
+    let p = new Point(0n, 0n);
+    let f = new Point(0n, 0n);
+    for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
+      if (precomputes) {
+        const w2 = (2 ** W);
+        const offset = w2 * byte_idx;
+        const mask = w2 - 1;
+        const masked = Number(n & BigInt(mask));
+        // console.log(offset, masked, mask);
+        const pcached = precomputes[offset + masked];
+        const fcached = precomputes[offset + masked ^ mask];
+        if (pcached.isZero()) {
+          f.add(fcached);
+        } else {
+          p.add(pcached);
+        }
+        p = p.add(pcached);
+        f = f.add(fcached);
+      } else {
+        const powPoint = doubles[byte_idx];
+        const hasBit = n & 1n;
+        if (hasBit) {
+          p = p.add(powPoint);
+        } else {
+          f = f.add(powPoint);
+        }
+      }
+      n >>= BigInt(W);
+    }
+    return p;
   }
 }
 
