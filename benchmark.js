@@ -1,4 +1,15 @@
-const secp = require('.');
+let secp;
+
+function logMem(i) {
+  const vals = Object.entries(process.memoryUsage()).map(([k, v]) => {
+    return `${k}=${(`${(v / 1e6).toFixed(1)}M`).padEnd(7)}`;
+  });
+  console.log(String(i).padStart(6), ...vals);
+}
+
+bench('load', 1, () => {
+  secp = require('.');
+});
 
 function bench(name, counts, callback) {
   const label = `${name} x${counts}`;
@@ -10,14 +21,22 @@ function bench(name, counts, callback) {
 }
 
 // warm-up
-secp.getPublicKey('beef');
+let pub;
+pub = secp.getPublicKey('beef');
 
-bench('getPublicKey 1 bit', 1, () => {
-  secp.getPublicKey('01');
+logMem('start');
+bench('getPublicKey 1 bit', 100, () => {
+  pub = secp.getPublicKey('01');
 });
 
-console.profile('cpu');
-bench('getPublicKey 256 bit', 1, () => {
-  secp.getPublicKey('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+// console.profile('cpu');
+bench('getPublicKey 256 bit', 100, () => {
+  pub = secp.getPublicKey('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
 });
-console.profileEnd('cpu');
+
+let custom = secp.Point.fromHex(pub);
+bench('getPublicKey 256 bit', 100, () => {
+  pub = custom.multiply(0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdefn);
+});
+logMem('end');
+// console.profileEnd('cpu');

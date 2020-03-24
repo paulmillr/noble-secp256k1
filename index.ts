@@ -6,6 +6,11 @@ const B = 7n;
 export const P = 2n ** 256n - 2n ** 32n - 977n;
 // Subgroup order, cofactor is 1
 export const PRIME_ORDER = 2n ** 256n - 432420386565659656852420866394968145599n;
+
+// y**2 = x**3 + ax + b
+function curve(x: bigint) {
+  return x ** 3n + A * x + B;
+}
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
@@ -15,16 +20,19 @@ type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
+const powersOf2: bigint[] = new Array(256);
+for (let i = 0n; i < 256n; i++) powersOf2[Number(i)] = 2n ** i;
+let BASE_POINT_DOUBLES: Point[];
+
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
   // A point on curve is valid if it conforms to equation
-  // y**2 = x**3 + ax + b
   static isValidPoint(x: bigint, y: bigint) {
     if (x === 0n || y === 0n || x >= P || y >= P) return false;
 
     const sqrY = y * y;
-    const yEquivalence = x ** 3n + A * x + B;
+    const yEquivalence = curve(x);
     const left1 = mod(sqrY, P);
     const left2 = mod(-sqrY, P);
     const right1 = mod(yEquivalence, P);
@@ -37,7 +45,7 @@ export class Point {
       throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
     }
     const x = arrayToNumber(bytes.slice(1));
-    const sqrY = mod(x ** 3n + A * x + B, P);
+    const sqrY = mod(curve(x), P);
     let y = powMod(sqrY, (P + 1n) / 4n, P);
     const isFirstByteOdd = (bytes[0] & 1) === 1;
     const isYOdd = (y & 1n) === 1n;
@@ -138,7 +146,7 @@ export class Point {
     return new Point(x, y);
   }
 
-  private double(): Point {
+  double(): Point {
     const a = this;
     const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
     const x = mod(lam * lam - 2n * a.x, P);
@@ -150,10 +158,13 @@ export class Point {
   // Since koblitz curves do not support Montgomery ladder,
   // we emulate constant-time by multiplying to every power of 2.
   // We've tried a few different multiplication methods
-  // - method: 1-bit privkey / 256-bit privkey
+  // method: 1-bit privkey / 256-bit privkey
   // - double-and-add: 0.16ms / 23ms
   // - double-and-add constant-time: 30ms
   // - wNAF with w=4: 0.12ms / 18ms
+  // - powers of 2: 0.01ms / 7.7ms
+  // - powers of 2 constant-time: 14ms (using this)
+  // - powers of 2 constant-time custom point: 29ms (using this)
   multiply(scalar: number | bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
@@ -162,23 +173,34 @@ export class Point {
     if (!isValidPrivateKey(n)) {
       throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
     }
-
-    let Q = new Point(0n, 0n);
-    let P: Point = this;
-    let F: Point = new Point(P.x, P.y); // Fake point for constant-timeness.
-    for (let bit = 0; bit <= 256; bit++) {
-      let added = false;
-      if (n > 0) {
-        if ((n & 1n) === 1n) {
-          Q = Q.add(P);
-          added = true;
-        }
-        n >>= 1n;
+    let p = new Point(0n, 0n);
+    let f = new Point(0n, 0n);
+    const doubles = this.precomputeDoubles();
+    for (let bit = 0; bit < 256; bit++) {
+      const pow = powersOf2[bit];
+      const powPoint = doubles[bit];
+      const hasBit = (n & pow) === pow;
+      if (hasBit) {
+        p = p.add(powPoint);
+      } else {
+        f = f.add(powPoint);
       }
-      if (!added) F = F.add(P);
-      P = P.double();
     }
-    return Q;
+    return p;
+  }
+
+  // If it's base point, use existing precomputes.
+  // If it's custom point, calculate all multiplications from 0 to 256.
+  private precomputeDoubles(): Point[] {
+    let points = new Array(256);
+    if (this.x === BASE_POINT.x && this.y === BASE_POINT.y) {
+      if (BASE_POINT_DOUBLES) return BASE_POINT_DOUBLES;
+      points = BASE_POINT_DOUBLES = new Array(256);
+    }
+    for (let bit = 0, point: Point = this; bit < 256; bit++, point = point.double()) {
+      points[bit] = point;
+    }
+    return points;
   }
 }
 
@@ -317,6 +339,14 @@ function arrayToNumber(bytes: Uint8Array): bigint {
 
 function pad64(num: number | bigint): string {
   return num.toString(16).padStart(64, '0');
+}
+
+function bitset(num: number | bigint): number[] {
+  return num
+    .toString(2)
+    .split('')
+    .reverse()
+    .map(n => Number.parseInt(n, 2));
 }
 
 // -------------------------

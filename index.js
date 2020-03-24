@@ -5,9 +5,16 @@ const A = 0n;
 const B = 7n;
 exports.P = 2n ** 256n - 2n ** 32n - 977n;
 exports.PRIME_ORDER = 2n ** 256n - 432420386565659656852420866394968145599n;
+function curve(x) {
+    return x ** 3n + A * x + B;
+}
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = exports.PRIME_ORDER >> 1n;
 const SUBPN = exports.P - exports.PRIME_ORDER;
+const powersOf2 = new Array(256);
+for (let i = 0n; i < 256n; i++)
+    powersOf2[Number(i)] = 2n ** i;
+let BASE_POINT_DOUBLES;
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -17,7 +24,7 @@ class Point {
         if (x === 0n || y === 0n || x >= exports.P || y >= exports.P)
             return false;
         const sqrY = y * y;
-        const yEquivalence = x ** 3n + A * x + B;
+        const yEquivalence = curve(x);
         const left1 = mod(sqrY, exports.P);
         const left2 = mod(-sqrY, exports.P);
         const right1 = mod(yEquivalence, exports.P);
@@ -29,7 +36,7 @@ class Point {
             throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
         }
         const x = arrayToNumber(bytes.slice(1));
-        const sqrY = mod(x ** 3n + A * x + B, exports.P);
+        const sqrY = mod(curve(x), exports.P);
         let y = powMod(sqrY, (exports.P + 1n) / 4n, exports.P);
         const isFirstByteOdd = (bytes[0] & 1) === 1;
         const isYOdd = (y & 1n) === 1n;
@@ -135,23 +142,33 @@ class Point {
         if (!isValidPrivateKey(n)) {
             throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
         }
-        let Q = new Point(0n, 0n);
-        let P = this;
-        let F = new Point(P.x, P.y);
-        for (let bit = 0; bit <= 256; bit++) {
-            let added = false;
-            if (n > 0) {
-                if ((n & 1n) === 1n) {
-                    Q = Q.add(P);
-                    added = true;
-                }
-                n >>= 1n;
+        const doubles = this.precomputeDoubles();
+        let p = new Point(0n, 0n);
+        let f = new Point(0n, 0n);
+        for (let bit = 0; bit < 256; bit++) {
+            const pow = powersOf2[bit];
+            const powPoint = doubles[bit];
+            const hasBit = (n & pow) === pow;
+            if (hasBit) {
+                p = p.add(powPoint);
             }
-            if (!added)
-                F = F.add(P);
-            P = P.double();
+            else {
+                f = f.add(powPoint);
+            }
         }
-        return Q;
+        return p;
+    }
+    precomputeDoubles() {
+        let points = new Array(256);
+        if (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) {
+            if (BASE_POINT_DOUBLES)
+                return BASE_POINT_DOUBLES;
+            points = BASE_POINT_DOUBLES = new Array(256);
+        }
+        for (let bit = 0, point = this; bit < 256; bit++, point = point.double()) {
+            points[bit] = point;
+        }
+        return points;
     }
 }
 exports.Point = Point;
@@ -260,6 +277,13 @@ function arrayToNumber(bytes) {
 }
 function pad64(num) {
     return num.toString(16).padStart(64, '0');
+}
+function bitset(num) {
+    return num
+        .toString(2)
+        .split('')
+        .reverse()
+        .map(n => Number.parseInt(n, 2));
 }
 function mod(a, b) {
     const result = a % b;
