@@ -19,8 +19,8 @@ export declare class Point {
     toHex(isCompressed?: boolean): string;
     negate(): Point;
     add(other: Point): Point;
-    double(): Point;
     multiply(scalar: number | bigint): Point;
+    private double;
     private precomputeDoubles;
 }
 export declare class SignResult {

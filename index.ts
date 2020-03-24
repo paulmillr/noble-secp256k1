@@ -146,14 +146,6 @@ export class Point {
     return new Point(x, y);
   }
 
-  double(): Point {
-    const a = this;
-    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
-    const x = mod(lam * lam - 2n * a.x, P);
-    const y = mod(lam * (a.x - x) - a.y, P);
-    return new Point(x, y);
-  }
-
   // Constant time multiplication.
   // Since koblitz curves do not support Montgomery ladder,
   // we emulate constant-time by multiplying to every power of 2.
@@ -187,6 +179,14 @@ export class Point {
       }
     }
     return p;
+  }
+
+  private double(): Point {
+    const a = this;
+    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
+    const x = mod(lam * lam - 2n * a.x, P);
+    const y = mod(lam * (a.x - x) - a.y, P);
+    return new Point(x, y);
   }
 
   // If it's base point, use existing precomputes.

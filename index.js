@@ -127,13 +127,6 @@ class Point {
         const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
         return new Point(x, y);
     }
-    double() {
-        const a = this;
-        const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
-        const x = mod(lam * lam - 2n * a.x, exports.P);
-        const y = mod(lam * (a.x - x) - a.y, exports.P);
-        return new Point(x, y);
-    }
     multiply(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
@@ -142,9 +135,9 @@ class Point {
         if (!isValidPrivateKey(n)) {
             throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
         }
-        const doubles = this.precomputeDoubles();
         let p = new Point(0n, 0n);
         let f = new Point(0n, 0n);
+        const doubles = this.precomputeDoubles();
         for (let bit = 0; bit < 256; bit++) {
             const pow = powersOf2[bit];
             const powPoint = doubles[bit];
@@ -157,6 +150,13 @@ class Point {
             }
         }
         return p;
+    }
+    double() {
+        const a = this;
+        const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
+        const x = mod(lam * lam - 2n * a.x, exports.P);
+        const y = mod(lam * (a.x - x) - a.y, exports.P);
+        return new Point(x, y);
     }
     precomputeDoubles() {
         let points = new Array(256);
