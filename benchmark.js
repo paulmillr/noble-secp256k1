@@ -21,7 +21,7 @@ let pub;
 console.log('Starting');
 bench('load', 1, () => {
   secp = require('.');
-  pub = secp.getPublicKey('beef');
+  secp.utils.precompute(8);
 });
 
 logMem('start');
@@ -33,6 +33,12 @@ bench('getPublicKey 1 bit', 1, () => {
 const priv = 2n ** 255n + 12341n;
 bench('getPublicKey 256 bit', 1, () => {
   pub = secp.getPublicKey(priv);
+});
+
+bench('sign', 1, async () => {
+  const s = Date.now();
+  const full = await secp.sign('beef', 4321n, { canonical: true });
+  console.log(Date.now() - s);
 });
 
 let custom = secp.Point.fromHex(pub);

@@ -119,6 +119,22 @@ To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
 
 ##### Helpers
 
+`utils.precompute(W = 4, point = BASE_POINT)`
+
+This is done by default, no need to run it unless you want to
+disable precomputation or change window size.
+
+We're doing scalar multiplication (used in getPublicKey etc) with
+precomputed BASE_POINT values.
+
+This slows down first getPublicKey() by milliseconds (see Speed section),
+but allows to speed-up subsequent getPublicKey() calls up to 20x.
+
+The precomputation window is variable. For example, we increase W to 8
+for tests, to speed-up tests 2x.
+
+You may want to precompute values for your own point.
+
 ```typescript
 // 𝔽p
 secp256k1.P // 2 ** 256 - 2 ** 32 - 977
@@ -155,12 +171,15 @@ secp256k1.SignResult {
 }
 ```
 
-## Contributing
+## Speed
 
-1. Clone the repository.
-2. `npm install` to install build dependencies like TypeScript
-3. `npm run compile` to compile TypeScript code
-4. `npm run test` to run jest on `test/index.ts`
+Measured with 2.9Ghz Coffee Lake.
+
+- `getPrivateKey()`: 3.5ms
+- `sign()`: 30ms
+- `getSharedSecret()`: 27ms
+- precomputation: first `getPrivateKey()` or `utils.precompute()`: 65ms
+- `getPrivateKey()` with `utils.precompute(8)` instead of `4`: 1.75ms
 
 ## Security
 
@@ -173,6 +192,13 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 3. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
 4. We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
 5. We've hardened implementation of koblitz curve multiplication to be algorithmically timing-resistant.
+
+## Contributing
+
+1. Clone the repository.
+2. `npm install` to install build dependencies like TypeScript
+3. `npm run compile` to compile TypeScript code
+4. `npm run test` to run jest on `test/index.ts`
 
 ## License
 

@@ -8,6 +8,8 @@ declare type Signature = Uint8Array | string | SignResult;
 export declare class Point {
     x: bigint;
     y: bigint;
+    W?: number;
+    private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     static isValidPoint(x: bigint, y: bigint): boolean;
     private static fromCompressedHex;
@@ -19,10 +21,11 @@ export declare class Point {
     toHex(isCompressed?: boolean): string;
     negate(): Point;
     add(other: Point): Point;
+    subtract(other: Point): Point;
     private double;
     private isZero;
     private precomputeWindow;
-    multiply(scalar: bigint): Point;
+    multiply(scalar: number | bigint): Point;
 }
 export declare class SignResult {
     r: bigint;
@@ -53,5 +56,6 @@ export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNo
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
+    precompute(W?: number, point?: Point): true;
 };
 export {};

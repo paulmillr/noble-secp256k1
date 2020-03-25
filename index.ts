@@ -23,6 +23,9 @@ type Signature = Uint8Array | string | SignResult;
 let BASE_POINT_PRECOMPUTES: Point[];
 
 export class Point {
+  W?: number;
+  private PRECOMPUTES?: Point[];
+
   constructor(public x: bigint, public y: bigint) {}
 
   // A point on curve is valid if it conforms to equation
@@ -112,7 +115,7 @@ export class Point {
   }
 
   negate(): Point {
-    return new Point(this.x, P - this.y);
+    return new Point(this.x, mod(-this.y, P));
   }
 
   add(other: Point): Point {
@@ -139,6 +142,10 @@ export class Point {
     return new Point(x, y);
   }
 
+  subtract(other: Point) {
+    return this.add(other.negate());
+  }
+
   private double(): Point {
     const a = this;
     const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
@@ -152,13 +159,13 @@ export class Point {
   }
 
   private precomputeWindow(W: number): Point[] {
-    let points: Point[] = new Array((2 ** W - 1) * W);
-    if (W === 4) {
-      if (BASE_POINT_PRECOMPUTES) return BASE_POINT_PRECOMPUTES;
-      points = BASE_POINT_PRECOMPUTES = [];
+    if (this.PRECOMPUTES) return this.PRECOMPUTES;
+    const points: Point[] = new Array((2 ** W - 1) * W);
+    if (W !== 1) {
+      this.PRECOMPUTES = points;
     }
     let currPoint: Point = this;
-    let winSize = 2 ** W - 1;
+    const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       let offset = currWin * winSize;
       let point: Point = currPoint;
@@ -177,19 +184,26 @@ export class Point {
   // - powers of 2 constant-time: 14ms (30ms custom point), 35ms first start
   // - double-and-add constant-time: 30ms
   // - wNAF with w=4: 0.12ms - 18ms, non-constant
-  multiply(scalar: bigint): Point {
+  multiply(scalar: number | bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    let n = BigInt(scalar);
-    if (!isValidPrivateKey(scalar)) {
-      throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    let W = (this.x === BASE_POINT.x && this.y === BASE_POINT.y) ? 4 : 1;
+    // TODO: remove the check in the future, need to adjust tests.
+    if (scalar > PRIME_ORDER) {
+      throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER')
+    }
+    const W = this.W || 1;
+    if (256 % W) {
+      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+    }
     const precomputes = this.precomputeWindow(W);
     let p = ZERO_POINT;
     let f = ZERO_POINT;
-    let winSize = 2 ** W - 1;
+    const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       const offset = currWin * winSize;
       const masked = Number(n & BigInt(winSize));
@@ -258,7 +272,8 @@ export const BASE_POINT = new Point(
   55066263022277343669578718895168534326250603453777594175500187360389116729240n,
   32670510020758816978083085130507043184471273380659243275938904335757337482424n
 );
-
+// Enable precomputes. Slows down first publicKey computation by 80ms.
+BASE_POINT.W = 4;
 const ZERO_POINT = new Point(0n, 0n);
 
 // HMAC-SHA256 implementation.
@@ -341,14 +356,6 @@ function arrayToNumber(bytes: Uint8Array): bigint {
 
 function pad64(num: number | bigint): string {
   return num.toString(16).padStart(64, '0');
-}
-
-function bitset(num: number | bigint): number[] {
-  return num
-    .toString(2)
-    .split('')
-    .reverse()
-    .map(n => Number.parseInt(n, 2));
 }
 
 // -------------------------
@@ -584,5 +591,11 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
+  },
+
+  precompute(W = 4, point = BASE_POINT): true {
+    point.W = W;
+    point.multiply(1n);
+    return true;
   }
 };

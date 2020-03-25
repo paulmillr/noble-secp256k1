@@ -94,7 +94,7 @@ class Point {
         }
     }
     negate() {
-        return new Point(this.x, exports.P - this.y);
+        return new Point(this.x, mod(-this.y, exports.P));
     }
     add(other) {
         if (!(other instanceof Point)) {
@@ -121,6 +121,9 @@ class Point {
         const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
         return new Point(x, y);
     }
+    subtract(other) {
+        return this.add(other.negate());
+    }
     double() {
         const a = this;
         const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
@@ -132,14 +135,14 @@ class Point {
         return this.x === 0n && this.y === 0n;
     }
     precomputeWindow(W) {
-        let points = new Array((2 ** W - 1) * W);
-        if (W === 4) {
-            if (BASE_POINT_PRECOMPUTES)
-                return BASE_POINT_PRECOMPUTES;
-            points = BASE_POINT_PRECOMPUTES = [];
+        if (this.PRECOMPUTES)
+            return this.PRECOMPUTES;
+        const points = new Array((2 ** W - 1) * W);
+        if (W !== 1) {
+            this.PRECOMPUTES = points;
         }
         let currPoint = this;
-        let winSize = 2 ** W - 1;
+        const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             let offset = currWin * winSize;
             let point = currPoint;
@@ -155,15 +158,21 @@ class Point {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
-        let n = BigInt(scalar);
-        if (!isValidPrivateKey(scalar)) {
-            throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+        let n = mod(BigInt(scalar), exports.PRIME_ORDER);
+        if (n <= 0) {
+            throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        let W = (this.x === exports.BASE_POINT.x && this.y === exports.BASE_POINT.y) ? 4 : 1;
+        if (scalar > exports.PRIME_ORDER) {
+            throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+        }
+        const W = this.W || 1;
+        if (256 % W) {
+            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+        }
         const precomputes = this.precomputeWindow(W);
         let p = ZERO_POINT;
         let f = ZERO_POINT;
-        let winSize = 2 ** W - 1;
+        const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             const offset = currWin * winSize;
             const masked = Number(n & BigInt(winSize));
@@ -222,6 +231,7 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
+exports.BASE_POINT.W = 4;
 const ZERO_POINT = new Point(0n, 0n);
 let hmac;
 if (typeof window == 'object' && 'crypto' in window) {
@@ -285,13 +295,6 @@ function arrayToNumber(bytes) {
 }
 function pad64(num) {
     return num.toString(16).padStart(64, '0');
-}
-function bitset(num) {
-    return num
-        .toString(2)
-        .split('')
-        .reverse()
-        .map(n => Number.parseInt(n, 2));
 }
 function mod(a, b) {
     const result = a % b;
@@ -446,5 +449,10 @@ exports.verify = verify;
 exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
+    },
+    precompute(W = 4, point = exports.BASE_POINT) {
+        point.W = W;
+        point.multiply(1n);
+        return true;
     }
 };
