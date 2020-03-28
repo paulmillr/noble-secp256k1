@@ -2,7 +2,7 @@
 
 [secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for assymetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC 6939.
 
-Algorithmically resistant to timing attacks. Tested against thousands of vectors from tiny-secp256k1.
+Algorithmically resistant to timing attacks. Tested against thousands of vectors from tiny-secp256k1. Faster than indutny/elliptic, ecdsa.js and sjcl.
 
 ### This library belongs to *noble* crypto
 
@@ -173,7 +173,7 @@ secp256k1.SignResult {
 
 ## Speed
 
-Measured with 2.9Ghz Coffee Lake.
+Measured with 2.9Ghz Coffee Lake. getPublicKey and signatures are faster than indutny/elliptic, ecdsa.js, sjcl.
 
     getPublicKey 1 bit x 2323 ops/sec @ 430μs/op
     getPublicKey 256 bit x 2309 ops/sec @ 432μs/op
