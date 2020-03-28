@@ -65,7 +65,8 @@ async function bench(label, samples, callback) {
     const full = await secp.sign('beef', 4321n, { canonical: true });
   });
 
-  let custom = secp.Point.fromHex(pub);
+  const priv = 2n ** 255n + 12341n;
+  const custom = secp.Point.fromPrivateKey(2n ** 254n + 44182n);
   await bench('getSharedSecret', 1000, () => {
     secp.getSharedSecret(priv, custom);
   });
