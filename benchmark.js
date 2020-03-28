@@ -1,4 +1,4 @@
-let secp;
+let secp = require('.');
 
 function time() {
   return process.hrtime.bigint();
@@ -8,12 +8,18 @@ function logMem() {
   const vals = Object.entries(process.memoryUsage()).map(([k, v]) => {
     return `${k}=${`${(v / 1e6).toFixed(1)}M`.padEnd(7)}`;
   });
-  console.log('RAM:', ...vals);
+  // console.log('RAM:', ...vals);
 }
 
 async function bench(label, samples, callback) {
+  let initial = false;
+  if (typeof label === 'function' && !samples && !callback) {
+    callback = label;
+    samples = 1;
+    label = 'Initialized in';
+    initial = true;
+  }
   const [μs, ms, sec] = [1000n, 1000000n, 1000000000n];
-  // if (counts > 1) label += ` x${counts}`;
   const start = time();
   for (let i = 0; i < samples; i++) {
     let val = callback();
@@ -35,42 +41,63 @@ async function bench(label, samples, callback) {
   }
 
   const perSec = (sec / perItem).toString();
-  console.log(`${label} x ${perSec} ops/sec, ${perItemStr}${symbol} / op, ${samples} samples`);
+  let str = `${label} `;
+  if (!initial) {
+    str += `x ${perSec} ops/sec @ ${perItemStr}${symbol}/op`;
+  } else {
+    str += `${perItemStr}${symbol}`;
+  }
+  console.log(str);
 }
 
-(async () => {
-  // warm-up
-  let pub;
-  console.log('Benchmarking...\n');
-  await bench('load', 1, () => {
-    secp = require('.');
-    secp.utils.precompute();
+async function runAll(windowSize=4, samples=1000) {
+  console.log(`-------\nBenchmarking window=${windowSize} samples=${samples}...`);
+  await bench(() => {
+    secp.utils.precompute(windowSize);
   });
 
-  logMem('start');
+  logMem();
   console.log();
 
-  await bench('getPublicKey 1 bit', 1000, () => {
+  let pub;
+  await bench('getPublicKey 1 bit', samples, () => {
     pub = secp.getPublicKey(2n);
   });
 
   // console.profile('cpu');
   const priv = 2n ** 255n + 12341n;
-  await bench('getPublicKey 256 bit', 1000, () => {
+  await bench('getPublicKey 256 bit', samples, () => {
     pub = secp.getPublicKey(priv);
   });
 
-  await bench('sign', 1000, async () => {
-    const s = Date.now();
-    const full = await secp.sign('beef', 4321n, { canonical: true });
+  const hex = '02cc734b5c09322e61a8f0762af66da3143ab06319d87a73063c1bca6f7719f0ce';
+  const msg = 'deadbeefdeadbeefdeadbeefdeadbeef';
+  await bench('sign', samples, async () => {
+    await secp.sign(msg, priv, { canonical: true });
   });
 
-  const priv = 2n ** 255n + 12341n;
-  const custom = secp.Point.fromPrivateKey(2n ** 254n + 44182n);
-  await bench('getSharedSecret', 1000, () => {
-    secp.getSharedSecret(priv, custom);
+  let signed = await secp.sign(msg, priv, { canonical: true });
+  await bench('verify', samples, () => {
+    secp.verify(signed, msg, pub);
+  });
+
+  let [sig, reco] = await secp.sign(msg, priv, { canonical: true, recovered: true });
+  await bench('recoverPublicKey', samples, () => {
+    secp.recoverPublicKey(msg, sig, reco);
+  });
+
+  const pubKey = secp.Point.fromHex(hex);
+  await bench('getSharedSecret aka ecdh', samples, () => {
+    secp.getSharedSecret(priv, pubKey);
+  });
+
+  const pubKeyPre = secp.utils.precompute(windowSize, pubKey);
+  await bench('getSharedSecret (precomputed)', samples, () => {
+    secp.getSharedSecret(priv, pubKeyPre);
   });
 
   console.log();
   logMem();
-})();
+}
+
+runAll(4).then(() => runAll(8)).then(() => runAll(16));

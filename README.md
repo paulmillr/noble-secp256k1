@@ -91,7 +91,7 @@ Generates deterministic ECDSA signature as per RFC6979. Asynchronous, so use `aw
 - `options?.canonical: boolean = false` - determines whether a signature `s` should be no more than 1/2 prime order
 - Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`.
 
-##### `verify(signature, hash)`
+##### `verify(signature, hash, publicKey)`
 ```typescript
 function verify(signature: Uint8Array, msgHash: Uint8Array, publicKey: Uint8Array): boolean
 function verify(signature: string, msgHash: string, publicKey: string): boolean
@@ -175,11 +175,23 @@ secp256k1.SignResult {
 
 Measured with 2.9Ghz Coffee Lake.
 
-- `getPrivateKey()`: 3.5ms
-- `sign()`: 30ms
-- `getSharedSecret()`: 27ms
-- precomputation: first `getPrivateKey()` or `utils.precompute()`: 65ms
-- `getPrivateKey()` with `utils.precompute(8)` instead of `4`: 1.75ms
+    getPublicKey 1 bit x 2323 ops/sec @ 430μs/op
+    getPublicKey 256 bit x 2309 ops/sec @ 432μs/op
+    sign x 1815 ops/sec @ 550μs/op
+    verify x 235 ops/sec @ 4ms/op
+    recoverPublicKey x 123 ops/sec @ 8ms/op
+    getSharedSecret aka ecdh x 278 ops/sec @ 3ms/op
+    getSharedSecret (precomputed) x 2593 ops/sec @ 385μs/op
+
+Custom window=16 (takes 11sec to initialize):
+
+    getPublicKey 1 bit x 5195 ops/sec @ 192μs/op
+    getPublicKey 256 bit x 6010 ops/sec @ 166μs/op
+    sign x 3451 ops/sec @ 289μs/op
+    verify x 246 ops/sec @ 4ms/op
+    recoverPublicKey x 125 ops/sec @ 7ms/op
+    getSharedSecret aka ecdh x 273 ops/sec @ 3ms/op
+    getSharedSecret (precomputed) x 5066 ops/sec @ 197μs/op
 
 ## Security
 

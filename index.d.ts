@@ -16,9 +16,10 @@ export declare class Point {
     y: bigint;
     static BASE_POINT: Point;
     static ZERO_POINT: Point;
-    WINDOW_SIZE?: number;
+    private WINDOW_SIZE?;
     private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
+    _setWindowSize(windowSize: number): void;
     static isValid(x: bigint, y: bigint): boolean;
     private static fromCompressedHex;
     private static fromUncompressedHex;
@@ -42,10 +43,10 @@ export declare class SignResult {
     static fromHex(hex: Hex): SignResult;
     toHex(compressed?: boolean): string;
 }
-export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
-export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
+export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
+export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
 export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string;
 declare type OptsRecovered = {
     recovered: true;
@@ -63,6 +64,6 @@ export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNo
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
-    precompute(windowSize?: number, point?: Point): true;
+    precompute(windowSize?: number, point?: Point): Point;
 };
 export {};

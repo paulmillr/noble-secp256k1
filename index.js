@@ -93,6 +93,10 @@ class Point {
         this.x = x;
         this.y = y;
     }
+    _setWindowSize(windowSize) {
+        this.WINDOW_SIZE = windowSize;
+        this.PRECOMPUTES = undefined;
+    }
     static isValid(x, y) {
         if (x === 0n || y === 0n || x >= P || y >= P)
             return false;
@@ -223,7 +227,7 @@ class Point {
             }
             currPoint = point;
         }
-        const res = JacobianPoint.batchAffine(points);
+        const res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
         if (W !== 1) {
             this.PRECOMPUTES = res;
         }
@@ -252,10 +256,10 @@ class Point {
             const offset = winSize * byte_idx;
             const masked = Number(n & BigInt(winSize));
             if (masked) {
-                p = p.add(JacobianPoint.fromPoint(precomputes[offset + masked - 1]));
+                p = p.add((precomputes[offset + masked - 1]));
             }
             else {
-                f = f.add(JacobianPoint.fromPoint(precomputes[offset]));
+                f = f.add((precomputes[offset]));
             }
             n >>= BigInt(W);
         }
@@ -493,13 +497,6 @@ function normalizePublicKey(publicKey) {
 function normalizeSignature(signature) {
     return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
-function recoverPublicKey(msgHash, signature, recovery) {
-    const point = Point.fromSignature(msgHash, signature, recovery);
-    if (!point)
-        return;
-    return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
-}
-exports.recoverPublicKey = recoverPublicKey;
 function getPublicKey(privateKey, isCompressed) {
     const point = Point.fromPrivateKey(privateKey);
     if (typeof privateKey === 'string') {
@@ -508,6 +505,13 @@ function getPublicKey(privateKey, isCompressed) {
     return point.toRawBytes(isCompressed);
 }
 exports.getPublicKey = getPublicKey;
+function recoverPublicKey(msgHash, signature, recovery) {
+    const point = Point.fromSignature(msgHash, signature, recovery);
+    if (!point)
+        return;
+    return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
+}
+exports.recoverPublicKey = recoverPublicKey;
 function getSharedSecret(privateA, publicB) {
     const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
     const shared = point.multiply(normalizePrivateKey(privateA));
@@ -543,14 +547,15 @@ function verify(signature, msgHash, publicKey) {
     return point3.x === sign.r;
 }
 exports.verify = verify;
-Point.BASE_POINT.WINDOW_SIZE = 4;
+Point.BASE_POINT._setWindowSize(4);
 exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
     },
     precompute(windowSize = 4, point = Point.BASE_POINT) {
-        point.WINDOW_SIZE = windowSize;
-        point.multiply(1n);
-        return true;
+        const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+        cached._setWindowSize(windowSize);
+        cached.multiply(1n);
+        return cached;
     }
 };

@@ -37,6 +37,8 @@ const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
 
+// Point represents default aka affine coordinates: (x, y)
+// Jacobian Point represents point in jacobian coordinates: (x=x/z^2, y=y/z^3, z)
 class JacobianPoint {
   static ZERO_POINT = new JacobianPoint(0n, 0n, 1n);
   static fromPoint(p: Point): JacobianPoint {
@@ -119,10 +121,15 @@ export class Point {
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
-  WINDOW_SIZE?: number;
-  private PRECOMPUTES?: Point[];
+  private WINDOW_SIZE?: number;
+  private PRECOMPUTES?: JacobianPoint[];
 
   constructor(public x: bigint, public y: bigint) {}
+
+  _setWindowSize(windowSize: number) {
+    this.WINDOW_SIZE = windowSize;
+    this.PRECOMPUTES = undefined;
+  }
 
   // A point on curve is valid if it conforms to equation
   static isValid(x: bigint, y: bigint) {
@@ -253,7 +260,7 @@ export class Point {
     return this.x === other.x && this.y === other.y;
   }
 
-  private precomputeWindow(W: number): Point[] {
+  private precomputeWindow(W: number): JacobianPoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
     const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
     let currPoint: JacobianPoint = JacobianPoint.fromPoint(this);
@@ -267,7 +274,7 @@ export class Point {
       }
       currPoint = point;
     }
-    const res = JacobianPoint.batchAffine(points);
+    const res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
     if (W !== 1) {
       this.PRECOMPUTES = res;
     }
@@ -299,9 +306,9 @@ export class Point {
       const offset = winSize * byte_idx;
       const masked = Number(n & BigInt(winSize));
       if (masked) {
-        p = p.add(JacobianPoint.fromPoint(precomputes[offset + masked - 1]));
+        p = p.add(precomputes[offset + masked - 1]);
       } else {
-        f = f.add(JacobianPoint.fromPoint(precomputes[offset]));
+        f = f.add(precomputes[offset]);
       }
       n >>= BigInt(W);
     }
@@ -591,6 +598,19 @@ function normalizeSignature(signature: Signature): SignResult {
   return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
 
+export function getPublicKey(
+  privateKey: Uint8Array | bigint | number,
+  isCompressed?: boolean
+): Uint8Array;
+export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
+export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKey {
+  const point = Point.fromPrivateKey(privateKey);
+  if (typeof privateKey === 'string') {
+    return point.toHex(isCompressed);
+  }
+  return point.toRawBytes(isCompressed);
+}
+
 export function recoverPublicKey(
   msgHash: string,
   signature: string,
@@ -609,19 +629,6 @@ export function recoverPublicKey(
   const point = Point.fromSignature(msgHash, signature, recovery);
   if (!point) return;
   return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
-}
-
-export function getPublicKey(
-  privateKey: Uint8Array | bigint | number,
-  isCompressed?: boolean
-): Uint8Array;
-export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
-export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKey {
-  const point = Point.fromPrivateKey(privateKey);
-  if (typeof privateKey === 'string') {
-    return point.toHex(isCompressed);
-  }
-  return point.toRawBytes(isCompressed);
 }
 
 export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string {
@@ -696,16 +703,17 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
 }
 
 // Enable precomputes. Slows down first publicKey computation by 80ms.
-Point.BASE_POINT.WINDOW_SIZE = 4;
+Point.BASE_POINT._setWindowSize(4);
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
   },
 
-  precompute(windowSize = 4, point = Point.BASE_POINT): true {
-    point.WINDOW_SIZE = windowSize;
-    point.multiply(1n);
-    return true;
+  precompute(windowSize = 4, point = Point.BASE_POINT): Point {
+    const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+    cached._setWindowSize(windowSize);
+    cached.multiply(1n);
+    return cached;
   }
 };
