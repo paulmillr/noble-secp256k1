@@ -274,6 +274,7 @@ export class Point {
     return res;
   }
 
+  // Constant time multiplication.
   multiply(scalar: bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
@@ -305,45 +306,6 @@ export class Point {
       n >>= BigInt(W);
     }
     return JacobianPoint.batchAffine([p, f])[0];
-  }
-
-  // Constant time multiplication.
-  // Benchmark of different methods for the reference:
-  // - windowed method (current): 4ms (30ms custom point), 75ms first start
-  // - powers of 2 constant-time: 14ms (30ms custom point), 35ms first start
-  // - double-and-add constant-time: 30ms
-  // - wNAF with w=4: 0.12ms - 18ms, non-constant
-  multiply2(scalar: number | bigint): Point {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
-    // TODO: remove the check in the future, need to adjust tests.
-    if (scalar > PRIME_ORDER) {
-      throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
-    }
-    const W = this.WINDOW_SIZE || 1;
-    if (256 % W) {
-      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-    }
-    const precomputes = this.precomputeWindow(W);
-    let p = Point.ZERO_POINT;
-    let f = Point.ZERO_POINT;
-    const winSize = 2 ** W - 1;
-    for (let currWin = 0; currWin < 256 / W; currWin++) {
-      const offset = currWin * winSize;
-      const masked = Number(n & BigInt(winSize));
-      if (masked) {
-        p = p.add(precomputes[offset + masked - 1]);
-      } else {
-        f = f.add(precomputes[offset]);
-      }
-      n >>= BigInt(W);
-    }
-    return p;
   }
 }
 
