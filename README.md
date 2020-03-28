@@ -122,11 +122,11 @@ To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
 
 ##### Helpers
 
-`utils.generateRandomPrivateKey(): Uint8Array`
+###### `utils.generateRandomPrivateKey(): Uint8Array`
 
 Returns `Uint8Array` of 32 cryptographically secure random bytes. You can use it as private key.
 
-`utils.precompute(W = 4, point = BASE_POINT): Point`
+###### `utils.precompute(W = 4, point = BASE_POINT): Point`
 
 Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
 
