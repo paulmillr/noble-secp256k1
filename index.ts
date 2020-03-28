@@ -503,24 +503,32 @@ function mod(a: bigint, b: bigint = P): bigint {
   return result >= 0 ? result : b + result;
 }
 
-function modInverse(v: bigint, n: bigint = P): bigint {
-  let lm = 1n;
-  let hm = 0n;
-  let low = mod(v, n);
-  let high = n;
-  let ratio = 0n;
-  let nm = 0n;
-  let enew = 0n;
-  while (low > 1n) {
-    ratio = high / low;
-    nm = hm - lm * ratio;
-    enew = high - low * ratio;
-    hm = lm;
-    lm = nm;
-    high = low;
-    low = enew;
+// Eucledian GCD
+// https://brilliant.org/wiki/extended-euclidean-algorithm/
+function egcd(a: bigint, b: bigint) {
+  let [x, y, u, v] = [0n, 1n, 1n, 0n];
+  while (a !== 0n) {
+    let q = b / a;
+    let r = b % a;
+    let m = x - u * q;
+    let n = y - v * q;
+    [b, a] = [a, r];
+    [x, y] = [u, v];
+    [u, v] = [m, n];
   }
-  return mod(nm, n);
+  let gcd = b;
+  return [gcd, x, y];
+}
+
+function modInverse(number: bigint, modulo: bigint = P) {
+  if (number === 0n || modulo <= 0n) {
+    throw new Error('modInverse: expected positive integers');
+  }
+  let [gcd, x] = egcd(mod(number, modulo), modulo);
+  if (gcd !== 1n) {
+    throw new Error('modInverse: does not exist');
+  }
+  return mod(x, modulo);
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
