@@ -64,6 +64,7 @@ export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNo
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
+    generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
     precompute(windowSize?: number, point?: Point): Point;
 };
 export {};

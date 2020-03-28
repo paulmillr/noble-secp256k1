@@ -46,7 +46,7 @@ const isMessageSigned = secp256k1.verify(signature, messageHash, publicKey);
 - [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
 - [`getSharedSecret(privateKeyA, publicKeyB)`](#getsharedsecretprivatekeya-publickeyb)
 - [`sign(hash, privateKey)`](#signhash-privatekey)
-- [`verify(signature, hash)`](#verifysignature-hash)
+- [`verify(signature, hash, publicKey)`](#verifysignature-hash-publickey)
 - [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
 - [Helpers](#helpers)
 
@@ -74,12 +74,15 @@ Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private ke
 
 To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
 
+To speed-up the function massively by precomputing EC multiplications,
+use `getSharedSecret(privateKeyA, secp.utils.precompute(8, publicKeyB))`
+
+
 ##### `sign(hash, privateKey)`
 ```typescript
 function sign(msgHash: Uint8Array, privateKey: Uint8Array, opts?: Options): Promise<Uint8Array>;
 function sign(msgHash: string, privateKey: string, opts?: Options): Promise<string>;
 function sign(msgHash: Uint8Array, privateKey: Uint8Array, opts?: Options): Promise<[Uint8Array | string, number]>;
-
 ```
 
 Generates deterministic ECDSA signature as per RFC6979. Asynchronous, so use `await`.
@@ -119,7 +122,13 @@ To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
 
 ##### Helpers
 
-`utils.precompute(W = 4, point = BASE_POINT)`
+`utils.generateRandomPrivateKey(): Uint8Array`
+
+Returns `Uint8Array` of 32 cryptographically secure random bytes. You can use it as private key.
+
+`utils.precompute(W = 4, point = BASE_POINT): Point`
+
+Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
 
 This is done by default, no need to run it unless you want to
 disable precomputation or change window size.
@@ -136,14 +145,9 @@ for tests, to speed-up tests 2x.
 You may want to precompute values for your own point.
 
 ```typescript
-// 𝔽p
-secp256k1.P // 2 ** 256 - 2 ** 32 - 977
-
-// Prime order
-secp256k1.PRIME_ORDER // 2 ** 256 - 432420386565659656852420866394968145599
-
-// Base point
-secp256k1.BASE_POINT // new secp256k1.Point(x, y) where
+secp256k1.CURVE_PARAMS.P // 2 ** 256 - 2 ** 32 - 977
+secp256k1.CURVE_PARAMS.n // 2 ** 256 - 432420386565659656852420866394968145599
+secp256k1.Point.BASE_POINT // new secp256k1.Point(x, y) where
 // x = 55066263022277343669578718895168534326250603453777594175500187360389116729240n
 // y = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
 
@@ -181,6 +185,7 @@ Measured with 2.9Ghz Coffee Lake. getPublicKey and signatures are faster than in
     recoverPublicKey x 123 ops/sec @ 8ms/op
     getSharedSecret aka ecdh x 278 ops/sec @ 3ms/op
     getSharedSecret (precomputed) x 2593 ops/sec @ 385μs/op
+    generateRandomPrivateKey x 339328 ops/sec @ 2μs/op
 
 Custom window=16 (takes 11sec to initialize):
 
@@ -190,6 +195,7 @@ Custom window=16 (takes 11sec to initialize):
     recoverPublicKey x 125 ops/sec @ 7ms/op
     getSharedSecret aka ecdh x 273 ops/sec @ 3ms/op
     getSharedSecret (precomputed) x 5066 ops/sec @ 197μs/op
+    generateRandomPrivateKey x 339328 ops/sec @ 2μs/op
 
 ## Security
 

@@ -96,6 +96,10 @@ async function runAll(windowSize=4, samples=1000) {
     secp.getSharedSecret(priv, pubKeyPre);
   });
 
+  await bench('generateRandomPrivateKey', samples, () => {
+    secp.utils.generateRandomPrivateKey();
+  });
+
   console.log();
   logMem();
 }

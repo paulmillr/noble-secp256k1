@@ -299,11 +299,11 @@ export class Point {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    let winSize = 2 ** W - 1;
+    const winSize = 2 ** W - 1;
     let p = JacobianPoint.ZERO_POINT;
     let f = JacobianPoint.ZERO_POINT;
-    for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
-      const offset = winSize * byte_idx;
+    for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
+      const offset = winSize * byteIdx;
       const masked = Number(n & BigInt(winSize));
       if (masked) {
         p = p.add(precomputes[offset + masked - 1]);
@@ -367,6 +367,7 @@ export class SignResult {
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
+let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(0);
 
 if (typeof window == 'object' && 'crypto' in window) {
   hmac = async (key: Uint8Array, message: Uint8Array) => {
@@ -380,14 +381,20 @@ if (typeof window == 'object' && 'crypto' in window) {
     const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
     return new Uint8Array(buffer);
   };
+  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+    return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+  };
 } else if (typeof process === 'object' && 'node' in process.versions) {
   const req = require;
-  const { createHmac } = req('crypto');
+  const { createHmac, randomBytes } = req('crypto');
 
   hmac = async (key: Uint8Array, message: Uint8Array) => {
     const hash = createHmac('sha256', key);
     hash.update(message);
     return Uint8Array.from(hash.digest());
+  };
+  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+    return new Uint8Array(randomBytes(bytesLength).buffer);
   };
 } else {
   throw new Error("The environment doesn't have hmac-sha256 function");
@@ -692,14 +699,14 @@ export async function sign(
 }
 
 export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean {
-  const msg = truncateHash(msgHash);
-  const sign = normalizeSignature(signature);
-  const point = normalizePublicKey(publicKey);
-  const w = modInverse(sign.s, PRIME_ORDER);
-  const point1 = Point.BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
-  const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
-  const point3 = point1.add(point2);
-  return point3.x === sign.r;
+  const h = truncateHash(msgHash);
+  const {r, s} = normalizeSignature(signature);
+  const pubKey = normalizePublicKey(publicKey);
+  const s1 = modInverse(s, PRIME_ORDER);
+  const Ghs1 = Point.BASE_POINT.multiply(mod(h * s1, PRIME_ORDER));
+  const Prs1 = pubKey.multiply(mod(r * s1, PRIME_ORDER));
+  const res = Ghs1.add(Prs1)
+  return res.x === r;
 }
 
 // Enable precomputes. Slows down first publicKey computation by 80ms.
@@ -709,6 +716,8 @@ export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
   },
+
+  generateRandomPrivateKey,
 
   precompute(windowSize = 4, point = Point.BASE_POINT): Point {
     const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);

@@ -249,17 +249,17 @@ class Point {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        let winSize = 2 ** W - 1;
+        const winSize = 2 ** W - 1;
         let p = JacobianPoint.ZERO_POINT;
         let f = JacobianPoint.ZERO_POINT;
-        for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
-            const offset = winSize * byte_idx;
+        for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
+            const offset = winSize * byteIdx;
             const masked = Number(n & BigInt(winSize));
             if (masked) {
-                p = p.add((precomputes[offset + masked - 1]));
+                p = p.add(precomputes[offset + masked - 1]);
             }
             else {
-                f = f.add((precomputes[offset]));
+                f = f.add(precomputes[offset]);
             }
             n >>= BigInt(W);
         }
@@ -312,20 +312,27 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 let hmac;
+let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(0);
 if (typeof window == 'object' && 'crypto' in window) {
     hmac = async (key, message) => {
         const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
         const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
         return new Uint8Array(buffer);
     };
+    generateRandomPrivateKey = (bytesLength = 32) => {
+        return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+    };
 }
 else if (typeof process === 'object' && 'node' in process.versions) {
     const req = require;
-    const { createHmac } = req('crypto');
+    const { createHmac, randomBytes } = req('crypto');
     hmac = async (key, message) => {
         const hash = createHmac('sha256', key);
         hash.update(message);
         return Uint8Array.from(hash.digest());
+    };
+    generateRandomPrivateKey = (bytesLength = 32) => {
+        return new Uint8Array(randomBytes(bytesLength).buffer);
     };
 }
 else {
@@ -537,14 +544,14 @@ async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
 }
 exports.sign = sign;
 function verify(signature, msgHash, publicKey) {
-    const msg = truncateHash(msgHash);
-    const sign = normalizeSignature(signature);
-    const point = normalizePublicKey(publicKey);
-    const w = modInverse(sign.s, PRIME_ORDER);
-    const point1 = Point.BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
-    const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
-    const point3 = point1.add(point2);
-    return point3.x === sign.r;
+    const h = truncateHash(msgHash);
+    const { r, s } = normalizeSignature(signature);
+    const pubKey = normalizePublicKey(publicKey);
+    const s1 = modInverse(s, PRIME_ORDER);
+    const Ghs1 = Point.BASE_POINT.multiply(mod(h * s1, PRIME_ORDER));
+    const Prs1 = pubKey.multiply(mod(r * s1, PRIME_ORDER));
+    const res = Ghs1.add(Prs1);
+    return res.x === r;
 }
 exports.verify = verify;
 Point.BASE_POINT._setWindowSize(4);
@@ -552,6 +559,7 @@ exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
     },
+    generateRandomPrivateKey,
     precompute(windowSize = 4, point = Point.BASE_POINT) {
         const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
