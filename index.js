@@ -261,38 +261,6 @@ class Point {
         }
         return JacobianPoint.batchAffine([p, f])[0];
     }
-    multiply2(scalar) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-            throw new TypeError('Point#multiply: expected number or bigint');
-        }
-        let n = mod(BigInt(scalar), PRIME_ORDER);
-        if (n <= 0) {
-            throw new Error('Point#multiply: invalid scalar, expected positive integer');
-        }
-        if (scalar > PRIME_ORDER) {
-            throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
-        }
-        const W = this.WINDOW_SIZE || 1;
-        if (256 % W) {
-            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-        }
-        const precomputes = this.precomputeWindow(W);
-        let p = Point.ZERO_POINT;
-        let f = Point.ZERO_POINT;
-        const winSize = 2 ** W - 1;
-        for (let currWin = 0; currWin < 256 / W; currWin++) {
-            const offset = currWin * winSize;
-            const masked = Number(n & BigInt(winSize));
-            if (masked) {
-                p = p.add(precomputes[offset + masked - 1]);
-            }
-            else {
-                f = f.add(precomputes[offset]);
-            }
-            n >>= BigInt(W);
-        }
-        return p;
-    }
 }
 exports.Point = Point;
 Point.BASE_POINT = new Point(exports.CURVE_PARAMS.Gx, exports.CURVE_PARAMS.Gy);
@@ -370,22 +338,12 @@ function powMod(x, power, order) {
     }
     return res;
 }
-function arrayToHex2(uint8a) {
+function arrayToHex(uint8a) {
     let hex = '';
     for (let i = 0; i < uint8a.length; i++) {
         hex += uint8a[i].toString(16).padStart(2, '0');
     }
     return hex;
-}
-const hexmap = new Array(256);
-for (let i = 0; i < hexmap.length; i++)
-    hexmap[i] = (i.toString(16).padStart(2, '0'));
-function arrayToHex(uint8a) {
-    let result = '';
-    for (let i = 0; i < uint8a.length; i++) {
-        result += hexmap[uint8a[i]];
-    }
-    return result;
 }
 function numberToHex(num) {
     const hex = num.toString(16);

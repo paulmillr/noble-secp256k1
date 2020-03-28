@@ -34,7 +34,6 @@ export declare class Point {
     equals(other: Point): boolean;
     private precomputeWindow;
     multiply(scalar: bigint): Point;
-    multiply2(scalar: number | bigint): Point;
 }
 export declare class SignResult {
     r: bigint;
