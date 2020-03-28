@@ -1,43 +1,67 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+
 // https://www.secg.org/sec2-v2.pdf
-const A = 0n;
-const B = 7n;
-// 𝔽p
-export const P = 2n ** 256n - 2n ** 32n - 977n;
-// Subgroup order, cofactor is 1
-export const PRIME_ORDER = 2n ** 256n - 432420386565659656852420866394968145599n;
+// Curve fomula is y^2 = x^3 + ax + b
+export const CURVE_PARAMS = {
+  // Params: a, b
+  a: 0n,
+  b: 7n,
+  // Field over which we'll do calculations
+  P: 2n ** 256n - 2n ** 32n - 977n,
+  // Subgroup order aka prime_order
+  n: 2n ** 256n - 432420386565659656852420866394968145599n,
+  // Cofactor
+  h: 1n,
+  // Base point (x, y) aka generator point
+  Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
+  Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n
+};
 
 // y**2 = x**3 + ax + b
+// Returns sqrY
 function curve(x: bigint) {
-  return x ** 3n + A * x + B;
+  const {a, b} = CURVE_PARAMS;
+  return mod(x ** 3n + a * x + b);
 }
-const PRIME_SIZE = 256;
-const HIGH_NUMBER = PRIME_ORDER >> 1n;
-const SUBPN = P - PRIME_ORDER;
 
 type PrivKey = Uint8Array | string | bigint | number;
 type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
-let BASE_POINT_PRECOMPUTES: Point[];
+const P = CURVE_PARAMS.P;
+const PRIME_ORDER = CURVE_PARAMS.n;
+
+const PRIME_SIZE = 256;
+const HIGH_NUMBER = PRIME_ORDER >> 1n;
+const SUBPN = P - PRIME_ORDER;
 
 export class Point {
-  W?: number;
+  // Base point aka generator
+  // public_key = base_point * private_key
+  static BASE_POINT: Point = new Point(CURVE_PARAMS.Gx, CURVE_PARAMS.Gy);
+  // Identity point aka point at infinity
+  // point = point + zero_point
+  static ZERO_POINT: Point = new Point(0n, 0n);
+
+  // We calculate precomputes for elliptic curve point multiplication
+  // using windowed method. This specifies window size and
+  // stores precomputed values. Usually only base point would be precomputed.
+  WINDOW_SIZE?: number;
   private PRECOMPUTES?: Point[];
 
   constructor(public x: bigint, public y: bigint) {}
 
   // A point on curve is valid if it conforms to equation
-  static isValidPoint(x: bigint, y: bigint) {
+  static isValid(x: bigint, y: bigint) {
     if (x === 0n || y === 0n || x >= P || y >= P) return false;
 
-    const sqrY = y * y;
+    const sqrY = mod(y * y);
     const yEquivalence = curve(x);
-    const left1 = mod(sqrY, P);
-    const left2 = mod(-sqrY, P);
-    const right1 = mod(yEquivalence, P);
-    const right2 = mod(-yEquivalence, P);
+    const left1 = sqrY;
+    const left2 = mod(-sqrY);
+    const right1 = yEquivalence;
+    const right2 = mod(-yEquivalence);
     return left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
   }
 
@@ -46,14 +70,14 @@ export class Point {
       throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
     }
     const x = arrayToNumber(bytes.slice(1));
-    const sqrY = mod(curve(x), P);
+    const sqrY = curve(x);
     let y = powMod(sqrY, (P + 1n) / 4n, P);
     const isFirstByteOdd = (bytes[0] & 1) === 1;
     const isYOdd = (y & 1n) === 1n;
     if (isFirstByteOdd !== isYOdd) {
-      y = mod(-y, P);
+      y = mod(-y);
     }
-    if (!Point.isValidPoint(x, y)) {
+    if (!this.isValid(x, y)) {
       throw new TypeError('Point.fromHex: Point is not on elliptic curve');
     }
     return new Point(x, y);
@@ -65,7 +89,7 @@ export class Point {
     }
     const x = arrayToNumber(bytes.slice(1, 33));
     const y = arrayToNumber(bytes.slice(33));
-    if (!this.isValidPoint(x, y)) {
+    if (!this.isValid(x, y)) {
       throw new TypeError('Point.fromHex: Point is not on elliptic curve');
     }
     return new Point(x, y);
@@ -80,7 +104,7 @@ export class Point {
   }
 
   static fromPrivateKey(privateKey: PrivKey) {
-    return BASE_POINT.multiply(normalizePrivateKey(privateKey));
+    return Point.BASE_POINT.multiply(normalizePrivateKey(privateKey));
   }
 
   // Recovers public key from ECDSA signature.
@@ -96,7 +120,7 @@ export class Point {
     const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
     const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
     const sP = P_.multiply(s);
-    const hG = BASE_POINT.multiply(h).negate();
+    const hG = Point.BASE_POINT.multiply(h).negate();
     const Q = sP.add(hG).multiply(rinv);
     return Q;
   }
@@ -115,7 +139,7 @@ export class Point {
   }
 
   negate(): Point {
-    return new Point(this.x, mod(-this.y, P));
+    return new Point(this.x, mod(-this.y));
   }
 
   add(other: Point): Point {
@@ -126,7 +150,6 @@ export class Point {
     const b = other;
     if (a.isZero()) return b;
     if (b.isZero()) return a;
-    if (a.x === b.y && a.y === -b.y) return ZERO_POINT;
     if (a.x === b.x) {
       if (a.y === b.y) {
         return this.double();
@@ -136,9 +159,9 @@ export class Point {
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
     }
-    const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, P), P);
-    const x = mod(lamAdd * lamAdd - a.x - b.x, P);
-    const y = mod(lamAdd * (a.x - x) - a.y, P);
+    const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x));
+    const x = mod(lamAdd * lamAdd - a.x - b.x);
+    const y = mod(lamAdd * (a.x - x) - a.y);
     return new Point(x, y);
   }
 
@@ -148,9 +171,9 @@ export class Point {
 
   private double(): Point {
     const a = this;
-    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, P), P);
-    const x = mod(lam * lam - 2n * a.x, P);
-    const y = mod(lam * (a.x - x) - a.y, P);
+    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y));
+    const x = mod(lam * lam - 2n * a.x);
+    const y = mod(lam * (a.x - x) - a.y);
     return new Point(x, y);
   }
 
@@ -196,13 +219,13 @@ export class Point {
     if (scalar > PRIME_ORDER) {
       throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER')
     }
-    const W = this.W || 1;
+    const W = this.WINDOW_SIZE || 1;
     if (256 % W) {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    let p = ZERO_POINT;
-    let f = ZERO_POINT;
+    let p = Point.ZERO_POINT;
+    let f = Point.ZERO_POINT;
     const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       const offset = currWin * winSize;
@@ -266,15 +289,6 @@ export class SignResult {
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
   }
 }
-
-// https://www.secg.org/sec2-v2.pdf
-export const BASE_POINT = new Point(
-  55066263022277343669578718895168534326250603453777594175500187360389116729240n,
-  32670510020758816978083085130507043184471273380659243275938904335757337482424n
-);
-// Enable precomputes. Slows down first publicKey computation by 80ms.
-BASE_POINT.W = 4;
-const ZERO_POINT = new Point(0n, 0n);
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
@@ -360,12 +374,12 @@ function pad64(num: number | bigint): string {
 
 // -------------------------
 
-function mod(a: bigint, b: bigint): bigint {
+function mod(a: bigint, b: bigint = P): bigint {
   const result = a % b;
   return result >= 0 ? result : b + result;
 }
 
-function modInverse(v: bigint, n: bigint): bigint {
+function modInverse(v: bigint, n: bigint = P): bigint {
   let lm = 1n;
   let hm = 0n;
   let low = mod(v, n);
@@ -457,7 +471,7 @@ function isValidPrivateKey(privateKey: bigint): boolean {
 }
 
 function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
-  const q = BASE_POINT.multiply(k);
+  const q = Point.BASE_POINT.multiply(k);
   const r = mod(q.x, PRIME_ORDER);
   const s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
   if (r === 0n || s === 0n) return;
@@ -582,19 +596,23 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
   const sign = normalizeSignature(signature);
   const point = normalizePublicKey(publicKey);
   const w = modInverse(sign.s, PRIME_ORDER);
-  const point1 = BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
+  const point1 = Point.BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
   const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
   const point3 = point1.add(point2);
   return point3.x === sign.r;
 }
+
+
+// Enable precomputes. Slows down first publicKey computation by 80ms.
+Point.BASE_POINT.WINDOW_SIZE = 4;
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
   },
 
-  precompute(W = 4, point = BASE_POINT): true {
-    point.W = W;
+  precompute(windowSize = 4, point = Point.BASE_POINT): true {
+    point.WINDOW_SIZE = windowSize;
     point.multiply(1n);
     return true;
   }

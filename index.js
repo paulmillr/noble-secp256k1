@@ -1,31 +1,38 @@
 "use strict";
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
-const A = 0n;
-const B = 7n;
-exports.P = 2n ** 256n - 2n ** 32n - 977n;
-exports.PRIME_ORDER = 2n ** 256n - 432420386565659656852420866394968145599n;
+exports.CURVE_PARAMS = {
+    a: 0n,
+    b: 7n,
+    P: 2n ** 256n - 2n ** 32n - 977n,
+    n: 2n ** 256n - 432420386565659656852420866394968145599n,
+    h: 1n,
+    Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
+    Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n
+};
 function curve(x) {
-    return x ** 3n + A * x + B;
+    const { a, b } = exports.CURVE_PARAMS;
+    return mod(x ** 3n + a * x + b);
 }
+const P = exports.CURVE_PARAMS.P;
+const PRIME_ORDER = exports.CURVE_PARAMS.n;
 const PRIME_SIZE = 256;
-const HIGH_NUMBER = exports.PRIME_ORDER >> 1n;
-const SUBPN = exports.P - exports.PRIME_ORDER;
-let BASE_POINT_PRECOMPUTES;
+const HIGH_NUMBER = PRIME_ORDER >> 1n;
+const SUBPN = P - PRIME_ORDER;
 class Point {
     constructor(x, y) {
         this.x = x;
         this.y = y;
     }
-    static isValidPoint(x, y) {
-        if (x === 0n || y === 0n || x >= exports.P || y >= exports.P)
+    static isValid(x, y) {
+        if (x === 0n || y === 0n || x >= P || y >= P)
             return false;
-        const sqrY = y * y;
+        const sqrY = mod(y * y);
         const yEquivalence = curve(x);
-        const left1 = mod(sqrY, exports.P);
-        const left2 = mod(-sqrY, exports.P);
-        const right1 = mod(yEquivalence, exports.P);
-        const right2 = mod(-yEquivalence, exports.P);
+        const left1 = sqrY;
+        const left2 = mod(-sqrY);
+        const right1 = yEquivalence;
+        const right2 = mod(-yEquivalence);
         return left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
     }
     static fromCompressedHex(bytes) {
@@ -33,14 +40,14 @@ class Point {
             throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
         }
         const x = arrayToNumber(bytes.slice(1));
-        const sqrY = mod(curve(x), exports.P);
-        let y = powMod(sqrY, (exports.P + 1n) / 4n, exports.P);
+        const sqrY = curve(x);
+        let y = powMod(sqrY, (P + 1n) / 4n, P);
         const isFirstByteOdd = (bytes[0] & 1) === 1;
         const isYOdd = (y & 1n) === 1n;
         if (isFirstByteOdd !== isYOdd) {
-            y = mod(-y, exports.P);
+            y = mod(-y);
         }
-        if (!Point.isValidPoint(x, y)) {
+        if (!this.isValid(x, y)) {
             throw new TypeError('Point.fromHex: Point is not on elliptic curve');
         }
         return new Point(x, y);
@@ -51,7 +58,7 @@ class Point {
         }
         const x = arrayToNumber(bytes.slice(1, 33));
         const y = arrayToNumber(bytes.slice(33));
-        if (!this.isValidPoint(x, y)) {
+        if (!this.isValid(x, y)) {
             throw new TypeError('Point.fromHex: Point is not on elliptic curve');
         }
         return new Point(x, y);
@@ -66,18 +73,18 @@ class Point {
         throw new TypeError('Point.fromHex: received invalid point');
     }
     static fromPrivateKey(privateKey) {
-        return exports.BASE_POINT.multiply(normalizePrivateKey(privateKey));
+        return Point.BASE_POINT.multiply(normalizePrivateKey(privateKey));
     }
     static fromSignature(msgHash, signature, recovery) {
         const sign = normalizeSignature(signature);
         const { r, s } = sign;
         if (r === 0n || s === 0n)
             return;
-        const rinv = modInverse(r, exports.PRIME_ORDER);
+        const rinv = modInverse(r, PRIME_ORDER);
         const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
         const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
         const sP = P_.multiply(s);
-        const hG = exports.BASE_POINT.multiply(h).negate();
+        const hG = Point.BASE_POINT.multiply(h).negate();
         const Q = sP.add(hG).multiply(rinv);
         return Q;
     }
@@ -94,7 +101,7 @@ class Point {
         }
     }
     negate() {
-        return new Point(this.x, mod(-this.y, exports.P));
+        return new Point(this.x, mod(-this.y));
     }
     add(other) {
         if (!(other instanceof Point)) {
@@ -106,8 +113,6 @@ class Point {
             return b;
         if (b.isZero())
             return a;
-        if (a.x === b.y && a.y === -b.y)
-            return ZERO_POINT;
         if (a.x === b.x) {
             if (a.y === b.y) {
                 return this.double();
@@ -116,9 +121,9 @@ class Point {
                 throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
             }
         }
-        const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x, exports.P), exports.P);
-        const x = mod(lamAdd * lamAdd - a.x - b.x, exports.P);
-        const y = mod(lamAdd * (a.x - x) - a.y, exports.P);
+        const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x));
+        const x = mod(lamAdd * lamAdd - a.x - b.x);
+        const y = mod(lamAdd * (a.x - x) - a.y);
         return new Point(x, y);
     }
     subtract(other) {
@@ -126,9 +131,9 @@ class Point {
     }
     double() {
         const a = this;
-        const lam = mod(3n * a.x * a.x * modInverse(2n * a.y, exports.P), exports.P);
-        const x = mod(lam * lam - 2n * a.x, exports.P);
-        const y = mod(lam * (a.x - x) - a.y, exports.P);
+        const lam = mod(3n * a.x * a.x * modInverse(2n * a.y));
+        const x = mod(lam * lam - 2n * a.x);
+        const y = mod(lam * (a.x - x) - a.y);
         return new Point(x, y);
     }
     isZero() {
@@ -158,20 +163,20 @@ class Point {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
-        let n = mod(BigInt(scalar), exports.PRIME_ORDER);
+        let n = mod(BigInt(scalar), PRIME_ORDER);
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        if (scalar > exports.PRIME_ORDER) {
+        if (scalar > PRIME_ORDER) {
             throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
         }
-        const W = this.W || 1;
+        const W = this.WINDOW_SIZE || 1;
         if (256 % W) {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        let p = ZERO_POINT;
-        let f = ZERO_POINT;
+        let p = Point.ZERO_POINT;
+        let f = Point.ZERO_POINT;
         const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             const offset = currWin * winSize;
@@ -188,6 +193,8 @@ class Point {
     }
 }
 exports.Point = Point;
+Point.BASE_POINT = new Point(exports.CURVE_PARAMS.Gx, exports.CURVE_PARAMS.Gy);
+Point.ZERO_POINT = new Point(0n, 0n);
 function parseByte(str) {
     return Number.parseInt(str, 16) * 2;
 }
@@ -230,9 +237,6 @@ class SignResult {
     }
 }
 exports.SignResult = SignResult;
-exports.BASE_POINT = new Point(55066263022277343669578718895168534326250603453777594175500187360389116729240n, 32670510020758816978083085130507043184471273380659243275938904335757337482424n);
-exports.BASE_POINT.W = 4;
-const ZERO_POINT = new Point(0n, 0n);
 let hmac;
 if (typeof window == 'object' && 'crypto' in window) {
     hmac = async (key, message) => {
@@ -296,11 +300,11 @@ function arrayToNumber(bytes) {
 function pad64(num) {
     return num.toString(16).padStart(64, '0');
 }
-function mod(a, b) {
+function mod(a, b = P) {
     const result = a % b;
     return result >= 0 ? result : b + result;
 }
-function modInverse(v, n) {
+function modInverse(v, n = P) {
     let lm = 1n;
     let hm = 0n;
     let low = mod(v, n);
@@ -326,8 +330,8 @@ function truncateHash(hash) {
     if (delta > 0) {
         msg = msg >> BigInt(delta);
     }
-    if (msg >= exports.PRIME_ORDER) {
-        msg -= exports.PRIME_ORDER;
+    if (msg >= PRIME_ORDER) {
+        msg -= PRIME_ORDER;
     }
     return msg;
 }
@@ -367,12 +371,12 @@ async function getQRSrfc6979(msgHash, privateKey) {
     throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 function isValidPrivateKey(privateKey) {
-    return 0 < privateKey && privateKey < exports.PRIME_ORDER;
+    return 0 < privateKey && privateKey < PRIME_ORDER;
 }
 function calcQRSFromK(k, msg, priv) {
-    const q = exports.BASE_POINT.multiply(k);
-    const r = mod(q.x, exports.PRIME_ORDER);
-    const s = mod(modInverse(k, exports.PRIME_ORDER) * (msg + r * priv), exports.PRIME_ORDER);
+    const q = Point.BASE_POINT.multiply(k);
+    const r = mod(q.x, PRIME_ORDER);
+    const s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
     if (r === 0n || s === 0n)
         return;
     return [q, r, s];
@@ -427,7 +431,7 @@ async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
     if (s > HIGH_NUMBER && canonical) {
-        adjustedS = exports.PRIME_ORDER - s;
+        adjustedS = PRIME_ORDER - s;
         recovery ^= 1;
     }
     const res = new SignResult(r, adjustedS).toHex();
@@ -439,19 +443,20 @@ function verify(signature, msgHash, publicKey) {
     const msg = truncateHash(msgHash);
     const sign = normalizeSignature(signature);
     const point = normalizePublicKey(publicKey);
-    const w = modInverse(sign.s, exports.PRIME_ORDER);
-    const point1 = exports.BASE_POINT.multiply(mod(msg * w, exports.PRIME_ORDER));
-    const point2 = point.multiply(mod(sign.r * w, exports.PRIME_ORDER));
+    const w = modInverse(sign.s, PRIME_ORDER);
+    const point1 = Point.BASE_POINT.multiply(mod(msg * w, PRIME_ORDER));
+    const point2 = point.multiply(mod(sign.r * w, PRIME_ORDER));
     const point3 = point1.add(point2);
     return point3.x === sign.r;
 }
 exports.verify = verify;
+Point.BASE_POINT.WINDOW_SIZE = 4;
 exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
     },
-    precompute(W = 4, point = exports.BASE_POINT) {
-        point.W = W;
+    precompute(windowSize = 4, point = Point.BASE_POINT) {
+        point.WINDOW_SIZE = windowSize;
         point.multiply(1n);
         return true;
     }

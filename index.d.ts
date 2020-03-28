@@ -1,6 +1,13 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
-export declare const P: bigint;
-export declare const PRIME_ORDER: bigint;
+export declare const CURVE_PARAMS: {
+    a: bigint;
+    b: bigint;
+    P: bigint;
+    n: bigint;
+    h: bigint;
+    Gx: bigint;
+    Gy: bigint;
+};
 declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
@@ -8,10 +15,12 @@ declare type Signature = Uint8Array | string | SignResult;
 export declare class Point {
     x: bigint;
     y: bigint;
-    W?: number;
+    static BASE_POINT: Point;
+    static ZERO_POINT: Point;
+    WINDOW_SIZE?: number;
     private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
-    static isValidPoint(x: bigint, y: bigint): boolean;
+    static isValid(x: bigint, y: bigint): boolean;
     private static fromCompressedHex;
     private static fromUncompressedHex;
     static fromHex(hex: Hex): Point;
@@ -34,7 +43,6 @@ export declare class SignResult {
     static fromHex(hex: Hex): SignResult;
     toHex(compressed?: boolean): string;
 }
-export declare const BASE_POINT: Point;
 export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
 export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
@@ -56,6 +64,6 @@ export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNo
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
-    precompute(W?: number, point?: Point): true;
+    precompute(windowSize?: number, point?: Point): true;
 };
 export {};

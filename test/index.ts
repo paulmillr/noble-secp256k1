@@ -19,7 +19,7 @@ const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.
 //   return sha256(new TextEncoder().encode(message));
 // }
 
-const MAX_PRIVATE_KEY = secp256k1.PRIME_ORDER - 1n;
+const MAX_PRIVATE_KEY = secp256k1.CURVE_PARAMS.n - 1n;
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 
