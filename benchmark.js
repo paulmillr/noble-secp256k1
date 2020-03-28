@@ -66,7 +66,7 @@ async function runAll(windowSize=4, samples=1000) {
 
   // console.profile('cpu');
   const priv = 2n ** 255n + 12341n;
-  await bench('getPublicKey 256 bit', samples, () => {
+  await bench('getPublicKey', samples, () => {
     pub = secp.getPublicKey(priv);
   });
 
