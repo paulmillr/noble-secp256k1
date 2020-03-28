@@ -396,18 +396,19 @@ export class Point {
     let win_sz = 2 ** W - 1,
       parr = [],
       farr = [];
-    let p = new Point(0n, 0n);
+    let p = new JacobianPoint(0n, 0n, 1n);
+    let f = new JacobianPoint(0n, 0n, 1n);
     for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
       const offset = win_sz * byte_idx;
       const masked = Number(n & BigInt(win_sz));
       if (!masked) {
-        farr.push(precomputes[offset]);
+        f = f.add(JacobianPoint.fromPoint(precomputes[offset]));
       } else {
-        parr.push(precomputes[offset + masked - 1]);
+        p = p.add(JacobianPoint.fromPoint(precomputes[offset + masked - 1]));
       }
       n >>= BigInt(W);
     }
-    return batchAdd([parr, farr])[0];
+    return JacobianPoint.batchAffine([p, f])[0];
   }
 
   // Constant time multiplication.
