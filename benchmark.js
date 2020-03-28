@@ -44,30 +44,30 @@ async function bench(label, samples, callback) {
   console.log('Benchmarking...\n');
   await bench('load', 1, () => {
     secp = require('.');
-    secp.utils.precompute(4);
+    secp.utils.precompute();
   });
 
   logMem('start');
   console.log();
 
-  await bench('getPublicKey 1 bit', 100, () => {
+  await bench('getPublicKey 1 bit', 1000, () => {
     pub = secp.getPublicKey(2n);
   });
 
   // console.profile('cpu');
   const priv = 2n ** 255n + 12341n;
-  await bench('getPublicKey 256 bit', 100, () => {
+  await bench('getPublicKey 256 bit', 1000, () => {
     pub = secp.getPublicKey(priv);
   });
 
-  await bench('sign', 100, async () => {
+  await bench('sign', 1000, async () => {
     const s = Date.now();
     const full = await secp.sign('beef', 4321n, { canonical: true });
   });
 
   let custom = secp.Point.fromHex(pub);
-  await bench('multiply custom point', 100, () => {
-    pub = custom.multiply(0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdefn);
+  await bench('getSharedSecret', 1000, () => {
+    secp.getSharedSecret(priv, custom);
   });
 
   console.log();

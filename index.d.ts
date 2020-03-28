@@ -1,4 +1,3 @@
-/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 export declare const CURVE_PARAMS: {
     a: bigint;
     b: bigint;
@@ -33,7 +32,6 @@ export declare class Point {
     subtract(other: Point): Point;
     private double;
     equals(other: Point): boolean;
-    private precomputeWindow2;
     private precomputeWindow;
     multiply(scalar: bigint): Point;
     multiply2(scalar: number | bigint): Point;

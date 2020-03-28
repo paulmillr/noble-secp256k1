@@ -1,5 +1,4 @@
-"use strict";
-/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+'use strict';
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CURVE_PARAMS = {
     a: 0n,
@@ -19,99 +18,6 @@ const PRIME_ORDER = exports.CURVE_PARAMS.n;
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
-function batchInverse(elms, n) {
-    let scratch = Array(elms.length);
-    let acc = 1n;
-    for (let i = 0; i < elms.length; i++) {
-        if (!elms[i])
-            continue;
-        scratch[i] = acc;
-        acc = mod(acc * elms[i], n);
-    }
-    acc = modInverse(acc, n);
-    for (let i = elms.length - 1; i >= 0; i--) {
-        if (!elms[i])
-            continue;
-        let tmp = mod(acc * elms[i], n);
-        elms[i] = mod(acc * scratch[i], n);
-        acc = tmp;
-    }
-}
-function batchAdd(parrs) {
-    let lastArr = new Array(parrs.length);
-    for (let i = 0; i < parrs.length; i++) {
-        let parr = parrs[i], last = [];
-        if (parr.length % 2)
-            last.push(parr.pop());
-        lastArr[i] = last;
-    }
-    let to_inv = [];
-    for (let i = 0; i < parrs.length; i++) {
-        let parr = parrs[i];
-        let last = lastArr[i];
-        for (let j = 0; j < parr.length; j += 2) {
-            let p1 = parr[j];
-            let p2 = parr[j + 1];
-            let p1z = p1.equals(Point.ZERO_POINT);
-            let p2z = p2.equals(Point.ZERO_POINT);
-            let inv = 0n;
-            if (p1z && p2z) {
-            }
-            else if (p1z)
-                last.push(p2);
-            else if (p2z)
-                last.push(p1);
-            else if (p1.x !== p2.x)
-                inv = mod(p2.x - p1.x, P);
-            else if (p1.y === p2.y)
-                inv = mod(2n * p1.y, P);
-            else
-                throw new TypeError('Point#batchAdd: incorrect invariant');
-            to_inv.push(inv);
-        }
-    }
-    batchInverse(to_inv, P);
-    let ij = 0;
-    for (let i = 0; i < parrs.length; i++) {
-        let parr = parrs[i];
-        let last = lastArr[i];
-        for (let j = 0; j < parr.length; j += 2) {
-            let p1 = parr[j];
-            let p2 = parr[j + 1];
-            let inv = to_inv[ij++];
-            if (!inv)
-                continue;
-            let x, y;
-            if (p1.x !== p2.x) {
-                let m = mod((p2.y - p1.y) * inv, P);
-                x = mod(m * m - p1.x - p2.x, P);
-                y = mod(m * (p1.x - x) - p1.y, P);
-            }
-            else {
-                let m = mod(3n * p1.x * p1.x * inv, P);
-                x = mod(m * m - 2n * p1.x, P);
-                y = mod(m * (p1.x - x) - p1.y, P);
-            }
-            last.push(new Point(x, y));
-        }
-    }
-    let output = new Array(parrs.length);
-    let toProcess = [];
-    for (let i = 0; i < lastArr.length; i++) {
-        let last = lastArr[i];
-        if (last.length > 1)
-            toProcess.push(last);
-        else
-            output[i] = !last.length ? Point.ZERO_POINT : last[0];
-    }
-    if (toProcess.length) {
-        let j = 0;
-        let processed = batchAdd(toProcess);
-        for (let i = 0; i < output.length; i++)
-            output[i] = output[i] || processed[j++];
-    }
-    return output;
-}
 class JacobianPoint {
     constructor(x, y, z) {
         this.x = x;
@@ -122,63 +28,66 @@ class JacobianPoint {
         return new JacobianPoint(p.x, p.y, 1n);
     }
     static batchAffine(points) {
-        let to_inv = new Array(points.length);
+        const toInv = new Array(points.length);
         for (let i = 0; i < points.length; i++)
-            to_inv[i] = points[i].z;
-        batchInverse(to_inv, P);
-        let res = new Array(points.length);
+            toInv[i] = points[i].z;
+        batchInverse(toInv, P);
+        const res = new Array(points.length);
         for (let i = 0; i < res.length; i++)
-            res[i] = points[i].toAffine(to_inv[i]);
+            res[i] = points[i].toAffine(toInv[i]);
         return res;
     }
     double() {
-        let a = this.x ** 2n;
-        let b = this.y ** 2n;
-        let c = b ** 2n;
-        let d = 2n * ((this.x + b) ** 2n - a - c);
-        let e = 3n * a;
-        let f = e ** 2n;
-        let x = mod(f - 2n * d, P);
-        let y = mod(e * (d - x) - 8n * c, P);
-        let z = mod(2n * this.y * this.z, P);
+        const a = this.x ** 2n;
+        const b = this.y ** 2n;
+        const c = b ** 2n;
+        const d = 2n * ((this.x + b) ** 2n - a - c);
+        const e = 3n * a;
+        const f = e ** 2n;
+        const x = mod(f - 2n * d);
+        const y = mod(e * (d - x) - 8n * c);
+        const z = mod(2n * this.y * this.z);
         return new JacobianPoint(x, y, z);
     }
     add(other) {
-        if (!other.x || !other.y)
-            return this;
-        if (!this.x || !this.y)
-            return other;
-        let z1z1 = this.z ** 2n;
-        let z2z2 = other.z ** 2n;
-        let u1 = this.x * z2z2;
-        let u2 = other.x * z1z1;
-        let s1 = this.y * other.z * z2z2;
-        let s2 = other.y * this.z * z1z1;
-        let h = mod(u2 - u1, P);
-        let r = mod(s2 - s1, P);
+        const a = this;
+        const b = other;
+        if (!b.x || !b.y)
+            return a;
+        if (!a.x || !a.y)
+            return b;
+        const z1z1 = a.z ** 2n;
+        const z2z2 = b.z ** 2n;
+        const u1 = a.x * z2z2;
+        const u2 = b.x * z1z1;
+        const s1 = a.y * b.z * z2z2;
+        const s2 = b.y * a.z * z1z1;
+        const h = mod(u2 - u1);
+        const r = mod(s2 - s1);
         if (!h) {
             if (!r) {
-                return this.double();
+                return a.double();
             }
             else {
-                return new JacobianPoint(0n, 0n, 1n);
+                return JacobianPoint.ZERO_POINT;
             }
         }
-        let hh = h ** 2n;
-        let hhh = h * hh;
-        let v = u1 * hh;
-        let x = mod(r ** 2n - hhh - 2n * v, P);
-        let y = mod(r * (v - x) - s1 * hhh, P);
-        let z = mod(this.z * other.z * h, P);
+        const hh = h ** 2n;
+        const hhh = h * hh;
+        const v = u1 * hh;
+        const x = mod(r ** 2n - hhh - 2n * v);
+        const y = mod(r * (v - x) - s1 * hhh);
+        const z = mod(this.z * b.z * h);
         return new JacobianPoint(x, y, z);
     }
-    toAffine(neg_z) {
-        let neg_z2 = neg_z ** 2n;
-        let x = mod(this.x * neg_z2, P);
-        let y = mod(this.y * neg_z2 * neg_z, P);
+    toAffine(negZ) {
+        const negZ2 = negZ ** 2n;
+        const x = mod(this.x * negZ2, P);
+        const y = mod(this.y * negZ2 * negZ, P);
         return new Point(x, y);
     }
 }
+JacobianPoint.ZERO_POINT = new JacobianPoint(0n, 0n, 1n);
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -299,26 +208,6 @@ class Point {
     equals(other) {
         return this.x === other.x && this.y === other.y;
     }
-    precomputeWindow2(W) {
-        if (this.PRECOMPUTES)
-            return this.PRECOMPUTES;
-        const points = new Array((2 ** W - 1) * W);
-        if (W !== 1) {
-            this.PRECOMPUTES = points;
-        }
-        let currPoint = this;
-        const winSize = 2 ** W - 1;
-        for (let currWin = 0; currWin < 256 / W; currWin++) {
-            let offset = currWin * winSize;
-            let point = currPoint;
-            for (let i = 0; i < winSize; i++) {
-                points[offset + i] = point;
-                point = point.add(currPoint);
-            }
-            currPoint = point;
-        }
-        return points;
-    }
     precomputeWindow(W) {
         if (this.PRECOMPUTES)
             return this.PRECOMPUTES;
@@ -334,7 +223,7 @@ class Point {
             }
             currPoint = point;
         }
-        let res = JacobianPoint.batchAffine(points);
+        const res = JacobianPoint.batchAffine(points);
         if (W !== 1) {
             this.PRECOMPUTES = res;
         }
@@ -356,17 +245,17 @@ class Point {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        let win_sz = 2 ** W - 1, parr = [], farr = [];
-        let p = new JacobianPoint(0n, 0n, 1n);
-        let f = new JacobianPoint(0n, 0n, 1n);
+        let winSize = 2 ** W - 1;
+        let p = JacobianPoint.ZERO_POINT;
+        let f = JacobianPoint.ZERO_POINT;
         for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
-            const offset = win_sz * byte_idx;
-            const masked = Number(n & BigInt(win_sz));
-            if (!masked) {
-                f = f.add(JacobianPoint.fromPoint(precomputes[offset]));
+            const offset = winSize * byte_idx;
+            const masked = Number(n & BigInt(winSize));
+            if (masked) {
+                p = p.add(JacobianPoint.fromPoint(precomputes[offset + masked - 1]));
             }
             else {
-                p = p.add(JacobianPoint.fromPoint(precomputes[offset + masked - 1]));
+                f = f.add(JacobianPoint.fromPoint(precomputes[offset]));
             }
             n >>= BigInt(W);
         }
@@ -481,12 +370,22 @@ function powMod(x, power, order) {
     }
     return res;
 }
-function arrayToHex(uint8a) {
+function arrayToHex2(uint8a) {
     let hex = '';
     for (let i = 0; i < uint8a.length; i++) {
         hex += uint8a[i].toString(16).padStart(2, '0');
     }
     return hex;
+}
+const hexmap = new Array(256);
+for (let i = 0; i < hexmap.length; i++)
+    hexmap[i] = (i.toString(16).padStart(2, '0'));
+function arrayToHex(uint8a) {
+    let result = '';
+    for (let i = 0; i < uint8a.length; i++) {
+        result += hexmap[uint8a[i]];
+    }
+    return result;
 }
 function numberToHex(num) {
     const hex = num.toString(16);
@@ -540,6 +439,24 @@ function modInverse(number, modulo = P) {
         throw new Error('modInverse: does not exist');
     }
     return mod(x, modulo);
+}
+function batchInverse(elms, n) {
+    let scratch = Array(elms.length);
+    let acc = 1n;
+    for (let i = 0; i < elms.length; i++) {
+        if (!elms[i])
+            continue;
+        scratch[i] = acc;
+        acc = mod(acc * elms[i], n);
+    }
+    acc = modInverse(acc, n);
+    for (let i = elms.length - 1; i >= 0; i--) {
+        if (!elms[i])
+            continue;
+        let tmp = mod(acc * elms[i], n);
+        elms[i] = mod(acc * scratch[i], n);
+        acc = tmp;
+    }
 }
 function truncateHash(hash) {
     hash = typeof hash === 'string' ? hash : arrayToHex(hash);
