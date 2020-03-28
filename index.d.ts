@@ -32,9 +32,10 @@ export declare class Point {
     add(other: Point): Point;
     subtract(other: Point): Point;
     private double;
-    private isZero;
+    equals(other: Point): boolean;
     private precomputeWindow;
-    multiply(scalar: number | bigint): Point;
+    multiply(scalar: bigint): Point;
+    multiply2(scalar: number | bigint): Point;
 }
 export declare class SignResult {
     r: bigint;

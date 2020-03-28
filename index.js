@@ -19,6 +19,99 @@ const PRIME_ORDER = exports.CURVE_PARAMS.n;
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
+function batchInverse(elms, n) {
+    let scratch = Array(elms.length);
+    let acc = 1n;
+    for (let i = 0; i < elms.length; i++) {
+        if (!elms[i])
+            continue;
+        scratch[i] = acc;
+        acc = mod(acc * elms[i], n);
+    }
+    acc = modInverse(acc, n);
+    for (let i = elms.length - 1; i >= 0; i--) {
+        if (!elms[i])
+            continue;
+        let tmp = mod(acc * elms[i], n);
+        elms[i] = mod(acc * scratch[i], n);
+        acc = tmp;
+    }
+}
+function batchAdd(parrs) {
+    let lastArr = new Array(parrs.length);
+    for (let i = 0; i < parrs.length; i++) {
+        let parr = parrs[i], last = [];
+        if (parr.length % 2)
+            last.push(parr.pop());
+        lastArr[i] = last;
+    }
+    let to_inv = [];
+    for (let i = 0; i < parrs.length; i++) {
+        let parr = parrs[i];
+        let last = lastArr[i];
+        for (let j = 0; j < parr.length; j += 2) {
+            let p1 = parr[j];
+            let p2 = parr[j + 1];
+            let p1z = p1.equals(Point.ZERO_POINT);
+            let p2z = p2.equals(Point.ZERO_POINT);
+            let inv = 0n;
+            if (p1z && p2z) {
+            }
+            else if (p1z)
+                last.push(p2);
+            else if (p2z)
+                last.push(p1);
+            else if (p1.x !== p2.x)
+                inv = mod(p2.x - p1.x, P);
+            else if (p1.y === p2.y)
+                inv = mod(2n * p1.y, P);
+            else
+                throw new TypeError('Point#batchAdd: incorrect invariant');
+            to_inv.push(inv);
+        }
+    }
+    batchInverse(to_inv, P);
+    let ij = 0;
+    for (let i = 0; i < parrs.length; i++) {
+        let parr = parrs[i];
+        let last = lastArr[i];
+        for (let j = 0; j < parr.length; j += 2) {
+            let p1 = parr[j];
+            let p2 = parr[j + 1];
+            let inv = to_inv[ij++];
+            if (!inv)
+                continue;
+            let x, y;
+            if (p1.x !== p2.x) {
+                let m = mod((p2.y - p1.y) * inv, P);
+                x = mod(m * m - p1.x - p2.x, P);
+                y = mod(m * (p1.x - x) - p1.y, P);
+            }
+            else {
+                let m = mod(3n * p1.x * p1.x * inv, P);
+                x = mod(m * m - 2n * p1.x, P);
+                y = mod(m * (p1.x - x) - p1.y, P);
+            }
+            last.push(new Point(x, y));
+        }
+    }
+    let output = new Array(parrs.length);
+    let toProcess = [];
+    for (let i = 0; i < lastArr.length; i++) {
+        let last = lastArr[i];
+        if (last.length > 1)
+            toProcess.push(last);
+        else
+            output[i] = !last.length ? Point.ZERO_POINT : last[0];
+    }
+    if (toProcess.length) {
+        let j = 0;
+        let processed = batchAdd(toProcess);
+        for (let i = 0; i < output.length; i++)
+            output[i] = output[i] || processed[j++];
+    }
+    return output;
+}
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -109,9 +202,9 @@ class Point {
         }
         const a = this;
         const b = other;
-        if (a.isZero())
+        if (a.equals(Point.ZERO_POINT))
             return b;
-        if (b.isZero())
+        if (b.equals(Point.ZERO_POINT))
             return a;
         if (a.x === b.x) {
             if (a.y === b.y) {
@@ -136,8 +229,8 @@ class Point {
         const y = mod(lam * (a.x - x) - a.y);
         return new Point(x, y);
     }
-    isZero() {
-        return this.x === 0n && this.y === 0n;
+    equals(other) {
+        return this.x === other.x && this.y === other.y;
     }
     precomputeWindow(W) {
         if (this.PRECOMPUTES)
@@ -160,6 +253,37 @@ class Point {
         return points;
     }
     multiply(scalar) {
+        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+            throw new TypeError('Point#multiply: expected number or bigint');
+        }
+        let n = mod(BigInt(scalar), PRIME_ORDER);
+        if (n <= 0) {
+            throw new Error('Point#multiply: invalid scalar, expected positive integer');
+        }
+        if (scalar > PRIME_ORDER) {
+            throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+        }
+        const W = this.WINDOW_SIZE || 1;
+        if (256 % W) {
+            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+        }
+        const precomputes = this.precomputeWindow(W);
+        let win_sz = 2 ** W - 1, parr = [], farr = [];
+        let p = new Point(0n, 0n);
+        for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
+            const offset = win_sz * byte_idx;
+            const masked = Number(n & BigInt(win_sz));
+            if (!masked) {
+                farr.push(precomputes[offset]);
+            }
+            else {
+                parr.push(precomputes[offset + masked - 1]);
+            }
+            n >>= BigInt(W);
+        }
+        return batchAdd([parr, farr])[0];
+    }
+    multiply2(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }

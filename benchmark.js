@@ -21,7 +21,7 @@ let pub;
 console.log('Starting');
 bench('load', 1, () => {
   secp = require('.');
-  secp.utils.precompute(8);
+  secp.utils.precompute(4);
 });
 
 logMem('start');

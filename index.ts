@@ -20,7 +20,7 @@ export const CURVE_PARAMS = {
 // y**2 = x**3 + ax + b
 // Returns sqrY
 function curve(x: bigint) {
-  const {a, b} = CURVE_PARAMS;
+  const { a, b } = CURVE_PARAMS;
   return mod(x ** 3n + a * x + b);
 }
 
@@ -35,6 +35,96 @@ const PRIME_ORDER = CURVE_PARAMS.n;
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
+
+function batchInverse(elms: bigint[], n: bigint) {
+  let scratch = Array(elms.length);
+  let acc = 1n;
+  for (let i = 0; i < elms.length; i++) {
+    if (!elms[i]) continue;
+    scratch[i] = acc;
+    acc = mod(acc * elms[i], n);
+  }
+  acc = modInverse(acc, n);
+  for (let i = elms.length - 1; i >= 0; i--) {
+    if (!elms[i]) continue;
+    let tmp = mod(acc * elms[i], n);
+    elms[i] = mod(acc * scratch[i], n);
+    acc = tmp;
+  }
+}
+
+function batchAdd(parrs: Point[][]): Point[] {
+  // if length is not even -- save last point
+  let lastArr = new Array(parrs.length);
+  for (let i = 0; i < parrs.length; i++) {
+    let parr = parrs[i],
+      last = [];
+    if (parr.length % 2) last.push(parr.pop() as Point);
+    lastArr[i] = last;
+  }
+  // First pass: add inversions to batch
+  let to_inv = [];
+  for (let i = 0; i < parrs.length; i++) {
+    let parr = parrs[i];
+    let last = lastArr[i];
+    for (let j = 0; j < parr.length; j += 2) {
+      let p1 = parr[j];
+      let p2 = parr[j + 1];
+      let p1z = p1.equals(Point.ZERO_POINT);
+      let p2z = p2.equals(Point.ZERO_POINT);
+      let inv = 0n;
+      if (p1z && p2z) {
+      } else if (p1z) last.push(p2);
+      else if (p2z) last.push(p1);
+      else if (p1.x !== p2.x) inv = mod(p2.x - p1.x, P);
+      // add
+      else if (p1.y === p2.y) inv = mod(2n * p1.y, P);
+      // double
+      else throw new TypeError('Point#batchAdd: incorrect invariant');
+      to_inv.push(inv);
+    }
+  }
+  batchInverse(to_inv, P);
+  // Second pass: process rest of formula
+  let ij = 0;
+  for (let i = 0; i < parrs.length; i++) {
+    let parr = parrs[i];
+    let last = lastArr[i];
+    for (let j = 0; j < parr.length; j += 2) {
+      let p1 = parr[j];
+      let p2 = parr[j + 1];
+      let inv = to_inv[ij++];
+      if (!inv) continue;
+      let x, y;
+      if (p1.x !== p2.x) {
+        // add
+        let m = mod((p2.y - p1.y) * inv, P);
+        x = mod(m * m - p1.x - p2.x, P);
+        y = mod(m * (p1.x - x) - p1.y, P);
+      } else {
+        // double
+        let m = mod(3n * p1.x * p1.x * inv, P);
+        x = mod(m * m - 2n * p1.x, P);
+        y = mod(m * (p1.x - x) - p1.y, P);
+      }
+      last.push(new Point(x, y));
+    }
+  }
+  // Recursively process rest of parrs if they has 2 or more elements
+  let output = new Array(parrs.length);
+  let toProcess = [];
+  for (let i = 0; i < lastArr.length; i++) {
+    let last = lastArr[i];
+    if (last.length > 1) toProcess.push(last);
+    else output[i] = !last.length ? Point.ZERO_POINT : last[0];
+  }
+  if (toProcess.length) {
+    let j = 0;
+    let processed = batchAdd(toProcess);
+    for (let i = 0; i < output.length; i++) output[i] = output[i] || processed[j++];
+  }
+  return output;
+}
 
 export class Point {
   // Base point aka generator
@@ -148,8 +238,8 @@ export class Point {
     }
     const a = this;
     const b = other;
-    if (a.isZero()) return b;
-    if (b.isZero()) return a;
+    if (a.equals(Point.ZERO_POINT)) return b;
+    if (b.equals(Point.ZERO_POINT)) return a;
     if (a.x === b.x) {
       if (a.y === b.y) {
         return this.double();
@@ -177,8 +267,8 @@ export class Point {
     return new Point(x, y);
   }
 
-  private isZero() {
-    return this.x === 0n && this.y === 0n;
+  equals(other: Point) {
+    return this.x === other.x && this.y === other.y;
   }
 
   private precomputeWindow(W: number): Point[] {
@@ -201,13 +291,7 @@ export class Point {
     return points;
   }
 
-  // Constant time multiplication.
-  // Benchmark of different methods for the reference:
-  // - windowed method (current): 4ms (30ms custom point), 75ms first start
-  // - powers of 2 constant-time: 14ms (30ms custom point), 35ms first start
-  // - double-and-add constant-time: 30ms
-  // - wNAF with w=4: 0.12ms - 18ms, non-constant
-  multiply(scalar: number | bigint): Point {
+  multiply(scalar: bigint): Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
@@ -217,7 +301,47 @@ export class Point {
     }
     // TODO: remove the check in the future, need to adjust tests.
     if (scalar > PRIME_ORDER) {
-      throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER')
+      throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+    }
+    const W = this.WINDOW_SIZE || 1;
+    if (256 % W) {
+      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+    }
+    const precomputes = this.precomputeWindow(W);
+    let win_sz = 2 ** W - 1,
+      parr = [],
+      farr = [];
+    let p = new Point(0n, 0n);
+    for (let byte_idx = 0; byte_idx < 256 / W; byte_idx++) {
+      const offset = win_sz * byte_idx;
+      const masked = Number(n & BigInt(win_sz));
+      if (!masked) {
+        farr.push(precomputes[offset]);
+      } else {
+        parr.push(precomputes[offset + masked - 1]);
+      }
+      n >>= BigInt(W);
+    }
+    return batchAdd([parr, farr])[0];
+  }
+
+  // Constant time multiplication.
+  // Benchmark of different methods for the reference:
+  // - windowed method (current): 4ms (30ms custom point), 75ms first start
+  // - powers of 2 constant-time: 14ms (30ms custom point), 35ms first start
+  // - double-and-add constant-time: 30ms
+  // - wNAF with w=4: 0.12ms - 18ms, non-constant
+  multiply2(scalar: number | bigint): Point {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
+    // TODO: remove the check in the future, need to adjust tests.
+    if (scalar > PRIME_ORDER) {
+      throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
     }
     const W = this.WINDOW_SIZE || 1;
     if (256 % W) {
@@ -601,7 +725,6 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
   const point3 = point1.add(point2);
   return point3.x === sign.r;
 }
-
 
 // Enable precomputes. Slows down first publicKey computation by 80ms.
 Point.BASE_POINT.WINDOW_SIZE = 4;
