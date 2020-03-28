@@ -33,6 +33,7 @@ export declare class Point {
     subtract(other: Point): Point;
     private double;
     equals(other: Point): boolean;
+    private precomputeWindow2;
     private precomputeWindow;
     multiply(scalar: bigint): Point;
     multiply2(scalar: number | bigint): Point;

@@ -126,6 +126,70 @@ function batchAdd(parrs: Point[][]): Point[] {
   return output;
 }
 
+class JacobianPoint {
+  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+  static fromPoint(p: Point): JacobianPoint {
+    return new JacobianPoint(p.x, p.y, 1n);
+  }
+
+  static batchAffine(points: JacobianPoint[]): Point[] {
+    let to_inv = new Array(points.length);
+    for (let i = 0; i < points.length; i++) to_inv[i] = points[i].z;
+    batchInverse(to_inv, P);
+    let res = new Array(points.length);
+    for (let i = 0; i < res.length; i++) res[i] = points[i].toAffine(to_inv[i]);
+    return res;
+  }
+  double(): JacobianPoint {
+    // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
+    // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
+    let a = this.x ** 2n;
+    let b = this.y ** 2n;
+    let c = b ** 2n;
+    let d = 2n * ((this.x + b) ** 2n - a - c);
+    let e = 3n * a;
+    let f = e ** 2n;
+    let x = mod(f - 2n * d, P);
+    let y = mod(e * (d - x) - 8n * c, P);
+    let z = mod(2n * this.y * this.z, P);
+    return new JacobianPoint(x, y, z);
+  }
+  add(other: JacobianPoint): JacobianPoint {
+    if (!other.x || !other.y) return this;
+    if (!this.x || !this.y) return other;
+    // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-1998-cmo-2
+    // Cost: 12M + 4S + 6add + 1*2.
+    let z1z1 = this.z ** 2n;
+    let z2z2 = other.z ** 2n;
+    let u1 = this.x * z2z2;
+    let u2 = other.x * z1z1;
+    let s1 = this.y * other.z * z2z2;
+    let s2 = other.y * this.z * z1z1;
+    let h = mod(u2 - u1, P);
+    let r = mod(s2 - s1, P);
+    if (!h) {
+      if (!r) {
+        return this.double();
+      } else {
+        return new JacobianPoint(0n, 0n, 1n);
+      }
+    }
+    let hh = h ** 2n;
+    let hhh = h * hh;
+    let v = u1 * hh;
+    let x = mod(r ** 2n - hhh - 2n * v, P);
+    let y = mod(r * (v - x) - s1 * hhh, P);
+    let z = mod(this.z * other.z * h, P);
+    return new JacobianPoint(x, y, z);
+  }
+  toAffine(neg_z: bigint): Point {
+    let neg_z2 = neg_z ** 2n;
+    let x = mod(this.x * neg_z2, P);
+    let y = mod(this.y * neg_z2 * neg_z, P);
+    return new Point(x, y);
+  }
+}
+
 export class Point {
   // Base point aka generator
   // public_key = base_point * private_key
@@ -271,7 +335,7 @@ export class Point {
     return this.x === other.x && this.y === other.y;
   }
 
-  private precomputeWindow(W: number): Point[] {
+  private precomputeWindow2(W: number): Point[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
     const points: Point[] = new Array((2 ** W - 1) * W);
     if (W !== 1) {
@@ -289,6 +353,27 @@ export class Point {
       currPoint = point;
     }
     return points;
+  }
+
+  private precomputeWindow(W: number): Point[] {
+    if (this.PRECOMPUTES) return this.PRECOMPUTES;
+    const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
+    let currPoint: JacobianPoint = JacobianPoint.fromPoint(this);
+    const winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      let offset = currWin * winSize;
+      let point: JacobianPoint = currPoint;
+      for (let i = 0; i < winSize; i++) {
+        points[offset + i] = point;
+        point = point.add(currPoint);
+      }
+      currPoint = point;
+    }
+    let res = JacobianPoint.batchAffine(points);
+    if (W !== 1) {
+      this.PRECOMPUTES = res;
+    }
+    return res;
   }
 
   multiply(scalar: bigint): Point {
