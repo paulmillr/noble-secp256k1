@@ -11,6 +11,21 @@ declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
 declare type Signature = Uint8Array | string | SignResult;
+declare class JacobianPoint {
+    x: bigint;
+    y: bigint;
+    z: bigint;
+    static ZERO_POINT: JacobianPoint;
+    static fromPoint(p: Point): JacobianPoint;
+    constructor(x: bigint, y: bigint, z: bigint);
+    static batchAffine(points: JacobianPoint[]): Point[];
+    equals(other: JacobianPoint): boolean;
+    negate(): JacobianPoint;
+    double(): JacobianPoint;
+    add(other: JacobianPoint): JacobianPoint;
+    multiplyUnsafe(n: bigint): JacobianPoint;
+    toAffine(invZ?: bigint): Point;
+}
 export declare class Point {
     x: bigint;
     y: bigint;
@@ -34,7 +49,8 @@ export declare class Point {
     private double;
     equals(other: Point): boolean;
     private precomputeWindow;
-    multiply(scalar: bigint): Point;
+    multiply(scalar: bigint, isAffine: false): JacobianPoint;
+    multiply(scalar: bigint, isAffine?: true): Point;
 }
 export declare class SignResult {
     r: bigint;

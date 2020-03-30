@@ -37,6 +37,18 @@ class JacobianPoint {
             res[i] = points[i].toAffine(toInv[i]);
         return res;
     }
+    equals(other) {
+        const a = this;
+        const b = other;
+        const az2 = mod(a.z * a.z);
+        const az3 = mod(a.z * az2);
+        const bz2 = mod(b.z * b.z);
+        const bz3 = mod(b.z * bz2);
+        return mod(a.x * bz2) === mod(az2 * b.x) && mod(a.y * bz3) === mod(az3 * b.y);
+    }
+    negate() {
+        return new JacobianPoint(this.x, mod(-this.y), this.z);
+    }
     double() {
         const a = this.x ** 2n;
         const b = this.y ** 2n;
@@ -52,9 +64,9 @@ class JacobianPoint {
     add(other) {
         const a = this;
         const b = other;
-        if (!b.x || !b.y)
+        if (b.x === 0n || b.y === 0n)
             return a;
-        if (!a.x || !a.y)
+        if (a.x === 0n || a.y === 0n)
             return b;
         const z1z1 = a.z ** 2n;
         const z2z2 = b.z ** 2n;
@@ -80,10 +92,21 @@ class JacobianPoint {
         const z = mod(this.z * b.z * h);
         return new JacobianPoint(x, y, z);
     }
-    toAffine(negZ) {
-        const negZ2 = negZ ** 2n;
-        const x = mod(this.x * negZ2, P);
-        const y = mod(this.y * negZ2 * negZ, P);
+    multiplyUnsafe(n) {
+        let p = JacobianPoint.ZERO_POINT;
+        let d = this;
+        while (n > 0n) {
+            if (n & 1n)
+                p = p.add(d);
+            d = d.double();
+            n >>= 1n;
+        }
+        return p;
+    }
+    toAffine(invZ = modInverse(this.z)) {
+        const invZ2 = invZ ** 2n;
+        const x = mod(this.x * invZ2, P);
+        const y = mod(this.y * invZ2 * invZ, P);
         return new Point(x, y);
     }
 }
@@ -156,10 +179,10 @@ class Point {
         const rinv = modInverse(r, PRIME_ORDER);
         const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
         const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
-        const sP = P_.multiply(s);
-        const hG = Point.BASE_POINT.multiply(h).negate();
-        const Q = sP.add(hG).multiply(rinv);
-        return Q;
+        const sP = P_.multiply(s, false);
+        const hG = Point.BASE_POINT.multiply(h, false).negate();
+        const Q = sP.add(hG).multiplyUnsafe(rinv);
+        return Q.toAffine();
     }
     toRawBytes(isCompressed = false) {
         return hexToArray(this.toHex(isCompressed));
@@ -227,13 +250,14 @@ class Point {
             }
             currPoint = point;
         }
-        const res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+        let res = points;
         if (W !== 1) {
+            res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
             this.PRECOMPUTES = res;
         }
         return res;
     }
-    multiply(scalar) {
+    multiply(scalar, isAffine = true) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
@@ -263,7 +287,7 @@ class Point {
             }
             n >>= BigInt(W);
         }
-        return JacobianPoint.batchAffine([p, f])[0];
+        return isAffine ? JacobianPoint.batchAffine([p, f])[0] : p;
     }
 }
 exports.Point = Point;
@@ -546,11 +570,11 @@ exports.sign = sign;
 function verify(signature, msgHash, publicKey) {
     const h = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
-    const pubKey = normalizePublicKey(publicKey);
+    const pubKey = JacobianPoint.fromPoint(normalizePublicKey(publicKey));
     const s1 = modInverse(s, PRIME_ORDER);
-    const Ghs1 = Point.BASE_POINT.multiply(mod(h * s1, PRIME_ORDER));
-    const Prs1 = pubKey.multiply(mod(r * s1, PRIME_ORDER));
-    const res = Ghs1.add(Prs1);
+    const Ghs1 = Point.BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
+    const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, PRIME_ORDER));
+    const res = Ghs1.add(Prs1).toAffine();
     return res.x === r;
 }
 exports.verify = verify;

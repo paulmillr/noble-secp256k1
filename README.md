@@ -179,23 +179,18 @@ secp256k1.SignResult {
 
 Measured with 2.9Ghz Coffee Lake. getPublicKey and signatures are faster than indutny/elliptic, ecdsa.js, sjcl.
 
-    getPublicKey x 2309 ops/sec @ 432μs/op
+    getPublicKey x 2394 ops/sec @ 416μs/op
     sign x 1815 ops/sec @ 550μs/op
-    verify x 235 ops/sec @ 4ms/op
-    recoverPublicKey x 123 ops/sec @ 8ms/op
-    getSharedSecret aka ecdh x 278 ops/sec @ 3ms/op
+    verify x 396 ops/sec @ 2ms/op
+    recoverPublicKey x 163 ops/sec @ 6ms/op
+    getSharedSecret aka ecdh x 287 ops/sec @ 3ms/op
     getSharedSecret (precomputed) x 2593 ops/sec @ 385μs/op
-    generateRandomPrivateKey x 339328 ops/sec @ 2μs/op
 
 Custom window=16 (takes 11sec to initialize):
 
     getPublicKey x 6010 ops/sec @ 166μs/op
     sign x 3451 ops/sec @ 289μs/op
-    verify x 246 ops/sec @ 4ms/op
-    recoverPublicKey x 125 ops/sec @ 7ms/op
-    getSharedSecret aka ecdh x 273 ops/sec @ 3ms/op
     getSharedSecret (precomputed) x 5066 ops/sec @ 197μs/op
-    generateRandomPrivateKey x 339328 ops/sec @ 2μs/op
 
 ## Security
 
