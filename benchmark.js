@@ -48,9 +48,9 @@ run([4, 8, 16], async (windowSize) => {
     secp.getSharedSecret(priv, pubKeyPre);
   });
 
-  await mark('generateRandomPrivateKey', samples, () => {
-    secp.utils.generateRandomPrivateKey();
-  });
+  // await mark('generateRandomPrivateKey', samples, () => {
+  //   secp.utils.generateRandomPrivateKey();
+  // });
 
   console.log();
   logMem();

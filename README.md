@@ -186,7 +186,7 @@ Measured with 2.9Ghz Coffee Lake. getPublicKey and signatures are faster than in
     getSharedSecret aka ecdh x 287 ops/sec @ 3ms/op
     getSharedSecret (precomputed) x 2593 ops/sec @ 385μs/op
 
-Custom window=16 (takes 11sec to initialize):
+Custom window=16 (takes 10s to initialize):
 
     getPublicKey x 6010 ops/sec @ 166μs/op
     sign x 3451 ops/sec @ 289μs/op
