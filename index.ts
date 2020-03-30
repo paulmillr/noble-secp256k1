@@ -37,8 +37,8 @@ const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
 
-// Point represents default aka affine coordinates: (x, y)
-// Jacobian Point represents point in jacobian coordinates: (x=x/z^2, y=y/z^3, z)
+// Default Point works in default aka affine coordinates: (x, y)
+// Jacobian Point works in jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
 class JacobianPoint {
   static ZERO_POINT = new JacobianPoint(0n, 0n, 1n);
   static fromPoint(p: Point): JacobianPoint {
@@ -47,15 +47,15 @@ class JacobianPoint {
 
   constructor(public x: bigint, public y: bigint, public z: bigint) {}
 
+  // Takes a bunch of Jacobian Points but executes only one
+  // modInverse on all of them. modInverse is very slow operation,
+  // so this improves performance massively.
   static batchAffine(points: JacobianPoint[]): Point[] {
-    const toInv = new Array(points.length);
-    for (let i = 0; i < points.length; i++) toInv[i] = points[i].z;
-    batchInverse(toInv, P);
-    const res = new Array(points.length);
-    for (let i = 0; i < res.length; i++) res[i] = points[i].toAffine(toInv[i]);
-    return res;
+    const toInv = batchInverse(points.map(p => p.z));
+    return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
+  // Compare one point to another.
   equals(other: JacobianPoint): boolean {
     const a = this;
     const b = other;
@@ -66,57 +66,79 @@ class JacobianPoint {
     return mod(a.x * bz2) === mod(az2 * b.x) && mod(a.y * bz3) === mod(az3 * b.y);
   }
 
+  // Inverses point to one corresponding to (x, -y) in Affine coordinates.
   negate(): JacobianPoint {
     return new JacobianPoint(this.x, mod(-this.y), this.z);
   }
 
+  // Fast algo for doubling 2 Jacobian Points when curve's a=0.
+  // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
+  // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
   double(): JacobianPoint {
-    // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
-    // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
-    const a = this.x ** 2n;
-    const b = this.y ** 2n;
-    const c = b ** 2n;
-    const d = 2n * ((this.x + b) ** 2n - a - c);
-    const e = 3n * a;
-    const f = e ** 2n;
-    const x = mod(f - 2n * d);
-    const y = mod(e * (d - x) - 8n * c);
-    const z = mod(2n * this.y * this.z);
-    return new JacobianPoint(x, y, z);
+    const X1 = this.x;
+    const Y1 = this.y;
+    const Z1 = this.z;
+    const A = X1 ** 2n;
+    const B = Y1 ** 2n;
+    const C = B ** 2n;
+    const D = 2n * ((X1 + B) ** 2n - A - C);
+    const E = 3n * A;
+    const F = E ** 2n;
+    const X3 = mod(F - 2n * D);
+    const Y3 = mod(E * (D - X3) - 8n * C);
+    const Z3 = mod(2n * Y1 * Z1);
+    return new JacobianPoint(X3, Y3, Z3);
   }
 
+  // Fast algo for adding 2 Jacobian Points when curve's a=0.
+  // http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-1998-cmo-2
+  // Cost: 12M + 4S + 6add + 1*2.
+  // Note: 2007 Bernstein-Lange (11M + 5S + 9add + 4*2) is actually *slower*. No idea why.
   add(other: JacobianPoint): JacobianPoint {
-    const a = this;
-    const b = other;
-    if (b.x === 0n || b.y === 0n) return a;
-    if (a.x === 0n || a.y === 0n) return b;
-    // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-1998-cmo-2
-    // Cost: 12M + 4S + 6add + 1*2.
-    const z1z1 = a.z ** 2n;
-    const z2z2 = b.z ** 2n;
-    const u1 = a.x * z2z2;
-    const u2 = b.x * z1z1;
-    const s1 = a.y * b.z * z2z2;
-    const s2 = b.y * a.z * z1z1;
-    const h = mod(u2 - u1);
-    const r = mod(s2 - s1);
-    if (!h) {
-      if (!r) {
-        return a.double();
+    const X1 = this.x;
+    const Y1 = this.y;
+    const Z1 = this.z;
+    const X2 = other.x;
+    const Y2 = other.y;
+    const Z2 = other.z;
+    if (X2 === 0n || Y2 === 0n) return this;
+    if (X1 === 0n || Y1 === 0n) return other;
+    const Z1Z1 = Z1 ** 2n;
+    const Z2Z2 = Z2 ** 2n;
+    const U1 = X1 * Z2Z2;
+    const U2 = X2 * Z1Z1;
+    const S1 = Y1 * Z2 * Z2Z2;
+    const S2 = Y2 * Z1 * Z1Z1;
+    const H = mod(U2 - U1);
+    const r = mod(S2 - S1);
+    // H = 0 meaning it's the same point.
+    if (H === 0n) {
+      if (r === 0n) {
+        return this.double();
       } else {
         return JacobianPoint.ZERO_POINT;
       }
     }
-    const hh = h ** 2n;
-    const hhh = h * hh;
-    const v = u1 * hh;
-    const x = mod(r ** 2n - hhh - 2n * v);
-    const y = mod(r * (v - x) - s1 * hhh);
-    const z = mod(this.z * b.z * h);
-    return new JacobianPoint(x, y, z);
+    const HH = mod(H ** 2n);
+    const HHH = mod(H * HH);
+    const V = U1 * HH;
+    const X3 = mod(r ** 2n - HHH - 2n * V);
+    const Y3 = mod(r * (V - X3) - S1 * HHH);
+    const Z3 = mod(Z1 * Z2 * H);
+    return new JacobianPoint(X3, Y3, Z3);
   }
 
-  multiplyUnsafe(n: bigint): JacobianPoint {
+  // Non-constant-time multiplication. Uses double-and-add algorithm.
+  // It's faster, but should only be used when you don't care about
+  // an exposed private key e.g. sig verification.
+  multiplyUnsafe(scalar: bigint): JacobianPoint {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
     let p = JacobianPoint.ZERO_POINT;
     let d: JacobianPoint = this;
     while (n > 0n) {
@@ -127,14 +149,17 @@ class JacobianPoint {
     return p;
   }
 
+  // Converts Jacobian point to default (x, y) coordinates.
+  // Can accept precomputed Z^-1 - for example, from batchInverse.
   toAffine(invZ: bigint = modInverse(this.z)): Point {
     const invZ2 = invZ ** 2n;
-    const x = mod(this.x * invZ2, P);
-    const y = mod(this.y * invZ2 * invZ, P);
+    const x = mod(this.x * invZ2);
+    const y = mod(this.y * invZ2 * invZ);
     return new Point(x, y);
   }
 }
 
+// Default Point works in default aka affine coordinates: (x, y)
 export class Point {
   // Base point aka generator
   // public_key = base_point * private_key
@@ -142,7 +167,6 @@ export class Point {
   // Identity point aka point at infinity
   // point = point + zero_point
   static ZERO_POINT: Point = new Point(0n, 0n);
-
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
@@ -151,12 +175,13 @@ export class Point {
 
   constructor(public x: bigint, public y: bigint) {}
 
+  // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
     this.WINDOW_SIZE = windowSize;
     this.PRECOMPUTES = undefined;
   }
 
-  // A point on curve is valid if it conforms to equation
+  // A point on curve is valid if it conforms to equation.
   static isValid(x: bigint, y: bigint) {
     if (x === 0n || y === 0n || x >= P || y >= P) return false;
 
@@ -199,6 +224,7 @@ export class Point {
     return new Point(x, y);
   }
 
+  // Converts hash string or Uint8Array to Point.
   static fromHex(hex: Hex) {
     const bytes = hex instanceof Uint8Array ? hex : hexToArray(hex);
     const header = bytes[0];
@@ -207,6 +233,7 @@ export class Point {
     throw new TypeError('Point.fromHex: received invalid point');
   }
 
+  // Multiplies generator point by privateKey.
   static fromPrivateKey(privateKey: PrivKey) {
     return Point.BASE_POINT.multiply(normalizePrivateKey(privateKey));
   }
@@ -242,47 +269,54 @@ export class Point {
     }
   }
 
+  equals(other: Point): boolean {
+    return this.x === other.x && this.y === other.y;
+  }
+
   negate(): Point {
     return new Point(this.x, mod(-this.y));
   }
 
+  // Adds point to itself. http://hyperelliptic.org/EFD/g1p/auto-shortw.html
+  double(): Point {
+    const X1 = this.x;
+    const Y1 = this.y;
+    const lambda = mod(3n * X1 ** 2n * modInverse(2n * Y1));
+    const X3 = mod(lambda * lambda - 2n * X1);
+    const Y3 = mod(lambda * (X1 - X3) - Y1);
+    return new Point(X3, Y3);
+  }
+
+  // Adds point to other point. http://hyperelliptic.org/EFD/g1p/auto-shortw.html
   add(other: Point): Point {
     if (!(other instanceof Point)) {
       throw new TypeError('Point#add: expected Point');
     }
     const a = this;
     const b = other;
+    const X1 = a.x;
+    const Y1 = a.y;
+    const X2 = b.x;
+    const Y2 = b.y;
     if (a.equals(Point.ZERO_POINT)) return b;
     if (b.equals(Point.ZERO_POINT)) return a;
-    if (a.x === b.x) {
-      if (a.y === b.y) {
+    if (X1 === X2) {
+      if (Y1 === Y2) {
         return this.double();
       } else {
         // return ZERO_POINT;
-        // Point at undefined.
+        // TODO: remove Point at undefined.
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
     }
-    const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x));
-    const x = mod(lamAdd * lamAdd - a.x - b.x);
-    const y = mod(lamAdd * (a.x - x) - a.y);
-    return new Point(x, y);
+    const lambda = mod((Y2 - Y1) * modInverse(X2 - X1));
+    const X3 = mod(lambda * lambda - X1 - X2);
+    const Y3 = mod(lambda * (X1 - X3) - Y1);
+    return new Point(X3, Y3);
   }
 
   subtract(other: Point) {
     return this.add(other.negate());
-  }
-
-  private double(): Point {
-    const a = this;
-    const lam = mod(3n * a.x * a.x * modInverse(2n * a.y));
-    const x = mod(lam * lam - 2n * a.x);
-    const y = mod(lam * (a.x - x) - a.y);
-    return new Point(x, y);
-  }
-
-  equals(other: Point): boolean {
-    return this.x === other.x && this.y === other.y;
   }
 
   private precomputeWindow(W: number): JacobianPoint[] {
@@ -308,6 +342,7 @@ export class Point {
   }
 
   // Constant time multiplication.
+  // Uses window method to generate 2^W precomputed points.
   multiply(scalar: bigint, isAffine: false): JacobianPoint;
   multiply(scalar: bigint, isAffine?: true): Point;
   multiply(scalar: bigint, isAffine = true): Point | JacobianPoint {
@@ -344,9 +379,7 @@ export class Point {
   }
 }
 
-function parseByte(str: string) {
-  return Number.parseInt(str, 16) * 2;
-}
+const { BASE_POINT } = Point;
 
 export class SignResult {
   constructor(public r: bigint, public s: bigint) {}
@@ -394,11 +427,11 @@ export class SignResult {
 }
 
 // HMAC-SHA256 implementation.
-let hmac: (key: Uint8Array, message: Uint8Array) => Promise<Uint8Array>;
+let hmac: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
 let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(0);
 
 if (typeof window == 'object' && 'crypto' in window) {
-  hmac = async (key: Uint8Array, message: Uint8Array) => {
+  hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
     const ckey = await window.crypto.subtle.importKey(
       'raw',
       key,
@@ -406,6 +439,7 @@ if (typeof window == 'object' && 'crypto' in window) {
       false,
       ['sign', 'verify']
     );
+    const message = concatTypedArrays(...messages);
     const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
     return new Uint8Array(buffer);
   };
@@ -416,9 +450,11 @@ if (typeof window == 'object' && 'crypto' in window) {
   const req = require;
   const { createHmac, randomBytes } = req('crypto');
 
-  hmac = async (key: Uint8Array, message: Uint8Array) => {
+  hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
     const hash = createHmac('sha256', key);
-    hash.update(message);
+    for (let message of messages) {
+      hash.update(message);
+    }
     return Uint8Array.from(hash.digest());
   };
   generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
@@ -428,16 +464,16 @@ if (typeof window == 'object' && 'crypto' in window) {
   throw new Error("The environment doesn't have hmac-sha256 function");
 }
 
-function powMod(x: bigint, power: bigint, order: bigint) {
-  let res = 1n;
-  while (power > 0) {
-    if (power & 1n) {
-      res = mod(res * x, order);
-    }
-    power >>= 1n;
-    x = mod(x * x, order);
+function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
+  if (arrays.length === 1) return arrays[0];
+  const length = arrays.reduce((a, arr) => a + arr.length, 0);
+  const result = new Uint8Array(length);
+  for (let i = 0, pad = 0; i < arrays.length; i++) {
+    const arr = arrays[i];
+    result.set(arr, pad);
+    pad += arr.length;
   }
-  return res;
+  return result;
 }
 
 // Convert between types
@@ -449,6 +485,10 @@ function arrayToHex(uint8a: Uint8Array): string {
     hex += uint8a[i].toString(16).padStart(2, '0');
   }
   return hex;
+}
+
+function pad64(num: number | bigint): string {
+  return num.toString(16).padStart(64, '0');
 }
 
 function numberToHex(num: number | bigint): string {
@@ -474,12 +514,13 @@ function hexToArray(hex: string): Uint8Array {
   return array;
 }
 
+// Big Endian
 function arrayToNumber(bytes: Uint8Array): bigint {
   return hexToNumber(arrayToHex(bytes));
 }
 
-function pad64(num: number | bigint): string {
-  return num.toString(16).padStart(64, '0');
+function parseByte(str: string): number {
+  return Number.parseInt(str, 16) * 2;
 }
 
 // -------------------------
@@ -487,6 +528,18 @@ function pad64(num: number | bigint): string {
 function mod(a: bigint, b: bigint = P): bigint {
   const result = a % b;
   return result >= 0 ? result : b + result;
+}
+
+function powMod(x: bigint, power: bigint, order: bigint) {
+  let res = 1n;
+  while (power > 0) {
+    if (power & 1n) {
+      res = mod(res * x, order);
+    }
+    power >>= 1n;
+    x = mod(x * x, order);
+  }
+  return res;
 }
 
 // Eucledian GCD
@@ -517,21 +570,23 @@ function modInverse(number: bigint, modulo: bigint = P) {
   return mod(x, modulo);
 }
 
-function batchInverse(elms: bigint[], n: bigint) {
-  let scratch = Array(elms.length);
+function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
+  const len = nums.length;
+  const scratch = new Array(len);
   let acc = 1n;
-  for (let i = 0; i < elms.length; i++) {
-    if (!elms[i]) continue;
+  for (let i = 0; i < len; i++) {
+    if (nums[i] === 0n) continue;
     scratch[i] = acc;
-    acc = mod(acc * elms[i], n);
+    acc = mod(acc * nums[i], n);
   }
   acc = modInverse(acc, n);
-  for (let i = elms.length - 1; i >= 0; i--) {
-    if (!elms[i]) continue;
-    let tmp = mod(acc * elms[i], n);
-    elms[i] = mod(acc * scratch[i], n);
+  for (let i = len - 1; i >= 0; i--) {
+    if (nums[i] === 0n) continue;
+    let tmp = mod(acc * nums[i], n);
+    nums[i] = mod(acc * scratch[i], n);
     acc = tmp;
   }
+  return nums;
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
@@ -545,16 +600,6 @@ function truncateHash(hash: string | Uint8Array): bigint {
     msg -= PRIME_ORDER;
   }
   return msg;
-}
-
-function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
-  const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-  for (let i = 0, pad = 0; i < args.length; i++) {
-    const arr = args[i];
-    result.set(arr, pad);
-    pad += arr.length;
-  }
-  return result;
 }
 
 type QRS = [Point, bigint, bigint];
@@ -575,14 +620,13 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   let k = new Uint8Array(32).fill(0);
   const b0 = Uint8Array.from([0x00]);
   const b1 = Uint8Array.from([0x01]);
-  const concat = concatTypedArrays;
 
   // Step D
-  k = await hmac(k, concat(v, b0, x, h1));
+  k = await hmac(k, v, b0, x, h1);
   // Step E
   v = await hmac(k, v);
   // Step F
-  k = await hmac(k, concat(v, b1, x, h1));
+  k = await hmac(k, v, b1, x, h1);
   // Step G
   v = await hmac(k, v);
 
@@ -594,7 +638,7 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
     if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!)) {
       return qrs;
     }
-    k = await hmac(k, concat(v, b0));
+    k = await hmac(k, v, b0);
     v = await hmac(k, v);
   }
 
@@ -606,7 +650,7 @@ function isValidPrivateKey(privateKey: bigint): boolean {
 }
 
 function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
-  const q = Point.BASE_POINT.multiply(k);
+  const q = BASE_POINT.multiply(k);
   const r = mod(q.x, PRIME_ORDER);
   const s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
   if (r === 0n || s === 0n) return;
@@ -728,17 +772,17 @@ export async function sign(
 
 export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean {
   const h = truncateHash(msgHash);
-  const {r, s} = normalizeSignature(signature);
+  const { r, s } = normalizeSignature(signature);
   const pubKey = JacobianPoint.fromPoint(normalizePublicKey(publicKey));
   const s1 = modInverse(s, PRIME_ORDER);
-  const Ghs1 = Point.BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
+  const Ghs1 = BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
   const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, PRIME_ORDER));
   const res = Ghs1.add(Prs1).toAffine();
   return res.x === r;
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
-Point.BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(4);
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
@@ -747,8 +791,8 @@ export const utils = {
 
   generateRandomPrivateKey,
 
-  precompute(windowSize = 4, point = Point.BASE_POINT): Point {
-    const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+  precompute(windowSize = 4, point = BASE_POINT): Point {
+    const cached = point === BASE_POINT ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
     cached.multiply(1n);
     return cached;

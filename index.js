@@ -28,14 +28,8 @@ class JacobianPoint {
         return new JacobianPoint(p.x, p.y, 1n);
     }
     static batchAffine(points) {
-        const toInv = new Array(points.length);
-        for (let i = 0; i < points.length; i++)
-            toInv[i] = points[i].z;
-        batchInverse(toInv, P);
-        const res = new Array(points.length);
-        for (let i = 0; i < res.length; i++)
-            res[i] = points[i].toAffine(toInv[i]);
-        return res;
+        const toInv = batchInverse(points.map(p => p.z));
+        return points.map((p, i) => p.toAffine(toInv[i]));
     }
     equals(other) {
         const a = this;
@@ -50,49 +44,63 @@ class JacobianPoint {
         return new JacobianPoint(this.x, mod(-this.y), this.z);
     }
     double() {
-        const a = this.x ** 2n;
-        const b = this.y ** 2n;
-        const c = b ** 2n;
-        const d = 2n * ((this.x + b) ** 2n - a - c);
-        const e = 3n * a;
-        const f = e ** 2n;
-        const x = mod(f - 2n * d);
-        const y = mod(e * (d - x) - 8n * c);
-        const z = mod(2n * this.y * this.z);
-        return new JacobianPoint(x, y, z);
+        const X1 = this.x;
+        const Y1 = this.y;
+        const Z1 = this.z;
+        const A = X1 ** 2n;
+        const B = Y1 ** 2n;
+        const C = B ** 2n;
+        const D = 2n * ((X1 + B) ** 2n - A - C);
+        const E = 3n * A;
+        const F = E ** 2n;
+        const X3 = mod(F - 2n * D);
+        const Y3 = mod(E * (D - X3) - 8n * C);
+        const Z3 = mod(2n * Y1 * Z1);
+        return new JacobianPoint(X3, Y3, Z3);
     }
     add(other) {
-        const a = this;
-        const b = other;
-        if (b.x === 0n || b.y === 0n)
-            return a;
-        if (a.x === 0n || a.y === 0n)
-            return b;
-        const z1z1 = a.z ** 2n;
-        const z2z2 = b.z ** 2n;
-        const u1 = a.x * z2z2;
-        const u2 = b.x * z1z1;
-        const s1 = a.y * b.z * z2z2;
-        const s2 = b.y * a.z * z1z1;
-        const h = mod(u2 - u1);
-        const r = mod(s2 - s1);
-        if (!h) {
-            if (!r) {
-                return a.double();
+        const X1 = this.x;
+        const Y1 = this.y;
+        const Z1 = this.z;
+        const X2 = other.x;
+        const Y2 = other.y;
+        const Z2 = other.z;
+        if (X2 === 0n || Y2 === 0n)
+            return this;
+        if (X1 === 0n || Y1 === 0n)
+            return other;
+        const Z1Z1 = Z1 ** 2n;
+        const Z2Z2 = Z2 ** 2n;
+        const U1 = X1 * Z2Z2;
+        const U2 = X2 * Z1Z1;
+        const S1 = Y1 * Z2 * Z2Z2;
+        const S2 = Y2 * Z1 * Z1Z1;
+        const H = mod(U2 - U1);
+        const r = mod(S2 - S1);
+        if (H === 0n) {
+            if (r === 0n) {
+                return this.double();
             }
             else {
                 return JacobianPoint.ZERO_POINT;
             }
         }
-        const hh = h ** 2n;
-        const hhh = h * hh;
-        const v = u1 * hh;
-        const x = mod(r ** 2n - hhh - 2n * v);
-        const y = mod(r * (v - x) - s1 * hhh);
-        const z = mod(this.z * b.z * h);
-        return new JacobianPoint(x, y, z);
+        const HH = mod(H ** 2n);
+        const HHH = mod(H * HH);
+        const V = U1 * HH;
+        const X3 = mod(r ** 2n - HHH - 2n * V);
+        const Y3 = mod(r * (V - X3) - S1 * HHH);
+        const Z3 = mod(Z1 * Z2 * H);
+        return new JacobianPoint(X3, Y3, Z3);
     }
-    multiplyUnsafe(n) {
+    multiplyUnsafe(scalar) {
+        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+            throw new TypeError('Point#multiply: expected number or bigint');
+        }
+        let n = mod(BigInt(scalar), PRIME_ORDER);
+        if (n <= 0) {
+            throw new Error('Point#multiply: invalid scalar, expected positive integer');
+        }
         let p = JacobianPoint.ZERO_POINT;
         let d = this;
         while (n > 0n) {
@@ -105,8 +113,8 @@ class JacobianPoint {
     }
     toAffine(invZ = modInverse(this.z)) {
         const invZ2 = invZ ** 2n;
-        const x = mod(this.x * invZ2, P);
-        const y = mod(this.y * invZ2 * invZ, P);
+        const x = mod(this.x * invZ2);
+        const y = mod(this.y * invZ2 * invZ);
         return new Point(x, y);
     }
 }
@@ -196,8 +204,19 @@ class Point {
             return `04${x}${pad64(this.y)}`;
         }
     }
+    equals(other) {
+        return this.x === other.x && this.y === other.y;
+    }
     negate() {
         return new Point(this.x, mod(-this.y));
+    }
+    double() {
+        const X1 = this.x;
+        const Y1 = this.y;
+        const lambda = mod(3n * X1 ** 2n * modInverse(2n * Y1));
+        const X3 = mod(lambda * lambda - 2n * X1);
+        const Y3 = mod(lambda * (X1 - X3) - Y1);
+        return new Point(X3, Y3);
     }
     add(other) {
         if (!(other instanceof Point)) {
@@ -205,35 +224,29 @@ class Point {
         }
         const a = this;
         const b = other;
+        const X1 = a.x;
+        const Y1 = a.y;
+        const X2 = b.x;
+        const Y2 = b.y;
         if (a.equals(Point.ZERO_POINT))
             return b;
         if (b.equals(Point.ZERO_POINT))
             return a;
-        if (a.x === b.x) {
-            if (a.y === b.y) {
+        if (X1 === X2) {
+            if (Y1 === Y2) {
                 return this.double();
             }
             else {
                 throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
             }
         }
-        const lamAdd = mod((b.y - a.y) * modInverse(b.x - a.x));
-        const x = mod(lamAdd * lamAdd - a.x - b.x);
-        const y = mod(lamAdd * (a.x - x) - a.y);
-        return new Point(x, y);
+        const lambda = mod((Y2 - Y1) * modInverse(X2 - X1));
+        const X3 = mod(lambda * lambda - X1 - X2);
+        const Y3 = mod(lambda * (X1 - X3) - Y1);
+        return new Point(X3, Y3);
     }
     subtract(other) {
         return this.add(other.negate());
-    }
-    double() {
-        const a = this;
-        const lam = mod(3n * a.x * a.x * modInverse(2n * a.y));
-        const x = mod(lam * lam - 2n * a.x);
-        const y = mod(lam * (a.x - x) - a.y);
-        return new Point(x, y);
-    }
-    equals(other) {
-        return this.x === other.x && this.y === other.y;
     }
     precomputeWindow(W) {
         if (this.PRECOMPUTES)
@@ -293,9 +306,7 @@ class Point {
 exports.Point = Point;
 Point.BASE_POINT = new Point(exports.CURVE_PARAMS.Gx, exports.CURVE_PARAMS.Gy);
 Point.ZERO_POINT = new Point(0n, 0n);
-function parseByte(str) {
-    return Number.parseInt(str, 16) * 2;
-}
+const { BASE_POINT } = Point;
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -338,8 +349,9 @@ exports.SignResult = SignResult;
 let hmac;
 let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(0);
 if (typeof window == 'object' && 'crypto' in window) {
-    hmac = async (key, message) => {
+    hmac = async (key, ...messages) => {
         const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
+        const message = concatTypedArrays(...messages);
         const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
         return new Uint8Array(buffer);
     };
@@ -350,9 +362,11 @@ if (typeof window == 'object' && 'crypto' in window) {
 else if (typeof process === 'object' && 'node' in process.versions) {
     const req = require;
     const { createHmac, randomBytes } = req('crypto');
-    hmac = async (key, message) => {
+    hmac = async (key, ...messages) => {
         const hash = createHmac('sha256', key);
-        hash.update(message);
+        for (let message of messages) {
+            hash.update(message);
+        }
         return Uint8Array.from(hash.digest());
     };
     generateRandomPrivateKey = (bytesLength = 32) => {
@@ -362,16 +376,17 @@ else if (typeof process === 'object' && 'node' in process.versions) {
 else {
     throw new Error("The environment doesn't have hmac-sha256 function");
 }
-function powMod(x, power, order) {
-    let res = 1n;
-    while (power > 0) {
-        if (power & 1n) {
-            res = mod(res * x, order);
-        }
-        power >>= 1n;
-        x = mod(x * x, order);
+function concatTypedArrays(...arrays) {
+    if (arrays.length === 1)
+        return arrays[0];
+    const length = arrays.reduce((a, arr) => a + arr.length, 0);
+    const result = new Uint8Array(length);
+    for (let i = 0, pad = 0; i < arrays.length; i++) {
+        const arr = arrays[i];
+        result.set(arr, pad);
+        pad += arr.length;
     }
-    return res;
+    return result;
 }
 function arrayToHex(uint8a) {
     let hex = '';
@@ -379,6 +394,9 @@ function arrayToHex(uint8a) {
         hex += uint8a[i].toString(16).padStart(2, '0');
     }
     return hex;
+}
+function pad64(num) {
+    return num.toString(16).padStart(64, '0');
 }
 function numberToHex(num) {
     const hex = num.toString(16);
@@ -402,12 +420,23 @@ function hexToArray(hex) {
 function arrayToNumber(bytes) {
     return hexToNumber(arrayToHex(bytes));
 }
-function pad64(num) {
-    return num.toString(16).padStart(64, '0');
+function parseByte(str) {
+    return Number.parseInt(str, 16) * 2;
 }
 function mod(a, b = P) {
     const result = a % b;
     return result >= 0 ? result : b + result;
+}
+function powMod(x, power, order) {
+    let res = 1n;
+    while (power > 0) {
+        if (power & 1n) {
+            res = mod(res * x, order);
+        }
+        power >>= 1n;
+        x = mod(x * x, order);
+    }
+    return res;
 }
 function egcd(a, b) {
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
@@ -433,23 +462,25 @@ function modInverse(number, modulo = P) {
     }
     return mod(x, modulo);
 }
-function batchInverse(elms, n) {
-    let scratch = Array(elms.length);
+function batchInverse(nums, n = P) {
+    const len = nums.length;
+    const scratch = new Array(len);
     let acc = 1n;
-    for (let i = 0; i < elms.length; i++) {
-        if (!elms[i])
+    for (let i = 0; i < len; i++) {
+        if (nums[i] === 0n)
             continue;
         scratch[i] = acc;
-        acc = mod(acc * elms[i], n);
+        acc = mod(acc * nums[i], n);
     }
     acc = modInverse(acc, n);
-    for (let i = elms.length - 1; i >= 0; i--) {
-        if (!elms[i])
+    for (let i = len - 1; i >= 0; i--) {
+        if (nums[i] === 0n)
             continue;
-        let tmp = mod(acc * elms[i], n);
-        elms[i] = mod(acc * scratch[i], n);
+        let tmp = mod(acc * nums[i], n);
+        nums[i] = mod(acc * scratch[i], n);
         acc = tmp;
     }
+    return nums;
 }
 function truncateHash(hash) {
     hash = typeof hash === 'string' ? hash : arrayToHex(hash);
@@ -463,15 +494,6 @@ function truncateHash(hash) {
     }
     return msg;
 }
-function concatTypedArrays(...args) {
-    const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-    for (let i = 0, pad = 0; i < args.length; i++) {
-        const arr = args[i];
-        result.set(arr, pad);
-        pad += arr.length;
-    }
-    return result;
-}
 async function getQRSrfc6979(msgHash, privateKey) {
     const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
     const h1 = hexToArray(pad64(num));
@@ -481,10 +503,9 @@ async function getQRSrfc6979(msgHash, privateKey) {
     let k = new Uint8Array(32).fill(0);
     const b0 = Uint8Array.from([0x00]);
     const b1 = Uint8Array.from([0x01]);
-    const concat = concatTypedArrays;
-    k = await hmac(k, concat(v, b0, x, h1));
+    k = await hmac(k, v, b0, x, h1);
     v = await hmac(k, v);
-    k = await hmac(k, concat(v, b1, x, h1));
+    k = await hmac(k, v, b1, x, h1);
     v = await hmac(k, v);
     for (let i = 0; i < 1000; i++) {
         v = await hmac(k, v);
@@ -493,7 +514,7 @@ async function getQRSrfc6979(msgHash, privateKey) {
         if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey))) {
             return qrs;
         }
-        k = await hmac(k, concat(v, b0));
+        k = await hmac(k, v, b0);
         v = await hmac(k, v);
     }
     throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
@@ -502,7 +523,7 @@ function isValidPrivateKey(privateKey) {
     return 0 < privateKey && privateKey < PRIME_ORDER;
 }
 function calcQRSFromK(k, msg, priv) {
-    const q = Point.BASE_POINT.multiply(k);
+    const q = BASE_POINT.multiply(k);
     const r = mod(q.x, PRIME_ORDER);
     const s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
     if (r === 0n || s === 0n)
@@ -572,20 +593,20 @@ function verify(signature, msgHash, publicKey) {
     const { r, s } = normalizeSignature(signature);
     const pubKey = JacobianPoint.fromPoint(normalizePublicKey(publicKey));
     const s1 = modInverse(s, PRIME_ORDER);
-    const Ghs1 = Point.BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
+    const Ghs1 = BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
     const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, PRIME_ORDER));
     const res = Ghs1.add(Prs1).toAffine();
     return res.x === r;
 }
 exports.verify = verify;
-Point.BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(4);
 exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
     },
     generateRandomPrivateKey,
-    precompute(windowSize = 4, point = Point.BASE_POINT) {
-        const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+    precompute(windowSize = 4, point = BASE_POINT) {
+        const cached = point === BASE_POINT ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
         cached.multiply(1n);
         return cached;

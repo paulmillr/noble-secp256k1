@@ -23,7 +23,7 @@ declare class JacobianPoint {
     negate(): JacobianPoint;
     double(): JacobianPoint;
     add(other: JacobianPoint): JacobianPoint;
-    multiplyUnsafe(n: bigint): JacobianPoint;
+    multiplyUnsafe(scalar: bigint): JacobianPoint;
     toAffine(invZ?: bigint): Point;
 }
 export declare class Point {
@@ -43,11 +43,11 @@ export declare class Point {
     static fromSignature(msgHash: Hex, signature: Signature, recovery: number): Point | undefined;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
+    equals(other: Point): boolean;
     negate(): Point;
+    double(): Point;
     add(other: Point): Point;
     subtract(other: Point): Point;
-    private double;
-    equals(other: Point): boolean;
     private precomputeWindow;
     multiply(scalar: bigint, isAffine: false): JacobianPoint;
     multiply(scalar: bigint, isAffine?: true): Point;
