@@ -229,6 +229,8 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 3. `npm run compile` to compile TypeScript code
 4. `npm run test` to run jest on `test/index.ts`
 
+Special thanks to [Roman Koblov](https://github.com/romankoblov), who have helped to improve scalar multiplication speed.
+
 ## License
 
 MIT (c) Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
