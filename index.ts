@@ -41,7 +41,7 @@ const SUBPN = P - PRIME_ORDER;
 // Jacobian Point works in jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
 class JacobianPoint {
   static ZERO_POINT = new JacobianPoint(0n, 0n, 1n);
-  static fromPoint(p: Point): JacobianPoint {
+  static fromAffine(p: Point): JacobianPoint {
     return new JacobianPoint(p.x, p.y, 1n);
   }
 
@@ -322,7 +322,7 @@ export class Point {
   private precomputeWindow(W: number): JacobianPoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
     const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
-    let currPoint: JacobianPoint = JacobianPoint.fromPoint(this);
+    let currPoint: JacobianPoint = JacobianPoint.fromAffine(this);
     const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       let offset = currWin * winSize;
@@ -335,7 +335,7 @@ export class Point {
     }
     let res = points;
     if (W !== 1) {
-      res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+      res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromAffine(p));
       this.PRECOMPUTES = res;
     }
     return res;
@@ -415,10 +415,14 @@ export class SignResult {
     return new SignResult(r, s);
   }
 
-  toHex(compressed = false) {
-    const rHex = numberToHex(this.r); //.padStart(64, '0');
-    const sHex = numberToHex(this.s); //.padStart(64, '0');
-    if (compressed) return sHex;
+  toRawBytes(isCompressed = false) {
+    return hexToArray(this.toHex(isCompressed));
+  }
+
+  toHex(isCompressed = false) {
+    const sHex = numberToHex(this.s);
+    if (isCompressed) return sHex;
+    const rHex = numberToHex(this.r);
     const rLen = numberToHex(rHex.length / 2);
     const sLen = numberToHex(sHex.length / 2);
     const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
@@ -713,8 +717,7 @@ export function recoverPublicKey(
 export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string {
   const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
   const shared = point.multiply(normalizePrivateKey(privateA));
-  const returnHex = typeof privateA === 'string';
-  return returnHex ? shared.toHex() : shared.toRawBytes();
+  return typeof privateA === 'string' ? shared.toHex() : shared.toRawBytes();
 }
 
 type OptsRecovered = { recovered: true; canonical?: true };
@@ -765,15 +768,15 @@ export async function sign(
     adjustedS = PRIME_ORDER - s;
     recovery ^= 1;
   }
-  const res = new SignResult(r, adjustedS).toHex();
-  const hashed = msgHash instanceof Uint8Array ? hexToArray(res) : res;
+  const sig = new SignResult(r, adjustedS);
+  const hashed = typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
   return recovered ? [hashed, recovery] : hashed;
 }
 
 export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean {
   const h = truncateHash(msgHash);
   const { r, s } = normalizeSignature(signature);
-  const pubKey = JacobianPoint.fromPoint(normalizePublicKey(publicKey));
+  const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
   const s1 = modInverse(s, PRIME_ORDER);
   const Ghs1 = BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
   const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, PRIME_ORDER));

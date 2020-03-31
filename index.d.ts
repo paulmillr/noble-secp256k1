@@ -16,7 +16,7 @@ declare class JacobianPoint {
     y: bigint;
     z: bigint;
     static ZERO_POINT: JacobianPoint;
-    static fromPoint(p: Point): JacobianPoint;
+    static fromAffine(p: Point): JacobianPoint;
     constructor(x: bigint, y: bigint, z: bigint);
     static batchAffine(points: JacobianPoint[]): Point[];
     equals(other: JacobianPoint): boolean;
@@ -57,7 +57,8 @@ export declare class SignResult {
     s: bigint;
     constructor(r: bigint, s: bigint);
     static fromHex(hex: Hex): SignResult;
-    toHex(compressed?: boolean): string;
+    toRawBytes(isCompressed?: boolean): Uint8Array;
+    toHex(isCompressed?: boolean): string;
 }
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;

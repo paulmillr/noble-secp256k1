@@ -177,13 +177,13 @@ secp256k1.SignResult {
 
 ## Speed
 
-Measured with 2.9Ghz Coffee Lake. getPublicKey and signatures are faster than indutny/elliptic, ecdsa.js, sjcl.
+Benchmarks measured with 2.9Ghz Coffee Lake.
 
-    getPublicKey x 2432 ops/sec @ 411μs/op
-    sign x 1833 ops/sec @ 545μs/op
-    verify x 404 ops/sec @ 2ms/op
-    recoverPublicKey x 163 ops/sec @ 6ms/op
-    getSharedSecret aka ecdh x 306 ops/sec @ 3ms/op
+    getPublicKey x 2525 ops/sec @ 395μs/op
+    sign x 1865 ops/sec @ 536μs/op
+    verify x 420 ops/sec @ 2ms/op
+    recoverPublicKey x 177 ops/sec @ 5ms/op
+    getSharedSecret aka ecdh x 319 ops/sec @ 3ms/op
     getSharedSecret (precomputed) x 2593 ops/sec @ 385μs/op
 
 Custom window=16 (takes 10s to initialize):
@@ -191,6 +191,24 @@ Custom window=16 (takes 10s to initialize):
     getPublicKey x 6010 ops/sec @ 166μs/op
     sign x 3451 ops/sec @ 289μs/op
     getSharedSecret (precomputed) x 5066 ops/sec @ 197μs/op
+
+Compare to other libraries:
+
+    elliptic#sign x 1,326 ops/sec
+    sjcl#sign x 185 ops/sec
+    openssl#sign x 1,926 ops/sec
+    ecdsa#sign x 69.32 ops/sec
+
+    elliptic#verify x 575 ops/sec
+    sjcl#verify x 155 ops/sec
+    openssl#verify x 2,392 ops/sec
+    ecdsa#verify x 45.64 ops/sec
+
+    (gen is getPublicKey)
+    elliptic#gen x 1,434 ops/sec
+    sjcl#gen x 194 ops/sec
+
+    elliptic#ecdh x 704 ops/sec
 
 ## Security
 
@@ -202,7 +220,7 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 2. Which means *any other JS library doesn't use constant-time bigints*. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases.
 3. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
 4. We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
-5. We've hardened implementation of koblitz curve multiplication to be algorithmically timing-resistant.
+5. Nonetheless we've hardened implementation of koblitz curve multiplication to be algorithmically constant time.
 
 ## Contributing
 

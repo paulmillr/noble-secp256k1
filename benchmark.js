@@ -14,11 +14,12 @@ run([4], async (windowSize) => {
 
   let pub;
   await mark('getPublicKey 1 bit', samples, () => {
-    pub = secp.getPublicKey(2n);
+    pub = secp.getPublicKey('02');
   });
 
   // console.profile('cpu');
-  const priv = 2n ** 255n + 12341n;
+  // const priv = 2n ** 255n + 12341n;
+  const priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
   await mark('getPublicKey', samples, () => {
     pub = secp.getPublicKey(priv);
   });
@@ -26,10 +27,10 @@ run([4], async (windowSize) => {
   const hex = '02cc734b5c09322e61a8f0762af66da3143ab06319d87a73063c1bca6f7719f0ce';
   const msg = 'deadbeefdeadbeefdeadbeefdeadbeef';
   await mark('sign', samples, async () => {
-    await secp.sign(msg, priv, { canonical: true });
+    await secp.sign(msg, priv);
   });
 
-  let signed = await secp.sign(msg, priv, { canonical: true });
+  let signed = await secp.sign(msg, priv);
   await mark('verify', samples, () => {
     secp.verify(signed, msg, pub);
   });
@@ -48,10 +49,6 @@ run([4], async (windowSize) => {
   await mark('getSharedSecret (precomputed)', samples, () => {
     secp.getSharedSecret(priv, pubKeyPre);
   });
-
-  // await mark('generateRandomPrivateKey', samples, () => {
-  //   secp.utils.generateRandomPrivateKey();
-  // });
 
   console.log();
   logMem();

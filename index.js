@@ -24,7 +24,7 @@ class JacobianPoint {
         this.y = y;
         this.z = z;
     }
-    static fromPoint(p) {
+    static fromAffine(p) {
         return new JacobianPoint(p.x, p.y, 1n);
     }
     static batchAffine(points) {
@@ -252,7 +252,7 @@ class Point {
         if (this.PRECOMPUTES)
             return this.PRECOMPUTES;
         const points = new Array((2 ** W - 1) * W);
-        let currPoint = JacobianPoint.fromPoint(this);
+        let currPoint = JacobianPoint.fromAffine(this);
         const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             let offset = currWin * winSize;
@@ -265,7 +265,7 @@ class Point {
         }
         let res = points;
         if (W !== 1) {
-            res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+            res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromAffine(p));
             this.PRECOMPUTES = res;
         }
         return res;
@@ -334,11 +334,14 @@ class SignResult {
         const s = hexToNumber(str.slice(sStart, sStart + sLen));
         return new SignResult(r, s);
     }
-    toHex(compressed = false) {
-        const rHex = numberToHex(this.r);
+    toRawBytes(isCompressed = false) {
+        return hexToArray(this.toHex(isCompressed));
+    }
+    toHex(isCompressed = false) {
         const sHex = numberToHex(this.s);
-        if (compressed)
+        if (isCompressed)
             return sHex;
+        const rHex = numberToHex(this.r);
         const rLen = numberToHex(rHex.length / 2);
         const sLen = numberToHex(sHex.length / 2);
         const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
@@ -567,8 +570,7 @@ exports.recoverPublicKey = recoverPublicKey;
 function getSharedSecret(privateA, publicB) {
     const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
     const shared = point.multiply(normalizePrivateKey(privateA));
-    const returnHex = typeof privateA === 'string';
-    return returnHex ? shared.toHex() : shared.toRawBytes();
+    return typeof privateA === 'string' ? shared.toHex() : shared.toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
 async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
@@ -583,15 +585,15 @@ async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
         adjustedS = PRIME_ORDER - s;
         recovery ^= 1;
     }
-    const res = new SignResult(r, adjustedS).toHex();
-    const hashed = msgHash instanceof Uint8Array ? hexToArray(res) : res;
+    const sig = new SignResult(r, adjustedS);
+    const hashed = typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
     return recovered ? [hashed, recovery] : hashed;
 }
 exports.sign = sign;
 function verify(signature, msgHash, publicKey) {
     const h = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
-    const pubKey = JacobianPoint.fromPoint(normalizePublicKey(publicKey));
+    const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
     const s1 = modInverse(s, PRIME_ORDER);
     const Ghs1 = BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
     const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, PRIME_ORDER));
