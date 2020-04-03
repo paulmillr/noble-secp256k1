@@ -359,7 +359,7 @@ export class Point {
     const precomputes = this.precomputeWindow(W);
 
     let p = JacobianPoint.ZERO_POINT;
-    let f = JacobianPoint.ZERO_POINT
+    let f = JacobianPoint.ZERO_POINT;
 
     const windows = isHalf ? 128 / W + 2 : 256 / W + 1;
     const windowSize = 2 ** (W - 1);
