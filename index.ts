@@ -856,7 +856,7 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
-BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(8);
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {

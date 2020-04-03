@@ -126,7 +126,7 @@ To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
 
 Returns `Uint8Array` of 32 cryptographically secure random bytes. You can use it as private key.
 
-###### `utils.precompute(W = 4, point = BASE_POINT): Point`
+###### `utils.precompute(W = 8, point = BASE_POINT): Point`
 
 Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
 
@@ -138,9 +138,6 @@ precomputed BASE_POINT values.
 
 This slows down first getPublicKey() by milliseconds (see Speed section),
 but allows to speed-up subsequent getPublicKey() calls up to 20x.
-
-The precomputation window is variable. For example, we increase W to 8
-for tests, to speed-up tests 2x.
 
 You may want to precompute values for your own point.
 
