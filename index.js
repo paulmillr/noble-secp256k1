@@ -655,7 +655,7 @@ exports.utils = {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
     },
     generateRandomPrivateKey,
-    precompute(windowSize = 4, point = BASE_POINT) {
+    precompute(windowSize = 8, point = BASE_POINT) {
         const cached = point === BASE_POINT ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
         cached.multiply(1n);

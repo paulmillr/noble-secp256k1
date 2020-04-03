@@ -2,7 +2,7 @@ const {run, mark, logMem} = require('micro-bmark');
 const secp = require('.');
 
 // run([4, 8, 16], async (windowSize) => {
-run([4], async (windowSize) => {
+run([8], async (windowSize) => {
   const samples = 1000;
   //console.log(`-------\nBenchmarking window=${windowSize} samples=${samples}...`);
   await mark(() => {

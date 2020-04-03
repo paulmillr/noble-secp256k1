@@ -179,18 +179,12 @@ secp256k1.SignResult {
 
 Benchmarks measured with 2.9Ghz Coffee Lake.
 
-    getPublicKey x 2525 ops/sec @ 395μs/op
-    sign x 1865 ops/sec @ 536μs/op
-    verify x 420 ops/sec @ 2ms/op
-    recoverPublicKey x 177 ops/sec @ 5ms/op
-    getSharedSecret aka ecdh x 319 ops/sec @ 3ms/op
-    getSharedSecret (precomputed) x 2593 ops/sec @ 385μs/op
-
-Custom window=16 (takes 10s to initialize):
-
-    getPublicKey x 6010 ops/sec @ 166μs/op
-    sign x 3451 ops/sec @ 289μs/op
-    getSharedSecret (precomputed) x 5066 ops/sec @ 197μs/op
+    getPublicKey x 4017 ops/sec @ 248μs/op
+    sign x 2620 ops/sec @ 381μs/op
+    verify x 446 ops/sec @ 2ms/op
+    recoverPublicKey x 202 ops/sec @ 4ms/op
+    getSharedSecret aka ecdh x 420 ops/sec @ 2ms/op
+    getSharedSecret (precomputed) x 3868 ops/sec @ 258μs/op
 
 Compare to other libraries:
 
