@@ -6,6 +6,7 @@ export declare const CURVE_PARAMS: {
     h: bigint;
     Gx: bigint;
     Gy: bigint;
+    beta: bigint;
 };
 declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
@@ -48,6 +49,7 @@ export declare class Point {
     add(other: Point): Point;
     subtract(other: Point): Point;
     private precomputeWindow;
+    private wNAF;
     multiply(scalar: bigint, isAffine: false): JacobianPoint;
     multiply(scalar: bigint, isAffine?: true): Point;
 }

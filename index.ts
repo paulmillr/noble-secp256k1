@@ -15,7 +15,10 @@ export const CURVE_PARAMS = {
   h: 1n,
   // Base point (x, y) aka generator point
   Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
-  Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n
+  Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
+
+  // For endomorphism, see below.
+  beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een
 };
 
 // y**2 = x**3 + ax + b
@@ -36,6 +39,9 @@ const PRIME_ORDER = CURVE_PARAMS.n;
 const PRIME_SIZE = 256;
 const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
+
+// If we're using Koblitz curve, we can improve efficiency by using endomorphism.
+const USE_ENDOMORPHISM = CURVE_PARAMS.a === 0n;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Jacobian Point works in jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
@@ -324,10 +330,11 @@ export class Point {
   private precomputeWindow(W: number): JacobianPoint[] {
     const cached = pointPrecomputes.get(this);
     if (cached) return cached;
+    const windows = (USE_ENDOMORPHISM ? 128 : 256) / W + 1;
     let points: JacobianPoint[] = [];
     let p = JacobianPoint.fromAffine(this);
     let base = p;
-    for (let window = 0; window < 256 / W + 1; window++) {
+    for (let window = 0; window < windows; window++) {
       base = p;
       points.push(base);
       for (let i = 1; i < 2 ** (W - 1); i++) {
@@ -341,6 +348,43 @@ export class Point {
       pointPrecomputes.set(this, points);
     }
     return points;
+  }
+
+  private wNAF(n: bigint, W: number, precomputes: JacobianPoint[], isHalf = false) {
+    let p = JacobianPoint.ZERO_POINT;
+    let f = JacobianPoint.ZERO_POINT
+
+    const windows = (isHalf ? 128 : 256) / W + 1;
+    const windowSize = 2 ** (W - 1);
+    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+    const maxNumber = 2 ** W;
+    const shiftBy = BigInt(W);
+
+    for (let window = 0; window < windows; window++) {
+      const offset = window * windowSize;
+      // Extract W bits.
+      let wbits = Number(n & mask);
+
+      // Shift number by W bits.
+      n >>= shiftBy;
+
+      // If the bits are bigger than max size, we'll split those.
+      // +224 => 256 - 32
+      if (wbits > windowSize) {
+        wbits -= maxNumber;
+        n += 1n;
+      }
+
+      // Check if we're onto Zero point.
+      // Add random point inside current window to f.
+      if (wbits === 0) {
+        f = f.add(precomputes[offset]);
+      } else {
+        const cached = precomputes[offset + Math.abs(wbits) - 1];
+        p = p.add(wbits < 0 ? cached.negate() : cached);
+      }
+    }
+    return [p, f];
   }
 
   // Constant time multiplication.
@@ -366,37 +410,24 @@ export class Point {
     }
     const precomputes = this.precomputeWindow(W);
 
-    const windowSize = 2 ** (W - 1);
-    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
-    const maxNumber = 2 ** W;
-
     // Real point.
-    let p = JacobianPoint.ZERO_POINT;
+    let point: JacobianPoint;
     // Fake point, we use it to achieve constant-time multiplication.
-    let f = JacobianPoint.ZERO_POINT;
-    for (let window = 0; window < 256 / W + 1; window++) {
-      const offset = window * windowSize;
-      // Extract W bits.
-      let wbits = Number(n & mask);
-      // Shift number by W bits.
-      n >>= BigInt(W);
-      // If the bits are bigger than max size, we'll split those.
-      // +224 => 256 - 32
-      if (wbits > windowSize) {
-        wbits -= maxNumber;
-        n += 1n;
-      }
-      // Check if we're onto Zero point.
-      if (wbits === 0) {
-        // Add random point inside current window to f.
-        f = f.add(precomputes[offset]);
-      } else {
-        const cached = precomputes[offset + Math.abs(wbits) - 1];
-        p = p.add(wbits < 0 ? cached.negate() : cached);
-
-      }
+    let fake: JacobianPoint;
+    if (USE_ENDOMORPHISM) {
+      const [k1neg, k1, k2neg, k2] = splitScalar(n);
+      let k1p, k2p, f1p, f2p;
+      [k1p, f1p] = this.wNAF(k1, W, precomputes, true);
+      [k2p, f2p] = this.wNAF(k2, W, precomputes, true);
+      if (k1neg) k1p = k1p.negate();
+      if (k2neg) k2p = k2p.negate();
+      k2p = new JacobianPoint(mod(k2p.x * CURVE_PARAMS.beta), k2p.y, k2p.z);
+      point = k1p.add(k2p);
+      fake = f1p.add(f2p);
+    } else {
+      [point, fake] = this.wNAF(n, W, precomputes);
     }
-    return isAffine ? JacobianPoint.batchAffine([p, f])[0] : p;
+    return isAffine ? JacobianPoint.batchAffine([point, fake])[0] : point;
   }
 }
 
@@ -612,6 +643,24 @@ function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
     acc = tmp;
   }
   return nums;
+}
+
+// Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
+// https://gist.github.com/gz-c/bf70ce96b2488e5ccca65900086c75f5
+function splitScalar(k: bigint): [boolean, bigint, boolean, bigint] {
+  const { n } = CURVE_PARAMS;
+  const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
+  const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
+  const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
+  const b2 = 0x3086d221a7d46bcde86c90e49284eb15n;
+  const c1 = (b2 * k) / n;
+  const c2 = (-b1 * k) / n;
+  const k1 = k - c1 * a1 - c2 * a2;
+  const k2 = -c1 * b1 - c2 * b2;
+  const k1neg = k1 < 0;
+  const k2neg = k2 < 0;
+  // let lambda = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n;
+  return [k1neg, k1neg ? -k1 : k1, k2neg, k2neg ? -k2 : k2];
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {

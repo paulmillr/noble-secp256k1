@@ -30,7 +30,7 @@
     "@types/node": "^12.12.26",
     "fast-check": "^1.22.1",
     "jest": "^25.1.0",
-    "micro-bmark": "^0.1.1",
+    "micro-bmark": "^0.1.2",
     "ts-jest": "^25.2.0",
     "typescript": "3.8.3"
   },
