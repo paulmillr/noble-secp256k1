@@ -1,6 +1,5 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 'use strict';
-
 // https://www.secg.org/sec2-v2.pdf
 // Curve fomula is y^2 = x^3 + ax + b
 export const CURVE_PARAMS = {
@@ -41,6 +40,8 @@ const HIGH_NUMBER = PRIME_ORDER >> 1n;
 const SUBPN = P - PRIME_ORDER;
 
 // If we're using Koblitz curve, we can improve efficiency by using endomorphism.
+// Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
+// https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 const USE_ENDOMORPHISM = CURVE_PARAMS.a === 0n;
 
 // Default Point works in default aka affine coordinates: (x, y)
@@ -646,7 +647,7 @@ function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
 }
 
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
-// https://gist.github.com/gz-c/bf70ce96b2488e5ccca65900086c75f5
+// https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalar(k: bigint): [boolean, bigint, boolean, bigint] {
   const { n } = CURVE_PARAMS;
   const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
