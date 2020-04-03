@@ -331,7 +331,7 @@ export class Point {
   private precomputeWindow(W: number): JacobianPoint[] {
     const cached = pointPrecomputes.get(this);
     if (cached) return cached;
-    const windows = (USE_ENDOMORPHISM ? 128 : 256) / W + 1;
+    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
     let points: JacobianPoint[] = [];
     let p = JacobianPoint.fromAffine(this);
     let base = p;
@@ -351,11 +351,17 @@ export class Point {
     return points;
   }
 
-  private wNAF(n: bigint, W: number, precomputes: JacobianPoint[], isHalf = false) {
+  private wNAF(n: bigint, isHalf = false) {
+    const W = this.WINDOW_SIZE || 1;
+    if (256 % W) {
+      throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
+    }
+    const precomputes = this.precomputeWindow(W);
+
     let p = JacobianPoint.ZERO_POINT;
     let f = JacobianPoint.ZERO_POINT
 
-    const windows = (isHalf ? 128 : 256) / W + 1;
+    const windows = isHalf ? 128 / W + 2 : 256 / W + 1;
     const windowSize = 2 ** (W - 1);
     const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
     const maxNumber = 2 ** W;
@@ -405,12 +411,6 @@ export class Point {
     if (scalar > PRIME_ORDER) {
       throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
     }
-    const W = this.WINDOW_SIZE || 1;
-    if (256 % W) {
-      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-    }
-    const precomputes = this.precomputeWindow(W);
-
     // Real point.
     let point: JacobianPoint;
     // Fake point, we use it to achieve constant-time multiplication.
@@ -418,15 +418,15 @@ export class Point {
     if (USE_ENDOMORPHISM) {
       const [k1neg, k1, k2neg, k2] = splitScalar(n);
       let k1p, k2p, f1p, f2p;
-      [k1p, f1p] = this.wNAF(k1, W, precomputes, true);
-      [k2p, f2p] = this.wNAF(k2, W, precomputes, true);
+      [k1p, f1p] = this.wNAF(k1, true);
+      [k2p, f2p] = this.wNAF(k2, true);
       if (k1neg) k1p = k1p.negate();
       if (k2neg) k2p = k2p.negate();
       k2p = new JacobianPoint(mod(k2p.x * CURVE_PARAMS.beta), k2p.y, k2p.z);
       point = k1p.add(k2p);
       fake = f1p.add(f2p);
     } else {
-      [point, fake] = this.wNAF(n, W, precomputes);
+      [point, fake] = this.wNAF(n);
     }
     return isAffine ? JacobianPoint.batchAffine([point, fake])[0] : point;
   }

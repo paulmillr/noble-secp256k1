@@ -255,7 +255,7 @@ class Point {
         const cached = pointPrecomputes.get(this);
         if (cached)
             return cached;
-        const windows = (USE_ENDOMORPHISM ? 128 : 256) / W + 1;
+        const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
         let points = [];
         let p = JacobianPoint.fromAffine(this);
         let base = p;
@@ -274,10 +274,15 @@ class Point {
         }
         return points;
     }
-    wNAF(n, W, precomputes, isHalf = false) {
+    wNAF(n, isHalf = false) {
+        const W = this.WINDOW_SIZE || 1;
+        if (256 % W) {
+            throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
+        }
+        const precomputes = this.precomputeWindow(W);
         let p = JacobianPoint.ZERO_POINT;
         let f = JacobianPoint.ZERO_POINT;
-        const windows = (isHalf ? 128 : 256) / W + 1;
+        const windows = isHalf ? 128 / W + 2 : 256 / W + 1;
         const windowSize = 2 ** (W - 1);
         const mask = BigInt(2 ** W - 1);
         const maxNumber = 2 ** W;
@@ -311,18 +316,13 @@ class Point {
         if (scalar > PRIME_ORDER) {
             throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
         }
-        const W = this.WINDOW_SIZE || 1;
-        if (256 % W) {
-            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-        }
-        const precomputes = this.precomputeWindow(W);
         let point;
         let fake;
         if (USE_ENDOMORPHISM) {
             const [k1neg, k1, k2neg, k2] = splitScalar(n);
             let k1p, k2p, f1p, f2p;
-            [k1p, f1p] = this.wNAF(k1, W, precomputes, true);
-            [k2p, f2p] = this.wNAF(k2, W, precomputes, true);
+            [k1p, f1p] = this.wNAF(k1, true);
+            [k2p, f2p] = this.wNAF(k2, true);
             if (k1neg)
                 k1p = k1p.negate();
             if (k2neg)
@@ -332,7 +332,7 @@ class Point {
             fake = f1p.add(f2p);
         }
         else {
-            [point, fake] = this.wNAF(n, W, precomputes);
+            [point, fake] = this.wNAF(n);
         }
         return isAffine ? JacobianPoint.batchAffine([point, fake])[0] : point;
     }
@@ -649,7 +649,7 @@ function verify(signature, msgHash, publicKey) {
     return res.x === r;
 }
 exports.verify = verify;
-BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(8);
 exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));

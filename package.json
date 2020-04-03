@@ -8,7 +8,7 @@
     "index.d.ts"
   ],
   "scripts": {
-    "compile": "tsc -d",
+    "build": "tsc -d",
     "test": "jest",
     "bench": "node benchmark.js"
   },
