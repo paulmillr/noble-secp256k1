@@ -32,7 +32,6 @@ export declare class Point {
     static BASE_POINT: Point;
     static ZERO_POINT: Point;
     private WINDOW_SIZE?;
-    private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
     static isValid(x: bigint, y: bigint): boolean;

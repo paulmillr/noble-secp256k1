@@ -159,6 +159,9 @@ class JacobianPoint {
   }
 }
 
+// Stores precomputed values for points.
+const pointPrecomputes = new WeakMap();
+
 // Default Point works in default aka affine coordinates: (x, y)
 export class Point {
   // Base point aka generator
@@ -171,14 +174,13 @@ export class Point {
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
   private WINDOW_SIZE?: number;
-  private PRECOMPUTES?: JacobianPoint[];
 
   constructor(public x: bigint, public y: bigint) {}
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
     this.WINDOW_SIZE = windowSize;
-    this.PRECOMPUTES = undefined;
+    pointPrecomputes.delete(this);
   }
 
   // A point on curve is valid if it conforms to equation.
@@ -320,29 +322,30 @@ export class Point {
   }
 
   private precomputeWindow(W: number): JacobianPoint[] {
-    if (this.PRECOMPUTES) return this.PRECOMPUTES;
-    const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
-    let currPoint: JacobianPoint = JacobianPoint.fromAffine(this);
-    const winSize = 2 ** W - 1;
-    for (let currWin = 0; currWin < 256 / W; currWin++) {
-      let offset = currWin * winSize;
-      let point: JacobianPoint = currPoint;
-      for (let i = 0; i < winSize; i++) {
-        points[offset + i] = point;
-        point = point.add(currPoint);
+    const cached = pointPrecomputes.get(this);
+    if (cached) return cached;
+    let points: JacobianPoint[] = [];
+    let p = JacobianPoint.fromAffine(this);
+    let base = p;
+    for (let window = 0; window < 256 / W + 1; window++) {
+      base = p;
+      points.push(base);
+      for (let i = 1; i < 2 ** (W - 1); i++) {
+        base = base.add(p);
+        points.push(base);
       }
-      currPoint = point;
+      p = base.double();
     }
-    let res = points;
     if (W !== 1) {
-      res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromAffine(p));
-      this.PRECOMPUTES = res;
+      points = JacobianPoint.batchAffine(points).map(JacobianPoint.fromAffine);
+      pointPrecomputes.set(this, points);
     }
-    return res;
+    return points;
   }
 
   // Constant time multiplication.
-  // Uses window method to generate 2^W precomputed points.
+  // Uses wNAF method. Windowed method may be 10% faster,
+  // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: bigint, isAffine: false): JacobianPoint;
   multiply(scalar: bigint, isAffine?: true): Point;
   multiply(scalar: bigint, isAffine = true): Point | JacobianPoint {
@@ -362,18 +365,36 @@ export class Point {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    const winSize = 2 ** W - 1;
+
+    const windowSize = 2 ** (W - 1);
+    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+    const maxNumber = 2 ** W;
+
+    // Real point.
     let p = JacobianPoint.ZERO_POINT;
+    // Fake point, we use it to achieve constant-time multiplication.
     let f = JacobianPoint.ZERO_POINT;
-    for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
-      const offset = winSize * byteIdx;
-      const masked = Number(n & BigInt(winSize));
-      if (masked) {
-        p = p.add(precomputes[offset + masked - 1]);
-      } else {
-        f = f.add(precomputes[offset]);
-      }
+    for (let window = 0; window < 256 / W + 1; window++) {
+      const offset = window * windowSize;
+      // Extract W bits.
+      let wbits = Number(n & mask);
+      // Shift number by W bits.
       n >>= BigInt(W);
+      // If the bits are bigger than max size, we'll split those.
+      // +224 => 256 - 32
+      if (wbits > windowSize) {
+        wbits -= maxNumber;
+        n += 1n;
+      }
+      // Check if we're onto Zero point.
+      if (wbits === 0) {
+        // Add random point inside current window to f.
+        f = f.add(precomputes[offset]);
+      } else {
+        const cached = precomputes[offset + Math.abs(wbits) - 1];
+        p = p.add(wbits < 0 ? cached.negate() : cached);
+
+      }
     }
     return isAffine ? JacobianPoint.batchAffine([p, f])[0] : p;
   }

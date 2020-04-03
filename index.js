@@ -119,6 +119,7 @@ class JacobianPoint {
     }
 }
 JacobianPoint.ZERO_POINT = new JacobianPoint(0n, 0n, 1n);
+const pointPrecomputes = new WeakMap();
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -126,7 +127,7 @@ class Point {
     }
     _setWindowSize(windowSize) {
         this.WINDOW_SIZE = windowSize;
-        this.PRECOMPUTES = undefined;
+        pointPrecomputes.delete(this);
     }
     static isValid(x, y) {
         if (x === 0n || y === 0n || x >= P || y >= P)
@@ -249,26 +250,26 @@ class Point {
         return this.add(other.negate());
     }
     precomputeWindow(W) {
-        if (this.PRECOMPUTES)
-            return this.PRECOMPUTES;
-        const points = new Array((2 ** W - 1) * W);
-        let currPoint = JacobianPoint.fromAffine(this);
-        const winSize = 2 ** W - 1;
-        for (let currWin = 0; currWin < 256 / W; currWin++) {
-            let offset = currWin * winSize;
-            let point = currPoint;
-            for (let i = 0; i < winSize; i++) {
-                points[offset + i] = point;
-                point = point.add(currPoint);
+        const cached = pointPrecomputes.get(this);
+        if (cached)
+            return cached;
+        let points = [];
+        let p = JacobianPoint.fromAffine(this);
+        let base = p;
+        for (let window = 0; window < 256 / W + 1; window++) {
+            base = p;
+            points.push(base);
+            for (let i = 1; i < 2 ** (W - 1); i++) {
+                base = base.add(p);
+                points.push(base);
             }
-            currPoint = point;
+            p = base.double();
         }
-        let res = points;
         if (W !== 1) {
-            res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromAffine(p));
-            this.PRECOMPUTES = res;
+            points = JacobianPoint.batchAffine(points).map(JacobianPoint.fromAffine);
+            pointPrecomputes.set(this, points);
         }
-        return res;
+        return points;
     }
     multiply(scalar, isAffine = true) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
@@ -286,19 +287,26 @@ class Point {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        const winSize = 2 ** W - 1;
+        const windowSize = 2 ** (W - 1);
+        const mask = BigInt(2 ** W - 1);
+        const maxNumber = 2 ** W;
         let p = JacobianPoint.ZERO_POINT;
         let f = JacobianPoint.ZERO_POINT;
-        for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
-            const offset = winSize * byteIdx;
-            const masked = Number(n & BigInt(winSize));
-            if (masked) {
-                p = p.add(precomputes[offset + masked - 1]);
+        for (let window = 0; window < 256 / W + 1; window++) {
+            const offset = window * windowSize;
+            let wbits = Number(n & mask);
+            n >>= BigInt(W);
+            if (wbits > windowSize) {
+                wbits -= maxNumber;
+                n += 1n;
             }
-            else {
+            if (wbits === 0) {
                 f = f.add(precomputes[offset]);
             }
-            n >>= BigInt(W);
+            else {
+                const cached = precomputes[offset + Math.abs(wbits) - 1];
+                p = p.add(wbits < 0 ? cached.negate() : cached);
+            }
         }
         return isAffine ? JacobianPoint.batchAffine([p, f])[0] : p;
     }
