@@ -2,7 +2,7 @@
 'use strict';
 // https://www.secg.org/sec2-v2.pdf
 // Curve fomula is y^2 = x^3 + ax + b
-export const CURVE_PARAMS = {
+const CURVE = {
   // Params: a, b
   a: 0n,
   b: 7n,
@@ -20,10 +20,14 @@ export const CURVE_PARAMS = {
   beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een
 };
 
+// Cleaner js output if that's on a separate line.
+export {CURVE};
+
+// Short weistrass curve formula.
 // y**2 = x**3 + ax + b
 // Returns sqrY
-function curve(x: bigint) {
-  const { a, b } = CURVE_PARAMS;
+function weistrass(x: bigint) {
+  const { a, b } = CURVE;
   return mod(x ** 3n + a * x + b);
 }
 
@@ -32,22 +36,18 @@ type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
-const P = CURVE_PARAMS.P;
-const PRIME_ORDER = CURVE_PARAMS.n;
-
 const PRIME_SIZE = 256;
-const HIGH_NUMBER = PRIME_ORDER >> 1n;
-const SUBPN = P - PRIME_ORDER;
 
 // If we're using Koblitz curve, we can improve efficiency by using endomorphism.
 // Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
 // https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
-const USE_ENDOMORPHISM = CURVE_PARAMS.a === 0n;
+const USE_ENDOMORPHISM = CURVE.a === 0n;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Jacobian Point works in jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
 class JacobianPoint {
-  static ZERO_POINT = new JacobianPoint(0n, 0n, 1n);
+  static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
+  static ZERO = new JacobianPoint(0n, 0n, 1n);
   static fromAffine(p: Point): JacobianPoint {
     return new JacobianPoint(p.x, p.y, 1n);
   }
@@ -123,7 +123,7 @@ class JacobianPoint {
       if (r === 0n) {
         return this.double();
       } else {
-        return JacobianPoint.ZERO_POINT;
+        return JacobianPoint.ZERO;
       }
     }
     const HH = mod(H ** 2n);
@@ -142,11 +142,11 @@ class JacobianPoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
+    let n = mod(BigInt(scalar), CURVE.n);
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    let p = JacobianPoint.ZERO_POINT;
+    let p = JacobianPoint.ZERO;
     let d: JacobianPoint = this;
     while (n > 0n) {
       if (n & 1n) p = p.add(d);
@@ -172,11 +172,11 @@ const pointPrecomputes = new WeakMap();
 // Default Point works in default aka affine coordinates: (x, y)
 export class Point {
   // Base point aka generator
-  // public_key = base_point * private_key
-  static BASE_POINT: Point = new Point(CURVE_PARAMS.Gx, CURVE_PARAMS.Gy);
+  // public_key = Point.BASE * private_key
+  static BASE: Point = new Point(CURVE.Gx, CURVE.Gy);
   // Identity point aka point at infinity
   // point = point + zero_point
-  static ZERO_POINT: Point = new Point(0n, 0n);
+  static ZERO: Point = new Point(0n, 0n);
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
@@ -192,10 +192,10 @@ export class Point {
 
   // A point on curve is valid if it conforms to equation.
   static isValid(x: bigint, y: bigint) {
-    if (x === 0n || y === 0n || x >= P || y >= P) return false;
+    if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) return false;
 
     const sqrY = mod(y * y);
-    const yEquivalence = curve(x);
+    const yEquivalence = weistrass(x);
     const left1 = sqrY;
     const left2 = mod(-sqrY);
     const right1 = yEquivalence;
@@ -208,8 +208,8 @@ export class Point {
       throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
     }
     const x = arrayToNumber(bytes.slice(1));
-    const sqrY = curve(x);
-    let y = powMod(sqrY, (P + 1n) / 4n, P);
+    const sqrY = weistrass(x);
+    let y = powMod(sqrY, (CURVE.P + 1n) / 4n, CURVE.P);
     const isFirstByteOdd = (bytes[0] & 1) === 1;
     const isYOdd = (y & 1n) === 1n;
     if (isFirstByteOdd !== isYOdd) {
@@ -244,7 +244,7 @@ export class Point {
 
   // Multiplies generator point by privateKey.
   static fromPrivateKey(privateKey: PrivKey) {
-    return Point.BASE_POINT.multiply(normalizePrivateKey(privateKey));
+    return Point.BASE.multiply(normalizePrivateKey(privateKey));
   }
 
   // Recovers public key from ECDSA signature.
@@ -256,11 +256,11 @@ export class Point {
     const sign = normalizeSignature(signature);
     const { r, s } = sign;
     if (r === 0n || s === 0n) return;
-    const rinv = modInverse(r, PRIME_ORDER);
+    const rinv = modInverse(r, CURVE.n);
     const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
     const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
-    const sP = P_.multiply(s, false);
-    const hG = Point.BASE_POINT.multiply(h, false).negate();
+    const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
+    const hG = Point.BASE.multiply(h, false).negate();
     const Q = sP.add(hG).multiplyUnsafe(rinv);
     return Q.toAffine();
   }
@@ -307,13 +307,13 @@ export class Point {
     const Y1 = a.y;
     const X2 = b.x;
     const Y2 = b.y;
-    if (a.equals(Point.ZERO_POINT)) return b;
-    if (b.equals(Point.ZERO_POINT)) return a;
+    if (a.equals(Point.ZERO)) return b;
+    if (b.equals(Point.ZERO)) return a;
     if (X1 === X2) {
       if (Y1 === Y2) {
         return this.double();
       } else {
-        // return ZERO_POINT;
+        // return ZERO;
         // TODO: remove Point at undefined.
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
@@ -358,8 +358,8 @@ export class Point {
     }
     const precomputes = this.precomputeWindow(W);
 
-    let p = JacobianPoint.ZERO_POINT;
-    let f = JacobianPoint.ZERO_POINT;
+    let p = JacobianPoint.ZERO;
+    let f = JacobianPoint.ZERO;
 
     const windows = isHalf ? 128 / W + 2 : 256 / W + 1;
     const windowSize = 2 ** (W - 1);
@@ -403,13 +403,13 @@ export class Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
+    let n = mod(BigInt(scalar), CURVE.n);
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
     // TODO: remove the check in the future, need to adjust tests.
-    if (scalar > PRIME_ORDER) {
-      throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+    if (scalar > CURVE.n) {
+      throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
     }
     // Real point.
     let point: JacobianPoint;
@@ -422,7 +422,7 @@ export class Point {
       [k2p, f2p] = this.wNAF(k2, true);
       if (k1neg) k1p = k1p.negate();
       if (k2neg) k2p = k2p.negate();
-      k2p = new JacobianPoint(mod(k2p.x * CURVE_PARAMS.beta), k2p.y, k2p.z);
+      k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
       point = k1p.add(k2p);
       fake = f1p.add(f2p);
     } else {
@@ -431,8 +431,6 @@ export class Point {
     return isAffine ? JacobianPoint.batchAffine([point, fake])[0] : point;
   }
 }
-
-const { BASE_POINT } = Point;
 
 export class SignResult {
   constructor(public r: bigint, public s: bigint) {}
@@ -485,7 +483,7 @@ export class SignResult {
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
-let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(0);
+let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
 
 if (typeof window == 'object' && 'crypto' in window) {
   hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
@@ -582,7 +580,7 @@ function parseByte(str: string): number {
 
 // -------------------------
 
-function mod(a: bigint, b: bigint = P): bigint {
+function mod(a: bigint, b: bigint = CURVE.P): bigint {
   const result = a % b;
   return result >= 0 ? result : b + result;
 }
@@ -616,7 +614,7 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-function modInverse(number: bigint, modulo: bigint = P) {
+function modInverse(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('modInverse: expected positive integers');
   }
@@ -627,7 +625,7 @@ function modInverse(number: bigint, modulo: bigint = P) {
   return mod(x, modulo);
 }
 
-function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
+function batchInverse(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
   let acc = 1n;
@@ -649,7 +647,7 @@ function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalar(k: bigint): [boolean, bigint, boolean, bigint] {
-  const { n } = CURVE_PARAMS;
+  const { n } = CURVE;
   const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
   const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
   const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
@@ -671,8 +669,8 @@ function truncateHash(hash: string | Uint8Array): bigint {
   if (delta > 0) {
     msg = msg >> BigInt(delta);
   }
-  if (msg >= PRIME_ORDER) {
-    msg -= PRIME_ORDER;
+  if (msg >= CURVE.n) {
+    msg -= CURVE.n;
   }
   return msg;
 }
@@ -721,13 +719,14 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
 }
 
 function isValidPrivateKey(privateKey: bigint): boolean {
-  return 0 < privateKey && privateKey < PRIME_ORDER;
+  return 0 < privateKey && privateKey < CURVE.n;
 }
 
 function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
-  const q = BASE_POINT.multiply(k);
-  const r = mod(q.x, PRIME_ORDER);
-  const s = mod(modInverse(k, PRIME_ORDER) * (msg + r * priv), PRIME_ORDER);
+  const max = CURVE.n;
+  const q = Point.BASE.multiply(k);
+  const r = mod(q.x, max);
+  const s = mod(modInverse(k, max) * (msg + r * priv), max);
   if (r === 0n || s === 0n) return;
   return [q, r, s];
 }
@@ -827,7 +826,7 @@ export async function sign(
 ): Promise<Hex | [Hex, number]> {
   const priv = normalizePrivateKey(privateKey);
   if (!isValidPrivateKey(priv)) {
-    throw new Error('Private key is invalid. Expected 0 < key < PRIME_ORDER');
+    throw new Error('Private key is invalid. Expected 0 < key < CURVE.n');
   }
   // We are using deterministic signature scheme
   // instead of letting user specify random `k`.
@@ -835,8 +834,9 @@ export async function sign(
 
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
   let adjustedS = s;
+  const HIGH_NUMBER = CURVE.n >> 1n;
   if (s > HIGH_NUMBER && canonical) {
-    adjustedS = PRIME_ORDER - s;
+    adjustedS = CURVE.n - s;
     recovery ^= 1;
   }
   const sig = new SignResult(r, adjustedS);
@@ -848,15 +848,15 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
   const h = truncateHash(msgHash);
   const { r, s } = normalizeSignature(signature);
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
-  const s1 = modInverse(s, PRIME_ORDER);
-  const Ghs1 = BASE_POINT.multiply(mod(h * s1, PRIME_ORDER), false);
-  const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, PRIME_ORDER));
+  const s1 = modInverse(s, CURVE.n);
+  const Ghs1 = Point.BASE.multiply(mod(h * s1, CURVE.n), false);
+  const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, CURVE.n));
   const res = Ghs1.add(Prs1).toAffine();
   return res.x === r;
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
-BASE_POINT._setWindowSize(8);
+Point.BASE._setWindowSize(8);
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
@@ -865,8 +865,8 @@ export const utils = {
 
   generateRandomPrivateKey,
 
-  precompute(windowSize = 8, point = BASE_POINT): Point {
-    const cached = point === BASE_POINT ? point : new Point(point.x, point.y);
+  precompute(windowSize = 8, point = Point.BASE): Point {
+    const cached = point === Point.BASE ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
     cached.multiply(1n);
     return cached;

@@ -6,7 +6,9 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["*.ts"],
   "exclude": ["node_modules"]

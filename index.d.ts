@@ -1,4 +1,4 @@
-export declare const CURVE_PARAMS: {
+declare const CURVE: {
     a: bigint;
     b: bigint;
     P: bigint;
@@ -8,6 +8,7 @@ export declare const CURVE_PARAMS: {
     Gy: bigint;
     beta: bigint;
 };
+export { CURVE };
 declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
@@ -16,7 +17,8 @@ declare class JacobianPoint {
     x: bigint;
     y: bigint;
     z: bigint;
-    static ZERO_POINT: JacobianPoint;
+    static BASE: JacobianPoint;
+    static ZERO: JacobianPoint;
     static fromAffine(p: Point): JacobianPoint;
     constructor(x: bigint, y: bigint, z: bigint);
     static batchAffine(points: JacobianPoint[]): Point[];
@@ -30,8 +32,8 @@ declare class JacobianPoint {
 export declare class Point {
     x: bigint;
     y: bigint;
-    static BASE_POINT: Point;
-    static ZERO_POINT: Point;
+    static BASE: Point;
+    static ZERO: Point;
     private WINDOW_SIZE?;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
@@ -85,4 +87,3 @@ export declare const utils: {
     generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
     precompute(windowSize?: number, point?: Point): Point;
 };
-export {};

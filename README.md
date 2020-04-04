@@ -179,7 +179,7 @@ Benchmarks measured with 2.9Ghz Coffee Lake.
     getPublicKey x 4017 ops/sec @ 248μs/op
     sign x 2620 ops/sec @ 381μs/op
     verify x 446 ops/sec @ 2ms/op
-    recoverPublicKey x 214 ops/sec @ 4ms/op
+    recoverPublicKey x 221 ops/sec @ 4ms/op
     getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
     getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
 

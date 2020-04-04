@@ -7,31 +7,8 @@ import * as privates from './vectors/privates.json';
 import * as points from './vectors/points.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 
-// let sha256 = (message: Uint8Array) => new Uint8Array();
-// const req = require;
-// const { createHash } = req("crypto");
-// sha256 = (message) => {
-//   const hash = createHash("sha256");
-//   hash.update(message);
-//   return Uint8Array.from(hash.digest());
-// };
-// function hash(message: string) {
-//   return sha256(new TextEncoder().encode(message));
-// }
-
-const MAX_PRIVATE_KEY = secp256k1.CURVE_PARAMS.n - 1n;
-
+const MAX_PRIVATE_KEY = secp256k1.CURVE.n - 1n;
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
-
-// const toLEHex = (n: number | bigint) =>
-//   n
-//     .toString(16)
-//     .padStart(64, '0')
-//     .replace(/\w\w/gi, a => `${a},`)
-//     .split(',')
-//     .reverse()
-//     .slice(1)
-//     .join('');
 
 describe('secp256k1', () => {
   it('.getPublicKey()', () => {
