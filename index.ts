@@ -40,6 +40,8 @@ const PRIME_SIZE = 256;
 
 // If we're using Koblitz curve, we can improve efficiency by using endomorphism.
 // Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
+// Should always be used for Jacobian's double-and-add multiplication.
+// For affines cached multiplication, it trades off 1/2 init time & 1/3 ram for 20% perf hit.
 // https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 const USE_ENDOMORPHISM = CURVE.a === 0n;
 
