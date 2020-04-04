@@ -100,15 +100,36 @@ class JacobianPoint {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        let p = JacobianPoint.ZERO;
-        let d = this;
-        while (n > 0n) {
-            if (n & 1n)
-                p = p.add(d);
-            d = d.double();
-            n >>= 1n;
+        if (!USE_ENDOMORPHISM) {
+            let p = JacobianPoint.ZERO;
+            let d = this;
+            while (n > 0n) {
+                if (n & 1n)
+                    p = p.add(d);
+                d = d.double();
+                n >>= 1n;
+            }
+            return p;
         }
-        return p;
+        let [k1neg, k1, k2neg, k2] = splitScalar(n);
+        let k1p = JacobianPoint.ZERO;
+        let k2p = JacobianPoint.ZERO;
+        let d = this;
+        while (k1 > 0n || k2 > 0n) {
+            if (k1 & 1n)
+                k1p = k1p.add(d);
+            if (k2 & 1n)
+                k2p = k2p.add(d);
+            d = d.double();
+            k1 >>= 1n;
+            k2 >>= 1n;
+        }
+        if (k1neg)
+            k1p = k1p.negate();
+        if (k2neg)
+            k2p = k2p.negate();
+        k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
+        return k1p.add(k2p);
     }
     toAffine(invZ = modInverse(this.z)) {
         const invZ2 = invZ ** 2n;
@@ -657,7 +678,7 @@ exports.utils = {
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point === Point.BASE ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
-        cached.multiply(1n);
+        cached.multiply(3n);
         return cached;
     }
 };
