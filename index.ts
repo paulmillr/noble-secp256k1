@@ -21,7 +21,7 @@ const CURVE = {
 };
 
 // Cleaner js output if that's on a separate line.
-export {CURVE};
+export { CURVE };
 
 // Short weistrass curve formula.
 // y**2 = x**3 + ax + b
