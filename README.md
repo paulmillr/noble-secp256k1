@@ -144,11 +144,11 @@ You may want to precompute values for your own point.
 ```typescript
 secp256k1.CURVE_PARAMS.P // 2 ** 256 - 2 ** 32 - 977
 secp256k1.CURVE_PARAMS.n // 2 ** 256 - 432420386565659656852420866394968145599
-secp256k1.Point.BASE_POINT // new secp256k1.Point(x, y) where
+secp256k1.Point.BASE // new secp256k1.Point(x, y) where
 // x = 55066263022277343669578718895168534326250603453777594175500187360389116729240n
 // y = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
 
-// Elliptic curve point
+// Elliptic curve point in Affine (x, y) coordinates.
 secp256k1.Point {
   constructor(x: bigint, y: bigint);
   // Supports compressed and non-compressed hex
@@ -159,8 +159,12 @@ secp256k1.Point {
     signature: Signature,
     recovery: number | bigint
   ): Point | undefined {
-  toHex(): string;
+  toRawBytes(isCompressed = false): Uint8Array;
+  toHex(isCompressed = false): string;
+  equals(other: Point): boolean;
+  negate(): Point;
   add(other: Point): Point;
+  subtract(other: Point): Point;
   // Constant-time scalar multiplication.
   multiply(scalar: bigint | Uint8Array): Point;
 }
