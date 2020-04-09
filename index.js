@@ -11,6 +11,7 @@ const CURVE = {
     beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een
 };
 exports.CURVE = CURVE;
+const P_DIV4_1 = (CURVE.P + 1n) / 4n;
 function weistrass(x) {
     const { a, b } = CURVE;
     return mod(x ** 3n + a * x + b);
@@ -167,7 +168,7 @@ class Point {
         }
         const x = arrayToNumber(bytes.slice(1));
         const sqrY = weistrass(x);
-        let y = powMod(sqrY, (CURVE.P + 1n) / 4n, CURVE.P);
+        let y = powMod(sqrY, P_DIV4_1, CURVE.P);
         const isFirstByteOdd = (bytes[0] & 1) === 1;
         const isYOdd = (y & 1n) === 1n;
         if (isFirstByteOdd !== isYOdd) {

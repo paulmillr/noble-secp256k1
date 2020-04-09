@@ -180,7 +180,7 @@ secp256k1.SignResult {
 
 Benchmarks measured with 2.9Ghz Coffee Lake.
 
-    getPublicKey x 4017 ops/sec @ 248μs/op
+    getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
     sign x 2620 ops/sec @ 381μs/op
     verify x 558 ops/sec @ 1ms/op
     recoverPublicKey x 295 ops/sec @ 3ms/op

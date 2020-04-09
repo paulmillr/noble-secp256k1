@@ -20,8 +20,8 @@ run(async (windowSize) => {
   // console.profile('cpu');
   // const priv = 2n ** 255n + 12341n;
   const priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
-  await mark('getPublicKey', samples, () => {
-    pub = secp.getPublicKey(priv);
+  await mark('getPublicKey(utils.randomPrivateKey())', samples, () => {
+    pub = secp.getPublicKey(secp.utils.randomPrivateKey());
   });
 
   const hex = '02cc734b5c09322e61a8f0762af66da3143ab06319d87a73063c1bca6f7719f0ce';
