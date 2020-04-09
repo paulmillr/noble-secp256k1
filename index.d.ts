@@ -17,11 +17,11 @@ declare class JacobianPoint {
     x: bigint;
     y: bigint;
     z: bigint;
+    constructor(x: bigint, y: bigint, z: bigint);
     static BASE: JacobianPoint;
     static ZERO: JacobianPoint;
     static fromAffine(p: Point): JacobianPoint;
-    constructor(x: bigint, y: bigint, z: bigint);
-    static batchAffine(points: JacobianPoint[]): Point[];
+    static fromAffineBatch(points: JacobianPoint[]): Point[];
     equals(other: JacobianPoint): boolean;
     negate(): JacobianPoint;
     double(): JacobianPoint;
@@ -84,6 +84,6 @@ export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNo
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
-    generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
+    randomPrivateKey: (bytesLength?: number) => Uint8Array;
     precompute(windowSize?: number, point?: Point): Point;
 };

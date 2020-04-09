@@ -26,8 +26,8 @@ class JacobianPoint {
     static fromAffine(p) {
         return new JacobianPoint(p.x, p.y, 1n);
     }
-    static batchAffine(points) {
-        const toInv = batchInverse(points.map(p => p.z));
+    static fromAffineBatch(points) {
+        const toInv = invertBatch(points.map(p => p.z));
         return points.map((p, i) => p.toAffine(toInv[i]));
     }
     equals(other) {
@@ -131,7 +131,7 @@ class JacobianPoint {
         k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
         return k1p.add(k2p);
     }
-    toAffine(invZ = modInverse(this.z)) {
+    toAffine(invZ = invert(this.z)) {
         const invZ2 = invZ ** 2n;
         const x = mod(this.x * invZ2);
         const y = mod(this.y * invZ2 * invZ);
@@ -206,7 +206,7 @@ class Point {
         const { r, s } = sign;
         if (r === 0n || s === 0n)
             return;
-        const rinv = modInverse(r, CURVE.n);
+        const rinv = invert(r, CURVE.n);
         const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
         const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
         const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
@@ -235,7 +235,7 @@ class Point {
     double() {
         const X1 = this.x;
         const Y1 = this.y;
-        const lambda = mod(3n * X1 ** 2n * modInverse(2n * Y1));
+        const lambda = mod(3n * X1 ** 2n * invert(2n * Y1));
         const X3 = mod(lambda * lambda - 2n * X1);
         const Y3 = mod(lambda * (X1 - X3) - Y1);
         return new Point(X3, Y3);
@@ -262,7 +262,7 @@ class Point {
                 throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
             }
         }
-        const lambda = mod((Y2 - Y1) * modInverse(X2 - X1));
+        const lambda = mod((Y2 - Y1) * invert(X2 - X1));
         const X3 = mod(lambda * lambda - X1 - X2);
         const Y3 = mod(lambda * (X1 - X3) - Y1);
         return new Point(X3, Y3);
@@ -288,7 +288,7 @@ class Point {
             p = base.double();
         }
         if (W !== 1) {
-            points = JacobianPoint.batchAffine(points).map(JacobianPoint.fromAffine);
+            points = JacobianPoint.fromAffineBatch(points).map(JacobianPoint.fromAffine);
             pointPrecomputes.set(this, points);
         }
         return points;
@@ -353,7 +353,7 @@ class Point {
         else {
             [point, fake] = this.wNAF(n);
         }
-        return isAffine ? JacobianPoint.batchAffine([point, fake])[0] : point;
+        return isAffine ? JacobianPoint.fromAffineBatch([point, fake])[0] : point;
     }
 }
 exports.Point = Point;
@@ -402,7 +402,7 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 let hmac;
-let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(bytesLength);
+let randomPrivateKey = (bytesLength = 32) => new Uint8Array(bytesLength);
 if (typeof window == 'object' && 'crypto' in window) {
     hmac = async (key, ...messages) => {
         const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
@@ -410,7 +410,7 @@ if (typeof window == 'object' && 'crypto' in window) {
         const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
         return new Uint8Array(buffer);
     };
-    generateRandomPrivateKey = (bytesLength = 32) => {
+    randomPrivateKey = (bytesLength = 32) => {
         return window.crypto.getRandomValues(new Uint8Array(bytesLength));
     };
 }
@@ -424,7 +424,7 @@ else if (typeof process === 'object' && 'node' in process.versions) {
         }
         return Uint8Array.from(hash.digest());
     };
-    generateRandomPrivateKey = (bytesLength = 32) => {
+    randomPrivateKey = (bytesLength = 32) => {
         return new Uint8Array(randomBytes(bytesLength).buffer);
     };
 }
@@ -507,17 +507,17 @@ function egcd(a, b) {
     let gcd = b;
     return [gcd, x, y];
 }
-function modInverse(number, modulo = CURVE.P) {
+function invert(number, modulo = CURVE.P) {
     if (number === 0n || modulo <= 0n) {
-        throw new Error('modInverse: expected positive integers');
+        throw new Error('invert: expected positive integers');
     }
     let [gcd, x] = egcd(mod(number, modulo), modulo);
     if (gcd !== 1n) {
-        throw new Error('modInverse: does not exist');
+        throw new Error('invert: does not exist');
     }
     return mod(x, modulo);
 }
-function batchInverse(nums, n = CURVE.P) {
+function invertBatch(nums, n = CURVE.P) {
     const len = nums.length;
     const scratch = new Array(len);
     let acc = 1n;
@@ -527,7 +527,7 @@ function batchInverse(nums, n = CURVE.P) {
         scratch[i] = acc;
         acc = mod(acc * nums[i], n);
     }
-    acc = modInverse(acc, n);
+    acc = invert(acc, n);
     for (let i = len - 1; i >= 0; i--) {
         if (nums[i] === 0n)
             continue;
@@ -595,7 +595,7 @@ function calcQRSFromK(k, msg, priv) {
     const max = CURVE.n;
     const q = Point.BASE.multiply(k);
     const r = mod(q.x, max);
-    const s = mod(modInverse(k, max) * (msg + r * priv), max);
+    const s = mod(invert(k, max) * (msg + r * priv), max);
     if (r === 0n || s === 0n)
         return;
     return [q, r, s];
@@ -662,7 +662,7 @@ function verify(signature, msgHash, publicKey) {
     const h = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
     const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
-    const s1 = modInverse(s, CURVE.n);
+    const s1 = invert(s, CURVE.n);
     const Ghs1 = Point.BASE.multiply(mod(h * s1, CURVE.n), false);
     const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, CURVE.n));
     const res = Ghs1.add(Prs1).toAffine();
@@ -674,7 +674,7 @@ exports.utils = {
     isValidPrivateKey(privateKey) {
         return isValidPrivateKey(normalizePrivateKey(privateKey));
     },
-    generateRandomPrivateKey,
+    randomPrivateKey,
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point === Point.BASE ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);

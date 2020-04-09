@@ -48,19 +48,18 @@ const USE_ENDOMORPHISM = CURVE.a === 0n;
 // Default Point works in default aka affine coordinates: (x, y)
 // Jacobian Point works in jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
 class JacobianPoint {
+  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+
   static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
   static ZERO = new JacobianPoint(0n, 0n, 1n);
   static fromAffine(p: Point): JacobianPoint {
     return new JacobianPoint(p.x, p.y, 1n);
   }
-
-  constructor(public x: bigint, public y: bigint, public z: bigint) {}
-
   // Takes a bunch of Jacobian Points but executes only one
-  // modInverse on all of them. modInverse is very slow operation,
+  // invert on all of them. invert is very slow operation,
   // so this improves performance massively.
-  static batchAffine(points: JacobianPoint[]): Point[] {
-    const toInv = batchInverse(points.map(p => p.z));
+  static fromAffineBatch(points: JacobianPoint[]): Point[] {
+    const toInv = invertBatch(points.map(p => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
@@ -75,7 +74,7 @@ class JacobianPoint {
     return mod(a.x * bz2) === mod(az2 * b.x) && mod(a.y * bz3) === mod(az3 * b.y);
   }
 
-  // Inverses point to one corresponding to (x, -y) in Affine coordinates.
+  // Flips point to one corresponding to (x, -y) in Affine coordinates.
   negate(): JacobianPoint {
     return new JacobianPoint(this.x, mod(-this.y), this.z);
   }
@@ -176,8 +175,8 @@ class JacobianPoint {
   }
 
   // Converts Jacobian point to default (x, y) coordinates.
-  // Can accept precomputed Z^-1 - for example, from batchInverse.
-  toAffine(invZ: bigint = modInverse(this.z)): Point {
+  // Can accept precomputed Z^-1 - for example, from invertBatch.
+  toAffine(invZ: bigint = invert(this.z)): Point {
     const invZ2 = invZ ** 2n;
     const x = mod(this.x * invZ2);
     const y = mod(this.y * invZ2 * invZ);
@@ -275,7 +274,7 @@ export class Point {
     const sign = normalizeSignature(signature);
     const { r, s } = sign;
     if (r === 0n || s === 0n) return;
-    const rinv = modInverse(r, CURVE.n);
+    const rinv = invert(r, CURVE.n);
     const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
     const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
@@ -309,7 +308,7 @@ export class Point {
   double(): Point {
     const X1 = this.x;
     const Y1 = this.y;
-    const lambda = mod(3n * X1 ** 2n * modInverse(2n * Y1));
+    const lambda = mod(3n * X1 ** 2n * invert(2n * Y1));
     const X3 = mod(lambda * lambda - 2n * X1);
     const Y3 = mod(lambda * (X1 - X3) - Y1);
     return new Point(X3, Y3);
@@ -337,7 +336,7 @@ export class Point {
         throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
       }
     }
-    const lambda = mod((Y2 - Y1) * modInverse(X2 - X1));
+    const lambda = mod((Y2 - Y1) * invert(X2 - X1));
     const X3 = mod(lambda * lambda - X1 - X2);
     const Y3 = mod(lambda * (X1 - X3) - Y1);
     return new Point(X3, Y3);
@@ -364,7 +363,7 @@ export class Point {
       p = base.double();
     }
     if (W !== 1) {
-      points = JacobianPoint.batchAffine(points).map(JacobianPoint.fromAffine);
+      points = JacobianPoint.fromAffineBatch(points).map(JacobianPoint.fromAffine);
       pointPrecomputes.set(this, points);
     }
     return points;
@@ -447,7 +446,7 @@ export class Point {
     } else {
       [point, fake] = this.wNAF(n);
     }
-    return isAffine ? JacobianPoint.batchAffine([point, fake])[0] : point;
+    return isAffine ? JacobianPoint.fromAffineBatch([point, fake])[0] : point;
   }
 }
 
@@ -502,7 +501,7 @@ export class SignResult {
 
 // HMAC-SHA256 implementation.
 let hmac: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
-let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
+let randomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
 
 if (typeof window == 'object' && 'crypto' in window) {
   hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
@@ -517,7 +516,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
     return new Uint8Array(buffer);
   };
-  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
     return window.crypto.getRandomValues(new Uint8Array(bytesLength));
   };
 } else if (typeof process === 'object' && 'node' in process.versions) {
@@ -531,7 +530,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     }
     return Uint8Array.from(hash.digest());
   };
-  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
     return new Uint8Array(randomBytes(bytesLength).buffer);
   };
 } else {
@@ -633,18 +632,18 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-function modInverse(number: bigint, modulo: bigint = CURVE.P) {
+function invert(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
-    throw new Error('modInverse: expected positive integers');
+    throw new Error('invert: expected positive integers');
   }
   let [gcd, x] = egcd(mod(number, modulo), modulo);
   if (gcd !== 1n) {
-    throw new Error('modInverse: does not exist');
+    throw new Error('invert: does not exist');
   }
   return mod(x, modulo);
 }
 
-function batchInverse(nums: bigint[], n: bigint = CURVE.P): bigint[] {
+function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
   let acc = 1n;
@@ -653,7 +652,7 @@ function batchInverse(nums: bigint[], n: bigint = CURVE.P): bigint[] {
     scratch[i] = acc;
     acc = mod(acc * nums[i], n);
   }
-  acc = modInverse(acc, n);
+  acc = invert(acc, n);
   for (let i = len - 1; i >= 0; i--) {
     if (nums[i] === 0n) continue;
     let tmp = mod(acc * nums[i], n);
@@ -745,7 +744,7 @@ function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
   const max = CURVE.n;
   const q = Point.BASE.multiply(k);
   const r = mod(q.x, max);
-  const s = mod(modInverse(k, max) * (msg + r * priv), max);
+  const s = mod(invert(k, max) * (msg + r * priv), max);
   if (r === 0n || s === 0n) return;
   return [q, r, s];
 }
@@ -867,7 +866,7 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
   const h = truncateHash(msgHash);
   const { r, s } = normalizeSignature(signature);
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
-  const s1 = modInverse(s, CURVE.n);
+  const s1 = invert(s, CURVE.n);
   const Ghs1 = Point.BASE.multiply(mod(h * s1, CURVE.n), false);
   const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, CURVE.n));
   const res = Ghs1.add(Prs1).toAffine();
@@ -882,7 +881,7 @@ export const utils = {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
   },
 
-  generateRandomPrivateKey,
+  randomPrivateKey,
 
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point === Point.BASE ? point : new Point(point.x, point.y);
