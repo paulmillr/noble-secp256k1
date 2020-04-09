@@ -17,7 +17,7 @@ const CURVE = {
   Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
 
   // For endomorphism, see below.
-  beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een
+  beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
 };
 
 const P_DIV4_1 = (CURVE.P + 1n) / 4n;
@@ -61,7 +61,7 @@ class JacobianPoint {
   // invert on all of them. invert is very slow operation,
   // so this improves performance massively.
   static fromAffineBatch(points: JacobianPoint[]): Point[] {
-    const toInv = invertBatch(points.map(p => p.z));
+    const toInv = invertBatch(points.map((p) => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
@@ -890,5 +890,5 @@ export const utils = {
     cached._setWindowSize(windowSize);
     cached.multiply(3n);
     return cached;
-  }
+  },
 };
