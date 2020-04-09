@@ -19,6 +19,35 @@ Algorithmically resistant to timing attacks. [Faster](#speed) than indutny/ellip
   [ripemd160](https://github.com/paulmillr/noble-ripemd160),
   [secretbox-aes-gcm](https://github.com/paulmillr/noble-secretbox-aes-gcm)
 
+## Speed
+
+Benchmarks measured with 2.9Ghz Coffee Lake.
+
+    getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
+    sign x 2620 ops/sec @ 381μs/op
+    verify x 558 ops/sec @ 1ms/op
+    recoverPublicKey x 295 ops/sec @ 3ms/op
+    getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
+    getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
+
+Compare to other libraries:
+
+    elliptic#sign x 1,326 ops/sec
+    sjcl#sign x 185 ops/sec
+    openssl#sign x 1,926 ops/sec
+    ecdsa#sign x 69.32 ops/sec
+
+    elliptic#verify x 575 ops/sec
+    sjcl#verify x 155 ops/sec
+    openssl#verify x 2,392 ops/sec
+    ecdsa#verify x 45.64 ops/sec
+
+    (gen is getPublicKey)
+    elliptic#gen x 1,434 ops/sec
+    sjcl#gen x 194 ops/sec
+
+    elliptic#ecdh x 704 ops/sec
+
 ## Usage
 
 > npm install noble-secp256k1
@@ -175,35 +204,6 @@ secp256k1.SignResult {
   toHex(): string;
 }
 ```
-
-## Speed
-
-Benchmarks measured with 2.9Ghz Coffee Lake.
-
-    getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
-    sign x 2620 ops/sec @ 381μs/op
-    verify x 558 ops/sec @ 1ms/op
-    recoverPublicKey x 295 ops/sec @ 3ms/op
-    getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
-    getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
-
-Compare to other libraries:
-
-    elliptic#sign x 1,326 ops/sec
-    sjcl#sign x 185 ops/sec
-    openssl#sign x 1,926 ops/sec
-    ecdsa#sign x 69.32 ops/sec
-
-    elliptic#verify x 575 ops/sec
-    sjcl#verify x 155 ops/sec
-    openssl#verify x 2,392 ops/sec
-    ecdsa#verify x 45.64 ops/sec
-
-    (gen is getPublicKey)
-    elliptic#gen x 1,434 ops/sec
-    sjcl#gen x 194 ops/sec
-
-    elliptic#ecdh x 704 ops/sec
 
 ## Security
 
