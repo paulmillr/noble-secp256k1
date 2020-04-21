@@ -206,7 +206,7 @@ class JacobianPoint {
 
   private wNAF(n: bigint, affinePoint?: Point): [JacobianPoint, JacobianPoint] {
     if (!affinePoint && this.equals(JacobianPoint.BASE)) affinePoint = Point.BASE;
-    const W = (affinePoint && affinePoint.WINDOW_SIZE) || 1;
+    const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
     if (256 % W) {
       throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
     }
@@ -310,13 +310,13 @@ export class Point {
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
-  WINDOW_SIZE?: number;
+  _WINDOW_SIZE?: number;
 
   constructor(public x: bigint, public y: bigint) {}
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
-    this.WINDOW_SIZE = windowSize;
+    this._WINDOW_SIZE = windowSize;
     pointPrecomputes.delete(this);
   }
 

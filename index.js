@@ -160,7 +160,7 @@ class JacobianPoint {
     wNAF(n, affinePoint) {
         if (!affinePoint && this.equals(JacobianPoint.BASE))
             affinePoint = Point.BASE;
-        const W = (affinePoint && affinePoint.WINDOW_SIZE) || 1;
+        const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
         if (256 % W) {
             throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
         }
@@ -240,7 +240,7 @@ class Point {
         this.y = y;
     }
     _setWindowSize(windowSize) {
-        this.WINDOW_SIZE = windowSize;
+        this._WINDOW_SIZE = windowSize;
         pointPrecomputes.delete(this);
     }
     static fromCompressedHex(bytes) {

@@ -18,7 +18,7 @@ export declare class Point {
     y: bigint;
     static BASE: Point;
     static ZERO: Point;
-    WINDOW_SIZE?: number;
+    _WINDOW_SIZE?: number;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
     private static fromCompressedHex;
