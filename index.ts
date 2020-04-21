@@ -267,10 +267,6 @@ class JacobianPoint {
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    // TODO: remove the check in the future, need to adjust tests.
-    if (scalar > CURVE.n) {
-      throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
-    }
     // Real point.
     let point: JacobianPoint;
     // Fake point, we use it to achieve constant-time multiplication.

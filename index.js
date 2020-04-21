@@ -205,9 +205,6 @@ class JacobianPoint {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        if (scalar > CURVE.n) {
-            throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
-        }
         let point;
         let fake;
         if (USE_ENDOMORPHISM) {
