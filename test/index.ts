@@ -69,7 +69,9 @@ describe('secp256k1', () => {
           expect(p.add(q).toHex(true)).toBe(expected);
         } else {
           // console.log(p, q);
-          expect(() => p.add(q).toHex(true)).toThrowError();
+          if (!p.equals(q.negate())) {
+            expect(() => p.add(q).toHex(true)).toThrowError();
+          }
         }
       }
     });

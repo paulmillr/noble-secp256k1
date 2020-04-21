@@ -1,8 +1,8 @@
 # noble-secp256k1
 
-[secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for assymetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC 6939.
+[secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for assymetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979.
 
-Algorithmically resistant to timing attacks. [Faster](#speed) than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
+Algorithmically resistant to timing attacks. Faster than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
 
 ### This library belongs to *noble* crypto
 
@@ -10,7 +10,7 @@ Algorithmically resistant to timing attacks. [Faster](#speed) than indutny/ellip
 
 - No dependencies, one small file
 - Easily auditable TypeScript/JS code
-- Uses es2019 bigint. Supported in Chrome, Firefox, node 10+
+- Uses es2020 bigint. Supported in Chrome, Firefox, node 10+
 - All releases are signed and trusted
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
