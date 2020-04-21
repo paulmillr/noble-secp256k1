@@ -218,6 +218,8 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 ## Contributing
 
+Check out an article about this library: https://paulmillr.com/posts/noble-secp256k1-fast-ecc/
+
 1. Clone the repository.
 2. `npm install` to install build dependencies like TypeScript
 3. `npm run compile` to compile TypeScript code
