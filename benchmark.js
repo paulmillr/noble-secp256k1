@@ -13,13 +13,18 @@ run(async (windowSize) => {
   console.log();
 
   let pub;
-  await mark('getPublicKey 1 bit', samples, () => {
-    pub = secp.getPublicKey('02');
+  let priv;
+
+  priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
+  await mark('getPublicKey 256 bit', samples * 10, () => {
+    pub = secp.getPublicKey(priv);
   });
 
-  // console.profile('cpu');
-  // const priv = 2n ** 255n + 12341n;
-  const priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
+  priv = '0000000000000000000000000000000000000000000000000000000000000003';
+  await mark('getPublicKey 1 bit', samples * 10, () => {
+    pub = secp.getPublicKey(priv);
+  });
+
   await mark('getPublicKey(utils.randomPrivateKey())', samples, () => {
     pub = secp.getPublicKey(secp.utils.randomPrivateKey());
   });

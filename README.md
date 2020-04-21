@@ -16,8 +16,7 @@ Algorithmically resistant to timing attacks. [Faster](#speed) than indutny/ellip
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519),
   [bls12-381](https://github.com/paulmillr/noble-bls12-381),
-  [ripemd160](https://github.com/paulmillr/noble-ripemd160),
-  [secretbox-aes-gcm](https://github.com/paulmillr/noble-secretbox-aes-gcm)
+  [ripemd160](https://github.com/paulmillr/noble-ripemd160)
 
 ## Speed
 
@@ -26,7 +25,7 @@ Benchmarks measured with 2.9Ghz Coffee Lake.
     getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
     sign x 2620 ops/sec @ 381μs/op
     verify x 558 ops/sec @ 1ms/op
-    recoverPublicKey x 295 ops/sec @ 3ms/op
+    recoverPublicKey x 301 ops/sec @ 3ms/op
     getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
     getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
 

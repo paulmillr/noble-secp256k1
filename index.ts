@@ -55,14 +55,22 @@ class JacobianPoint {
   static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
   static ZERO = new JacobianPoint(0n, 0n, 1n);
   static fromAffine(p: Point): JacobianPoint {
+    if (!(p instanceof Point)) {
+      throw new TypeError('JacobianPoint#fromAffine: expected Point');
+    }
     return new JacobianPoint(p.x, p.y, 1n);
   }
+
   // Takes a bunch of Jacobian Points but executes only one
   // invert on all of them. invert is very slow operation,
   // so this improves performance massively.
-  static fromAffineBatch(points: JacobianPoint[]): Point[] {
+  static toAffineBatch(points: JacobianPoint[]): Point[] {
     const toInv = invertBatch(points.map((p) => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
+  }
+
+  static normalizeZ(points: JacobianPoint[]): JacobianPoint[] {
+    return JacobianPoint.toAffineBatch(points).map(JacobianPoint.fromAffine);
   }
 
   // Compare one point to another.
@@ -105,6 +113,9 @@ class JacobianPoint {
   // Cost: 12M + 4S + 6add + 1*2.
   // Note: 2007 Bernstein-Lange (11M + 5S + 9add + 4*2) is actually *slower*. No idea why.
   add(other: JacobianPoint): JacobianPoint {
+    if (!(other instanceof JacobianPoint)) {
+      throw new TypeError('JacobianPoint#add: expected JacobianPoint');
+    }
     const X1 = this.x;
     const Y1 = this.y;
     const Z1 = this.z;
@@ -176,6 +187,109 @@ class JacobianPoint {
     return k1p.add(k2p);
   }
 
+  private precomputeWindow(W: number): JacobianPoint[] {
+    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+    let points: JacobianPoint[] = [];
+    let p: JacobianPoint = this;
+    let base = p;
+    for (let window = 0; window < windows; window++) {
+      base = p;
+      points.push(base);
+      for (let i = 1; i < 2 ** (W - 1); i++) {
+        base = base.add(p);
+        points.push(base);
+      }
+      p = base.double();
+    }
+    return points;
+  }
+
+  private wNAF(n: bigint, affinePoint?: Point): [JacobianPoint, JacobianPoint] {
+    if (!affinePoint && this.equals(JacobianPoint.BASE)) affinePoint = Point.BASE;
+    const W = (affinePoint && affinePoint.WINDOW_SIZE) || 1;
+    if (256 % W) {
+      throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
+    }
+
+    let precomputes = affinePoint && pointPrecomputes.get(affinePoint);
+    if (!precomputes) {
+      precomputes = this.precomputeWindow(W);
+      if (affinePoint && W !== 1) {
+        precomputes = JacobianPoint.normalizeZ(precomputes);
+        pointPrecomputes.set(affinePoint, precomputes);
+      }
+    }
+
+    let p = JacobianPoint.ZERO;
+    let f = JacobianPoint.ZERO;
+
+    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+    const windowSize = 2 ** (W - 1);
+    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+    const maxNumber = 2 ** W;
+    const shiftBy = BigInt(W);
+
+    for (let window = 0; window < windows; window++) {
+      const offset = window * windowSize;
+      // Extract W bits.
+      let wbits = Number(n & mask);
+
+      // Shift number by W bits.
+      n >>= shiftBy;
+
+      // If the bits are bigger than max size, we'll split those.
+      // +224 => 256 - 32
+      if (wbits > windowSize) {
+        wbits -= maxNumber;
+        n += 1n;
+      }
+
+      // Check if we're onto Zero point.
+      // Add random point inside current window to f.
+      if (wbits === 0) {
+        f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+      } else {
+        const cached = precomputes[offset + Math.abs(wbits) - 1];
+        p = p.add(wbits < 0 ? cached.negate() : cached);
+      }
+    }
+    return [p, f];
+  }
+
+  // Constant time multiplication.
+  // Uses wNAF method. Windowed method may be 10% faster,
+  // but takes 2x longer to generate and consumes 2x memory.
+  multiply(scalar: number | bigint, affinePoint?: Point): JacobianPoint {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = mod(BigInt(scalar), CURVE.n);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
+    // TODO: remove the check in the future, need to adjust tests.
+    if (scalar > CURVE.n) {
+      throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
+    }
+    // Real point.
+    let point: JacobianPoint;
+    // Fake point, we use it to achieve constant-time multiplication.
+    let fake: JacobianPoint;
+    if (USE_ENDOMORPHISM) {
+      const [k1neg, k1, k2neg, k2] = splitScalar(n);
+      let k1p, k2p, f1p, f2p;
+      [k1p, f1p] = this.wNAF(k1, affinePoint);
+      [k2p, f2p] = this.wNAF(k2, affinePoint);
+      if (k1neg) k1p = k1p.negate();
+      if (k2neg) k2p = k2p.negate();
+      k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
+      [point, fake] = [k1p.add(k2p), f1p.add(f2p)];
+    } else {
+      [point, fake] = this.wNAF(n, affinePoint);
+    }
+    return JacobianPoint.normalizeZ([point, fake])[0];
+  }
+
   // Converts Jacobian point to default (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   toAffine(invZ: bigint = invert(this.z)): Point {
@@ -187,7 +301,7 @@ class JacobianPoint {
 }
 
 // Stores precomputed values for points.
-const pointPrecomputes = new WeakMap();
+const pointPrecomputes = new WeakMap<Point, JacobianPoint[]>();
 
 // Default Point works in default aka affine coordinates: (x, y)
 export class Point {
@@ -200,7 +314,7 @@ export class Point {
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
-  private WINDOW_SIZE?: number;
+  WINDOW_SIZE?: number;
 
   constructor(public x: bigint, public y: bigint) {}
 
@@ -208,19 +322,6 @@ export class Point {
   _setWindowSize(windowSize: number) {
     this.WINDOW_SIZE = windowSize;
     pointPrecomputes.delete(this);
-  }
-
-  // A point on curve is valid if it conforms to equation.
-  static isValid(x: bigint, y: bigint) {
-    if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) return false;
-
-    const sqrY = mod(y * y);
-    const yEquivalence = weistrass(x);
-    const left1 = sqrY;
-    const left2 = mod(-sqrY);
-    const right1 = yEquivalence;
-    const right2 = mod(-yEquivalence);
-    return left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
   }
 
   private static fromCompressedHex(bytes: Uint8Array) {
@@ -235,10 +336,9 @@ export class Point {
     if (isFirstByteOdd !== isYOdd) {
       y = mod(-y);
     }
-    if (!this.isValid(x, y)) {
-      throw new TypeError('Point.fromHex: Point is not on elliptic curve');
-    }
-    return new Point(x, y);
+    const point = new Point(x, y);
+    point.assertValidity();
+    return point;
   }
 
   private static fromUncompressedHex(bytes: Uint8Array) {
@@ -247,10 +347,9 @@ export class Point {
     }
     const x = arrayToNumber(bytes.slice(1, 33));
     const y = arrayToNumber(bytes.slice(33));
-    if (!this.isValid(x, y)) {
-      throw new TypeError('Point.fromHex: Point is not on elliptic curve');
-    }
-    return new Point(x, y);
+    const point = new Point(x, y);
+    point.assertValidity();
+    return point;
   }
 
   // Converts hash string or Uint8Array to Point.
@@ -280,9 +379,11 @@ export class Point {
     const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
     const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-    const hG = Point.BASE.multiply(h, false).negate();
+    const hG = JacobianPoint.BASE.multiply(h).negate();
     const Q = sP.add(hG).multiplyUnsafe(rinv);
-    return Q.toAffine();
+    const point = Q.toAffine();
+    point.assertValidity();
+    return point;
   }
 
   toRawBytes(isCompressed = false) {
@@ -298,157 +399,46 @@ export class Point {
     }
   }
 
+  // A point on curve is valid if it conforms to equation.
+  assertValidity(): void {
+    const { x, y } = this;
+    if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) {
+      throw new TypeError('Point is not on elliptic curve');
+    }
+
+    const sqrY = mod(y * y);
+    const yEquivalence = weistrass(x);
+    const left1 = sqrY;
+    const left2 = mod(-sqrY);
+    const right1 = yEquivalence;
+    const right2 = mod(-yEquivalence);
+    const res = left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
+    if (!res) throw new TypeError('Point is not on elliptic curve');
+  }
+
   equals(other: Point): boolean {
     return this.x === other.x && this.y === other.y;
   }
 
-  negate(): Point {
+  negate() {
     return new Point(this.x, mod(-this.y));
   }
 
-  // Adds point to itself. http://hyperelliptic.org/EFD/g1p/auto-shortw.html
-  double(): Point {
-    const X1 = this.x;
-    const Y1 = this.y;
-    const lambda = mod(3n * X1 ** 2n * invert(2n * Y1));
-    const X3 = mod(lambda * lambda - 2n * X1);
-    const Y3 = mod(lambda * (X1 - X3) - Y1);
-    return new Point(X3, Y3);
+  double() {
+    return JacobianPoint.fromAffine(this).double().toAffine();
   }
 
-  // Adds point to other point. http://hyperelliptic.org/EFD/g1p/auto-shortw.html
-  add(other: Point): Point {
-    if (!(other instanceof Point)) {
-      throw new TypeError('Point#add: expected Point');
-    }
-    const a = this;
-    const b = other;
-    const X1 = a.x;
-    const Y1 = a.y;
-    const X2 = b.x;
-    const Y2 = b.y;
-    if (a.equals(Point.ZERO)) return b;
-    if (b.equals(Point.ZERO)) return a;
-    if (X1 === X2) {
-      if (Y1 === Y2) {
-        return this.double();
-      } else {
-        // return ZERO;
-        // TODO: remove Point at undefined.
-        throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
-      }
-    }
-    const lambda = mod((Y2 - Y1) * invert(X2 - X1));
-    const X3 = mod(lambda * lambda - X1 - X2);
-    const Y3 = mod(lambda * (X1 - X3) - Y1);
-    return new Point(X3, Y3);
+  add(other: Point) {
+    return JacobianPoint.fromAffine(this).add(JacobianPoint.fromAffine(other)).toAffine();
   }
 
   subtract(other: Point) {
     return this.add(other.negate());
   }
 
-  private precomputeWindow(W: number): JacobianPoint[] {
-    const cached = pointPrecomputes.get(this);
-    if (cached) return cached;
-    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
-    let points: JacobianPoint[] = [];
-    let p = JacobianPoint.fromAffine(this);
-    let base = p;
-    for (let window = 0; window < windows; window++) {
-      base = p;
-      points.push(base);
-      for (let i = 1; i < 2 ** (W - 1); i++) {
-        base = base.add(p);
-        points.push(base);
-      }
-      p = base.double();
-    }
-    if (W !== 1) {
-      points = JacobianPoint.fromAffineBatch(points).map(JacobianPoint.fromAffine);
-      pointPrecomputes.set(this, points);
-    }
-    return points;
-  }
-
-  private wNAF(n: bigint, isHalf = false) {
-    const W = this.WINDOW_SIZE || 1;
-    if (256 % W) {
-      throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
-    }
-    const precomputes = this.precomputeWindow(W);
-
-    let p = JacobianPoint.ZERO;
-    let f = JacobianPoint.ZERO;
-
-    const windows = isHalf ? 128 / W + 2 : 256 / W + 1;
-    const windowSize = 2 ** (W - 1);
-    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
-    const maxNumber = 2 ** W;
-    const shiftBy = BigInt(W);
-
-    for (let window = 0; window < windows; window++) {
-      const offset = window * windowSize;
-      // Extract W bits.
-      let wbits = Number(n & mask);
-
-      // Shift number by W bits.
-      n >>= shiftBy;
-
-      // If the bits are bigger than max size, we'll split those.
-      // +224 => 256 - 32
-      if (wbits > windowSize) {
-        wbits -= maxNumber;
-        n += 1n;
-      }
-
-      // Check if we're onto Zero point.
-      // Add random point inside current window to f.
-      if (wbits === 0) {
-        f = f.add(precomputes[offset]);
-      } else {
-        const cached = precomputes[offset + Math.abs(wbits) - 1];
-        p = p.add(wbits < 0 ? cached.negate() : cached);
-      }
-    }
-    return [p, f];
-  }
-
   // Constant time multiplication.
-  // Uses wNAF method. Windowed method may be 10% faster,
-  // but takes 2x longer to generate and consumes 2x memory.
-  multiply(scalar: bigint, isAffine: false): JacobianPoint;
-  multiply(scalar: bigint, isAffine?: true): Point;
-  multiply(scalar: bigint, isAffine = true): Point | JacobianPoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    let n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
-    // TODO: remove the check in the future, need to adjust tests.
-    if (scalar > CURVE.n) {
-      throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
-    }
-    // Real point.
-    let point: JacobianPoint;
-    // Fake point, we use it to achieve constant-time multiplication.
-    let fake: JacobianPoint;
-    if (USE_ENDOMORPHISM) {
-      const [k1neg, k1, k2neg, k2] = splitScalar(n);
-      let k1p, k2p, f1p, f2p;
-      [k1p, f1p] = this.wNAF(k1, true);
-      [k2p, f2p] = this.wNAF(k2, true);
-      if (k1neg) k1p = k1p.negate();
-      if (k2neg) k2p = k2p.negate();
-      k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
-      point = k1p.add(k2p);
-      fake = f1p.add(f2p);
-    } else {
-      [point, fake] = this.wNAF(n);
-    }
-    return isAffine ? JacobianPoint.fromAffineBatch([point, fake])[0] : point;
+  multiply(scalar: number | bigint) {
+    return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
   }
 }
 
@@ -804,9 +794,11 @@ export function recoverPublicKey(
   return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 
+// ECDH (Elliptic Curve Diffie Hellman) implementation.
 export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string {
-  const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
-  const shared = point.multiply(normalizePrivateKey(privateA));
+  const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
+  b.assertValidity();
+  const shared = b.multiply(normalizePrivateKey(privateA));
   return typeof privateA === 'string' ? shared.toHex() : shared.toRawBytes();
 }
 
@@ -869,7 +861,7 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
   const { r, s } = normalizeSignature(signature);
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
   const s1 = invert(s, CURVE.n);
-  const Ghs1 = Point.BASE.multiply(mod(h * s1, CURVE.n), false);
+  const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, CURVE.n));
   const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, CURVE.n));
   const res = Ghs1.add(Prs1).toAffine();
   return res.x === r;

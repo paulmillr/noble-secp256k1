@@ -8,7 +8,7 @@ const CURVE = {
     h: 1n,
     Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
     Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
-    beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een
+    beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
 };
 exports.CURVE = CURVE;
 const P_DIV4_1 = (CURVE.P + 1n) / 4n;
@@ -25,11 +25,17 @@ class JacobianPoint {
         this.z = z;
     }
     static fromAffine(p) {
+        if (!(p instanceof Point)) {
+            throw new TypeError('JacobianPoint#fromAffine: expected Point');
+        }
         return new JacobianPoint(p.x, p.y, 1n);
     }
-    static fromAffineBatch(points) {
-        const toInv = invertBatch(points.map(p => p.z));
+    static toAffineBatch(points) {
+        const toInv = invertBatch(points.map((p) => p.z));
         return points.map((p, i) => p.toAffine(toInv[i]));
+    }
+    static normalizeZ(points) {
+        return JacobianPoint.toAffineBatch(points).map(JacobianPoint.fromAffine);
     }
     equals(other) {
         const a = this;
@@ -59,6 +65,9 @@ class JacobianPoint {
         return new JacobianPoint(X3, Y3, Z3);
     }
     add(other) {
+        if (!(other instanceof JacobianPoint)) {
+            throw new TypeError('JacobianPoint#add: expected JacobianPoint');
+        }
         const X1 = this.x;
         const Y1 = this.y;
         const Z1 = this.z;
@@ -132,6 +141,92 @@ class JacobianPoint {
         k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
         return k1p.add(k2p);
     }
+    precomputeWindow(W) {
+        const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+        let points = [];
+        let p = this;
+        let base = p;
+        for (let window = 0; window < windows; window++) {
+            base = p;
+            points.push(base);
+            for (let i = 1; i < 2 ** (W - 1); i++) {
+                base = base.add(p);
+                points.push(base);
+            }
+            p = base.double();
+        }
+        return points;
+    }
+    wNAF(n, affinePoint) {
+        if (!affinePoint && this.equals(JacobianPoint.BASE))
+            affinePoint = Point.BASE;
+        const W = (affinePoint && affinePoint.WINDOW_SIZE) || 1;
+        if (256 % W) {
+            throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
+        }
+        let precomputes = affinePoint && pointPrecomputes.get(affinePoint);
+        if (!precomputes) {
+            precomputes = this.precomputeWindow(W);
+            if (affinePoint && W !== 1) {
+                precomputes = JacobianPoint.normalizeZ(precomputes);
+                pointPrecomputes.set(affinePoint, precomputes);
+            }
+        }
+        let p = JacobianPoint.ZERO;
+        let f = JacobianPoint.ZERO;
+        const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+        const windowSize = 2 ** (W - 1);
+        const mask = BigInt(2 ** W - 1);
+        const maxNumber = 2 ** W;
+        const shiftBy = BigInt(W);
+        for (let window = 0; window < windows; window++) {
+            const offset = window * windowSize;
+            let wbits = Number(n & mask);
+            n >>= shiftBy;
+            if (wbits > windowSize) {
+                wbits -= maxNumber;
+                n += 1n;
+            }
+            if (wbits === 0) {
+                f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+            }
+            else {
+                const cached = precomputes[offset + Math.abs(wbits) - 1];
+                p = p.add(wbits < 0 ? cached.negate() : cached);
+            }
+        }
+        return [p, f];
+    }
+    multiply(scalar, affinePoint) {
+        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+            throw new TypeError('Point#multiply: expected number or bigint');
+        }
+        let n = mod(BigInt(scalar), CURVE.n);
+        if (n <= 0) {
+            throw new Error('Point#multiply: invalid scalar, expected positive integer');
+        }
+        if (scalar > CURVE.n) {
+            throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
+        }
+        let point;
+        let fake;
+        if (USE_ENDOMORPHISM) {
+            const [k1neg, k1, k2neg, k2] = splitScalar(n);
+            let k1p, k2p, f1p, f2p;
+            [k1p, f1p] = this.wNAF(k1, affinePoint);
+            [k2p, f2p] = this.wNAF(k2, affinePoint);
+            if (k1neg)
+                k1p = k1p.negate();
+            if (k2neg)
+                k2p = k2p.negate();
+            k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
+            [point, fake] = [k1p.add(k2p), f1p.add(f2p)];
+        }
+        else {
+            [point, fake] = this.wNAF(n, affinePoint);
+        }
+        return JacobianPoint.normalizeZ([point, fake])[0];
+    }
     toAffine(invZ = invert(this.z)) {
         const invZ2 = invZ ** 2n;
         const x = mod(this.x * invZ2);
@@ -151,17 +246,6 @@ class Point {
         this.WINDOW_SIZE = windowSize;
         pointPrecomputes.delete(this);
     }
-    static isValid(x, y) {
-        if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P)
-            return false;
-        const sqrY = mod(y * y);
-        const yEquivalence = weistrass(x);
-        const left1 = sqrY;
-        const left2 = mod(-sqrY);
-        const right1 = yEquivalence;
-        const right2 = mod(-yEquivalence);
-        return left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
-    }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
             throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
@@ -174,10 +258,9 @@ class Point {
         if (isFirstByteOdd !== isYOdd) {
             y = mod(-y);
         }
-        if (!this.isValid(x, y)) {
-            throw new TypeError('Point.fromHex: Point is not on elliptic curve');
-        }
-        return new Point(x, y);
+        const point = new Point(x, y);
+        point.assertValidity();
+        return point;
     }
     static fromUncompressedHex(bytes) {
         if (bytes.length !== 65) {
@@ -185,10 +268,9 @@ class Point {
         }
         const x = arrayToNumber(bytes.slice(1, 33));
         const y = arrayToNumber(bytes.slice(33));
-        if (!this.isValid(x, y)) {
-            throw new TypeError('Point.fromHex: Point is not on elliptic curve');
-        }
-        return new Point(x, y);
+        const point = new Point(x, y);
+        point.assertValidity();
+        return point;
     }
     static fromHex(hex) {
         const bytes = hex instanceof Uint8Array ? hex : hexToArray(hex);
@@ -211,9 +293,11 @@ class Point {
         const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
         const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
         const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-        const hG = Point.BASE.multiply(h, false).negate();
+        const hG = JacobianPoint.BASE.multiply(h).negate();
         const Q = sP.add(hG).multiplyUnsafe(rinv);
-        return Q.toAffine();
+        const point = Q.toAffine();
+        point.assertValidity();
+        return point;
     }
     toRawBytes(isCompressed = false) {
         return hexToArray(this.toHex(isCompressed));
@@ -227,6 +311,21 @@ class Point {
             return `04${x}${pad64(this.y)}`;
         }
     }
+    assertValidity() {
+        const { x, y } = this;
+        if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) {
+            throw new TypeError('Point is not on elliptic curve');
+        }
+        const sqrY = mod(y * y);
+        const yEquivalence = weistrass(x);
+        const left1 = sqrY;
+        const left2 = mod(-sqrY);
+        const right1 = yEquivalence;
+        const right2 = mod(-yEquivalence);
+        const res = left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
+        if (!res)
+            throw new TypeError('Point is not on elliptic curve');
+    }
     equals(other) {
         return this.x === other.x && this.y === other.y;
     }
@@ -234,127 +333,16 @@ class Point {
         return new Point(this.x, mod(-this.y));
     }
     double() {
-        const X1 = this.x;
-        const Y1 = this.y;
-        const lambda = mod(3n * X1 ** 2n * invert(2n * Y1));
-        const X3 = mod(lambda * lambda - 2n * X1);
-        const Y3 = mod(lambda * (X1 - X3) - Y1);
-        return new Point(X3, Y3);
+        return JacobianPoint.fromAffine(this).double().toAffine();
     }
     add(other) {
-        if (!(other instanceof Point)) {
-            throw new TypeError('Point#add: expected Point');
-        }
-        const a = this;
-        const b = other;
-        const X1 = a.x;
-        const Y1 = a.y;
-        const X2 = b.x;
-        const Y2 = b.y;
-        if (a.equals(Point.ZERO))
-            return b;
-        if (b.equals(Point.ZERO))
-            return a;
-        if (X1 === X2) {
-            if (Y1 === Y2) {
-                return this.double();
-            }
-            else {
-                throw new TypeError('Point#add: cannot add points (a.x == b.x, a.y != b.y)');
-            }
-        }
-        const lambda = mod((Y2 - Y1) * invert(X2 - X1));
-        const X3 = mod(lambda * lambda - X1 - X2);
-        const Y3 = mod(lambda * (X1 - X3) - Y1);
-        return new Point(X3, Y3);
+        return JacobianPoint.fromAffine(this).add(JacobianPoint.fromAffine(other)).toAffine();
     }
     subtract(other) {
         return this.add(other.negate());
     }
-    precomputeWindow(W) {
-        const cached = pointPrecomputes.get(this);
-        if (cached)
-            return cached;
-        const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
-        let points = [];
-        let p = JacobianPoint.fromAffine(this);
-        let base = p;
-        for (let window = 0; window < windows; window++) {
-            base = p;
-            points.push(base);
-            for (let i = 1; i < 2 ** (W - 1); i++) {
-                base = base.add(p);
-                points.push(base);
-            }
-            p = base.double();
-        }
-        if (W !== 1) {
-            points = JacobianPoint.fromAffineBatch(points).map(JacobianPoint.fromAffine);
-            pointPrecomputes.set(this, points);
-        }
-        return points;
-    }
-    wNAF(n, isHalf = false) {
-        const W = this.WINDOW_SIZE || 1;
-        if (256 % W) {
-            throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
-        }
-        const precomputes = this.precomputeWindow(W);
-        let p = JacobianPoint.ZERO;
-        let f = JacobianPoint.ZERO;
-        const windows = isHalf ? 128 / W + 2 : 256 / W + 1;
-        const windowSize = 2 ** (W - 1);
-        const mask = BigInt(2 ** W - 1);
-        const maxNumber = 2 ** W;
-        const shiftBy = BigInt(W);
-        for (let window = 0; window < windows; window++) {
-            const offset = window * windowSize;
-            let wbits = Number(n & mask);
-            n >>= shiftBy;
-            if (wbits > windowSize) {
-                wbits -= maxNumber;
-                n += 1n;
-            }
-            if (wbits === 0) {
-                f = f.add(precomputes[offset]);
-            }
-            else {
-                const cached = precomputes[offset + Math.abs(wbits) - 1];
-                p = p.add(wbits < 0 ? cached.negate() : cached);
-            }
-        }
-        return [p, f];
-    }
-    multiply(scalar, isAffine = true) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-            throw new TypeError('Point#multiply: expected number or bigint');
-        }
-        let n = mod(BigInt(scalar), CURVE.n);
-        if (n <= 0) {
-            throw new Error('Point#multiply: invalid scalar, expected positive integer');
-        }
-        if (scalar > CURVE.n) {
-            throw new Error('Point#multiply: invalid scalar, expected < CURVE.n');
-        }
-        let point;
-        let fake;
-        if (USE_ENDOMORPHISM) {
-            const [k1neg, k1, k2neg, k2] = splitScalar(n);
-            let k1p, k2p, f1p, f2p;
-            [k1p, f1p] = this.wNAF(k1, true);
-            [k2p, f2p] = this.wNAF(k2, true);
-            if (k1neg)
-                k1p = k1p.negate();
-            if (k2neg)
-                k2p = k2p.negate();
-            k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
-            point = k1p.add(k2p);
-            fake = f1p.add(f2p);
-        }
-        else {
-            [point, fake] = this.wNAF(n);
-        }
-        return isAffine ? JacobianPoint.fromAffineBatch([point, fake])[0] : point;
+    multiply(scalar) {
+        return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
     }
 }
 exports.Point = Point;
@@ -636,8 +624,9 @@ function recoverPublicKey(msgHash, signature, recovery) {
 }
 exports.recoverPublicKey = recoverPublicKey;
 function getSharedSecret(privateA, publicB) {
-    const point = publicB instanceof Point ? publicB : Point.fromHex(publicB);
-    const shared = point.multiply(normalizePrivateKey(privateA));
+    const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
+    b.assertValidity();
+    const shared = b.multiply(normalizePrivateKey(privateA));
     return typeof privateA === 'string' ? shared.toHex() : shared.toRawBytes();
 }
 exports.getSharedSecret = getSharedSecret;
@@ -664,7 +653,7 @@ function verify(signature, msgHash, publicKey) {
     const { r, s } = normalizeSignature(signature);
     const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
     const s1 = invert(s, CURVE.n);
-    const Ghs1 = Point.BASE.multiply(mod(h * s1, CURVE.n), false);
+    const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, CURVE.n));
     const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, CURVE.n));
     const res = Ghs1.add(Prs1).toAffine();
     return res.x === r;
@@ -681,5 +670,5 @@ exports.utils = {
         cached._setWindowSize(windowSize);
         cached.multiply(3n);
         return cached;
-    }
+    },
 };

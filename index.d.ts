@@ -13,31 +13,14 @@ declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
 declare type Signature = Uint8Array | string | SignResult;
-declare class JacobianPoint {
-    x: bigint;
-    y: bigint;
-    z: bigint;
-    constructor(x: bigint, y: bigint, z: bigint);
-    static BASE: JacobianPoint;
-    static ZERO: JacobianPoint;
-    static fromAffine(p: Point): JacobianPoint;
-    static fromAffineBatch(points: JacobianPoint[]): Point[];
-    equals(other: JacobianPoint): boolean;
-    negate(): JacobianPoint;
-    double(): JacobianPoint;
-    add(other: JacobianPoint): JacobianPoint;
-    multiplyUnsafe(scalar: bigint): JacobianPoint;
-    toAffine(invZ?: bigint): Point;
-}
 export declare class Point {
     x: bigint;
     y: bigint;
     static BASE: Point;
     static ZERO: Point;
-    private WINDOW_SIZE?;
+    WINDOW_SIZE?: number;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
-    static isValid(x: bigint, y: bigint): boolean;
     private static fromCompressedHex;
     private static fromUncompressedHex;
     static fromHex(hex: Hex): Point;
@@ -45,15 +28,13 @@ export declare class Point {
     static fromSignature(msgHash: Hex, signature: Signature, recovery: number): Point | undefined;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
+    assertValidity(): void;
     equals(other: Point): boolean;
     negate(): Point;
     double(): Point;
     add(other: Point): Point;
     subtract(other: Point): Point;
-    private precomputeWindow;
-    private wNAF;
-    multiply(scalar: bigint, isAffine: false): JacobianPoint;
-    multiply(scalar: bigint, isAffine?: true): Point;
+    multiply(scalar: number | bigint): Point;
 }
 export declare class SignResult {
     r: bigint;
