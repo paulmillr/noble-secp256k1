@@ -1,6 +1,6 @@
 # noble-secp256k1
 
-[secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for assymetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979.
+[secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for asymmetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979.
 
 Algorithmically resistant to timing attacks. Faster than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
 
