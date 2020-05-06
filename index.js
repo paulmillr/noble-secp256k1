@@ -528,7 +528,7 @@ function splitScalar(k) {
     const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
     const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
     const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
-    const b2 = 0x3086d221a7d46bcde86c90e49284eb15n;
+    const b2 = a1;
     const c1 = (b2 * k) / n;
     const c2 = (-b1 * k) / n;
     const k1 = k - c1 * a1 - c2 * a2;
@@ -587,6 +587,8 @@ function calcQRSFromK(k, msg, priv) {
     return [q, r, s];
 }
 function normalizePrivateKey(privateKey) {
+    if (!privateKey)
+        throw new Error(`Expected receive valid private key, not "${privateKey}"`);
     let key;
     if (privateKey instanceof Uint8Array) {
         key = arrayToNumber(privateKey);
@@ -628,6 +630,8 @@ function getSharedSecret(privateA, publicB) {
 }
 exports.getSharedSecret = getSharedSecret;
 async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
+    if (msgHash == null)
+        throw new Error(`Expected valid msgHash, not "${msgHash}"`);
     const priv = normalizePrivateKey(privateKey);
     if (!isValidPrivateKey(priv)) {
         throw new Error('Private key is invalid. Expected 0 < key < CURVE.n');
