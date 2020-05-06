@@ -401,8 +401,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     };
 }
 else if (typeof process === 'object' && 'node' in process.versions) {
-    const req = require;
-    const { createHmac, randomBytes } = req('crypto');
+    const { createHmac, randomBytes } = require('crypto');
     hmac = async (key, ...messages) => {
         const hash = createHmac('sha256', key);
         for (let message of messages) {
