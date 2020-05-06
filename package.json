@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -d",
     "test": "jest",
-    "bench": "node benchmark.js"
+    "bench": "node test/benchmark.js"
   },
   "jest": {
     "testRegex": "/test/.*?\\.ts",

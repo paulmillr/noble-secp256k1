@@ -1,5 +1,5 @@
 const {run, mark, logMem} = require('micro-bmark');
-const secp = require('.');
+const secp = require('..');
 
 // run([4, 8, 16], async (windowSize) => {
 run(async (windowSize) => {
