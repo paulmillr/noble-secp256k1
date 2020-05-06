@@ -508,8 +508,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     return window.crypto.getRandomValues(new Uint8Array(bytesLength));
   };
 } else if (typeof process === 'object' && 'node' in process.versions) {
-  const req = require;
-  const { createHmac, randomBytes } = req('crypto');
+  const { createHmac, randomBytes } = require('crypto');
 
   hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
     const hash = createHmac('sha256', key);

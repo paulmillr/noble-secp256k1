@@ -14,8 +14,8 @@ describe('secp256k1', () => {
   it('.getPublicKey()', () => {
     const data = privatesTxt
       .split('\n')
-      .filter(line => line)
-      .map(line => line.split(':'));
+      .filter((line) => line)
+      .map((line) => line.split(':'));
     for (let [priv, x, y] of data) {
       const point = secp.Point.fromPrivateKey(BigInt(priv));
       expect(toBEHex(point.x)).toBe(x);
@@ -52,7 +52,7 @@ describe('secp256k1', () => {
 
     it('#toHex() roundtrip', () => {
       fc.assert(
-        fc.property(fc.bigInt(1n, MAX_PRIVATE_KEY), x => {
+        fc.property(fc.bigInt(1n, MAX_PRIVATE_KEY), (x) => {
           const point1 = secp.Point.fromPrivateKey(x);
           const hex = point1.toHex(true);
           expect(secp.Point.fromHex(hex).toHex(true)).toBe(hex);
@@ -168,7 +168,7 @@ describe('secp256k1', () => {
       const privateKey = 123456789n;
       const publicKey = secp.getPublicKey(privateKey.toString(16));
       const [signature, recovery] = await secp.sign(message, privateKey, {
-        recovered: true
+        recovered: true,
       });
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);

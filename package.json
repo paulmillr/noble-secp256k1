@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "tsc -d",
+    "lint": "prettier --print-width 100 --single-quote --check index.ts",
     "test": "jest",
     "bench": "node test/benchmark.js"
   },
@@ -31,6 +32,7 @@
     "fast-check": "^1.24.1",
     "jest": "^25.4.0",
     "micro-bmark": "^0.1.2",
+    "prettier": "^2.0.5",
     "ts-jest": "^25.4.0",
     "typescript": "3.8.3"
   },

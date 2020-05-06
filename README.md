@@ -1,8 +1,10 @@
-# noble-secp256k1
+# noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
 [secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for asymmetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979.
 
 Algorithmically resistant to timing attacks. Faster than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
+
+Check out a blog post about this library: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to *noble* crypto
 
@@ -218,7 +220,7 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 ## Contributing
 
-Check out an article about this library: https://paulmillr.com/posts/noble-secp256k1-fast-ecc/
+Check out a blog post about this library: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 1. Clone the repository.
 2. `npm install` to install build dependencies like TypeScript
