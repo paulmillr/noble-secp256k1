@@ -796,6 +796,7 @@ function isPub(item: PrivKey | PubKey): boolean {
   const len = (arr || str) && (item as Hex).length;
   if (arr) return len === 33 || len === 65;
   if (str) return len === 66 || len === 130;
+  if (item instanceof Point) return true;
   return false;
 }
 

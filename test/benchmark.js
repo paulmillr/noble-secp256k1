@@ -47,7 +47,7 @@ run(async (windowSize) => {
 
   const pubKey = secp.Point.fromHex(hex);
   await mark('getSharedSecret aka ecdh', samples, () => {
-    secp.getSharedSecret(priv, pubKey);
+    secp.getSharedSecret(priv, hex);
   });
 
   const pubKeyPre = secp.utils.precompute(windowSize, pubKey);

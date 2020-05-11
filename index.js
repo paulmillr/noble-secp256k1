@@ -629,6 +629,8 @@ function isPub(item) {
         return len === 33 || len === 65;
     if (str)
         return len === 66 || len === 130;
+    if (item instanceof Point)
+        return true;
     return false;
 }
 function getSharedSecret(privateA, publicB, isCompressed = false) {
