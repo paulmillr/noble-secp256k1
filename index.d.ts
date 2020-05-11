@@ -9,10 +9,10 @@ declare const CURVE: {
     beta: bigint;
 };
 export { CURVE };
-declare type PrivKey = Uint8Array | string | bigint | number;
-declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
-declare type Signature = Uint8Array | string | SignResult;
+declare type PrivKey = Hex | bigint | number;
+declare type PubKey = Hex | Point;
+declare type Signature = Hex | SignResult;
 export declare class Point {
     x: bigint;
     y: bigint;
@@ -48,7 +48,7 @@ export declare function getPublicKey(privateKey: Uint8Array | bigint | number, i
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
 export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
-export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string;
+export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed?: boolean): Hex;
 declare type OptsRecovered = {
     recovered: true;
     canonical?: true;

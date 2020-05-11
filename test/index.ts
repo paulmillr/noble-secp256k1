@@ -3,12 +3,22 @@ import * as secp from '..';
 import { readFileSync } from 'fs';
 import * as sysPath from 'path';
 import * as ecdsa from './vectors/ecdsa.json';
+import * as ecdh from './vectors/ecdh.json';
 import * as privates from './vectors/privates.json';
 import * as points from './vectors/points.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 
 const MAX_PRIVATE_KEY = secp.CURVE.n - 1n;
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
+function hexToArray(hex: string): Uint8Array {
+  hex = hex.length & 1 ? `0${hex}` : hex;
+  const array = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < array.length; i++) {
+    let j = i * 2;
+    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
+  }
+  return array;
+}
 
 describe('secp256k1', () => {
   it('.getPublicKey()', () => {
@@ -20,6 +30,34 @@ describe('secp256k1', () => {
       const point = secp.Point.fromPrivateKey(BigInt(priv));
       expect(toBEHex(point.x)).toBe(x);
       expect(toBEHex(point.y)).toBe(y);
+
+      const point2 = secp.Point.fromHex(secp.getPublicKey(toBEHex(BigInt(priv))));
+      expect(toBEHex(point2.x)).toBe(x);
+      expect(toBEHex(point2.y)).toBe(y);
+
+      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToArray(toBEHex(BigInt(priv)))));
+      expect(toBEHex(point3.x)).toBe(x);
+      expect(toBEHex(point3.y)).toBe(y);
+    }
+  });
+  it('precompute', () => {
+    secp.utils.precompute(4);
+    const data = privatesTxt
+      .split('\n')
+      .filter((line) => line)
+      .map((line) => line.split(':'));
+    for (let [priv, x, y] of data) {
+      const point = secp.Point.fromPrivateKey(BigInt(priv));
+      expect(toBEHex(point.x)).toBe(x);
+      expect(toBEHex(point.y)).toBe(y);
+
+      const point2 = secp.Point.fromHex(secp.getPublicKey(toBEHex(BigInt(priv))));
+      expect(toBEHex(point2.x)).toBe(x);
+      expect(toBEHex(point2.y)).toBe(y);
+
+      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToArray(toBEHex(BigInt(priv)))));
+      expect(toBEHex(point3.x)).toBe(x);
+      expect(toBEHex(point3.y)).toBe(y);
     }
   });
   describe('Point', () => {
@@ -131,6 +169,13 @@ describe('secp256k1', () => {
         expect(toBEHex(res.s)).toBe(vecS);
       }
     });
+
+    it('edge cases', () => {
+      // @ts-ignore
+      expect(async () => await secp.sign()).rejects.toThrowError();
+      // @ts-ignore
+      expect(async () => await secp.sign('')).rejects.toThrowError();
+    })
   });
 
   describe('.verify()', () => {
@@ -175,6 +220,39 @@ describe('secp256k1', () => {
       expect(recoveredPubkey).toBe(publicKey);
       expect(secp.verify(signature, message, publicKey)).toBe(true);
     });
+  });
+
+  describe('.getSharedSecret()', () => {
+    // TODO: Real implementation.
+    function derToPub(der: string) {
+      return der.slice(46);
+    }
+    it('should produce correct results', () => {
+      // TODO: Once der is there, run all tests.
+      for (const vector of ecdh.testGroups[0].tests.slice(0, 230)) {
+        if (vector.result === 'invalid') {
+          expect(() => {
+            secp.getSharedSecret(vector.private, derToPub(vector.public), true);
+          }).toThrowError();
+        } else if (vector.result === 'valid') {
+          const res = secp.getSharedSecret(vector.private, derToPub(vector.public), true);
+          expect(res.slice(2)).toBe(`${vector.shared}`);
+        }
+      }
+    });
+    it('priv/pub order does not matter', () => {
+      for (const vector of ecdh.testGroups[0].tests.slice(0, 100)) {
+        if (vector.result === 'valid') {
+          let priv = vector.private;
+          priv = priv.length === 66 ? priv.slice(2) : priv;
+          const res = secp.getSharedSecret(derToPub(vector.public), priv, true);
+          expect(res.slice(2)).toBe(`${vector.shared}`);
+        }
+      }
+    });
+    it('rejects invalid keys', () => {
+      expect(() => secp.getSharedSecret('01', '02')).toThrowError();
+    })
   });
 
   describe('utils', () => {

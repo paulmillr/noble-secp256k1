@@ -33,10 +33,10 @@ function weistrass(x: bigint) {
   return mod(x ** 3n + a * x + b);
 }
 
-type PrivKey = Uint8Array | string | bigint | number;
-type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
-type Signature = Uint8Array | string | SignResult;
+type PrivKey = Hex | bigint | number;
+type PubKey = Hex | Point;
+type Signature = Hex | SignResult;
 
 const PRIME_SIZE = 256;
 
@@ -762,7 +762,7 @@ export function getPublicKey(
   isCompressed?: boolean
 ): Uint8Array;
 export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
-export function getPublicKey(privateKey: PrivKey, isCompressed?: boolean): PubKey {
+export function getPublicKey(privateKey: PrivKey, isCompressed = false): PubKey {
   const point = Point.fromPrivateKey(privateKey);
   if (typeof privateKey === 'string') {
     return point.toHex(isCompressed);
@@ -790,12 +790,28 @@ export function recoverPublicKey(
   return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 
+function isPub(item: PrivKey | PubKey): boolean {
+  const arr = item instanceof Uint8Array;
+  const str = typeof item === 'string';
+  const len = (arr || str) && (item as Hex).length;
+  if (arr) return len === 33 || len === 65;
+  if (str) return len === 66 || len === 130;
+  return false;
+}
+
 // ECDH (Elliptic Curve Diffie Hellman) implementation.
-export function getSharedSecret(privateA: PrivKey, publicB: PubKey): Uint8Array | string {
+export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed = false): Hex {
+  if (isPub(privateA) && !isPub(publicB)) {
+    [privateA, publicB] = [publicB as PrivKey, privateA as PubKey];
+  } else if (!isPub(publicB)) {
+    throw new Error('Received invalid keys');
+  }
   const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
   b.assertValidity();
   const shared = b.multiply(normalizePrivateKey(privateA));
-  return typeof privateA === 'string' ? shared.toHex() : shared.toRawBytes();
+  return typeof privateA === 'string'
+    ? shared.toHex(isCompressed)
+    : shared.toRawBytes(isCompressed);
 }
 
 type OptsRecovered = { recovered: true; canonical?: true };
@@ -834,9 +850,6 @@ export async function sign(
 ): Promise<Hex | [Hex, number]> {
   if (msgHash == null) throw new Error(`Expected valid msgHash, not "${msgHash}"`);
   const priv = normalizePrivateKey(privateKey);
-  if (!isValidPrivateKey(priv)) {
-    throw new Error('Private key is invalid. Expected 0 < key < CURVE.n');
-  }
   // We are using deterministic signature scheme
   // instead of letting user specify random `k`.
   const [q, r, s] = await getQRSrfc6979(msgHash, priv);

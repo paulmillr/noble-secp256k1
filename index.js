@@ -606,7 +606,7 @@ function normalizePublicKey(publicKey) {
 function normalizeSignature(signature) {
     return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
-function getPublicKey(privateKey, isCompressed) {
+function getPublicKey(privateKey, isCompressed = false) {
     const point = Point.fromPrivateKey(privateKey);
     if (typeof privateKey === 'string') {
         return point.toHex(isCompressed);
@@ -621,20 +621,35 @@ function recoverPublicKey(msgHash, signature, recovery) {
     return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 exports.recoverPublicKey = recoverPublicKey;
-function getSharedSecret(privateA, publicB) {
+function isPub(item) {
+    const arr = item instanceof Uint8Array;
+    const str = typeof item === 'string';
+    const len = (arr || str) && item.length;
+    if (arr)
+        return len === 33 || len === 65;
+    if (str)
+        return len === 66 || len === 130;
+    return false;
+}
+function getSharedSecret(privateA, publicB, isCompressed = false) {
+    if (isPub(privateA) && !isPub(publicB)) {
+        [privateA, publicB] = [publicB, privateA];
+    }
+    else if (!isPub(publicB)) {
+        throw new Error('Received invalid keys');
+    }
     const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
     b.assertValidity();
     const shared = b.multiply(normalizePrivateKey(privateA));
-    return typeof privateA === 'string' ? shared.toHex() : shared.toRawBytes();
+    return typeof privateA === 'string'
+        ? shared.toHex(isCompressed)
+        : shared.toRawBytes(isCompressed);
 }
 exports.getSharedSecret = getSharedSecret;
 async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
     if (msgHash == null)
         throw new Error(`Expected valid msgHash, not "${msgHash}"`);
     const priv = normalizePrivateKey(privateKey);
-    if (!isValidPrivateKey(priv)) {
-        throw new Error('Private key is invalid. Expected 0 < key < CURVE.n');
-    }
     const [q, r, s] = await getQRSrfc6979(msgHash, priv);
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
