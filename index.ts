@@ -487,43 +487,6 @@ export class SignResult {
   }
 }
 
-// HMAC-SHA256 implementation.
-let hmac: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
-let randomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
-
-if (typeof window == 'object' && 'crypto' in window) {
-  hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
-    const ckey = await window.crypto.subtle.importKey(
-      'raw',
-      key,
-      { name: 'HMAC', hash: { name: 'SHA-256' } },
-      false,
-      ['sign', 'verify']
-    );
-    const message = concatTypedArrays(...messages);
-    const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
-    return new Uint8Array(buffer);
-  };
-  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
-    return window.crypto.getRandomValues(new Uint8Array(bytesLength));
-  };
-} else if (typeof process === 'object' && 'node' in process.versions) {
-  const { createHmac, randomBytes } = require('crypto');
-
-  hmac = async (key: Uint8Array, ...messages: Uint8Array[]) => {
-    const hash = createHmac('sha256', key);
-    for (let message of messages) {
-      hash.update(message);
-    }
-    return Uint8Array.from(hash.digest());
-  };
-  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
-    return new Uint8Array(randomBytes(bytesLength).buffer);
-  };
-} else {
-  throw new Error("The environment doesn't have hmac-sha256 function");
-}
-
 function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
@@ -700,24 +663,24 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   const b1 = Uint8Array.from([0x01]);
 
   // Step D
-  k = await hmac(k, v, b0, x, h1);
+  k = await utils.hmacSha256(k, v, b0, x, h1);
   // Step E
-  v = await hmac(k, v);
+  v = await utils.hmacSha256(k, v);
   // Step F
-  k = await hmac(k, v, b1, x, h1);
+  k = await utils.hmacSha256(k, v, b1, x, h1);
   // Step G
-  v = await hmac(k, v);
+  v = await utils.hmacSha256(k, v);
 
   // Step H3, repeat until 1 < T < n - 1
   for (let i = 0; i < 1000; i++) {
-    v = await hmac(k, v);
+    v = await utils.hmacSha256(k, v);
     const T = arrayToNumber(v);
     let qrs: QRS;
     if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!)) {
       return qrs;
     }
-    k = await hmac(k, v, b0);
-    v = await hmac(k, v);
+    k = await utils.hmacSha256(k, v, b0);
+    v = await utils.hmacSha256(k, v);
   }
 
   throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
@@ -886,7 +849,48 @@ export const utils = {
     return isValidPrivateKey(normalizePrivateKey(privateKey));
   },
 
-  randomPrivateKey,
+  randomPrivateKey: (bytesLength: number = 32): Uint8Array => {
+    // @ts-ignore
+    if (typeof window == 'object' && 'crypto' in window) {
+      // @ts-ignore
+      return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+      // @ts-ignore
+    } else if (typeof process === 'object' && 'node' in process.versions) {
+      // @ts-ignore
+      const { randomBytes } = require('crypto');
+      return new Uint8Array(randomBytes(bytesLength).buffer);
+    } else {
+      throw new Error("The environment doesn't have randomBytes function");
+    }
+  },
+
+  hmacSha256: async (key: Uint8Array, ...messages: Uint8Array[]): Promise<Uint8Array> => {
+    // @ts-ignore
+    if (typeof window == 'object' && 'crypto' in window) {
+      // @ts-ignore
+      const ckey = await window.crypto.subtle.importKey(
+        'raw',
+        key,
+        { name: 'HMAC', hash: { name: 'SHA-256' } },
+        false,
+        ['sign', 'verify']
+      );
+      const message = concatTypedArrays(...messages);
+      const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
+      return new Uint8Array(buffer);
+      // @ts-ignore
+    } else if (typeof process === 'object' && 'node' in process.versions) {
+      // @ts-ignore
+      const { createHmac, randomBytes } = require('crypto');
+      const hash = createHmac('sha256', key);
+      for (let message of messages) {
+        hash.update(message);
+      }
+      return Uint8Array.from(hash.digest());
+    } else {
+      throw new Error("The environment doesn't have hmac-sha256 function");
+    }
+  },
 
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point === Point.BASE ? point : new Point(point.x, point.y);

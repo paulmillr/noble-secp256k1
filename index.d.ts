@@ -66,5 +66,6 @@ export declare function verify(signature: Signature, msgHash: Hex, publicKey: Pu
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
     randomPrivateKey: (bytesLength?: number) => Uint8Array;
+    hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
     precompute(windowSize?: number, point?: Point): Point;
 };

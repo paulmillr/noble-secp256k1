@@ -2,7 +2,7 @@
 
 [secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for asymmetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979.
 
-Algorithmically resistant to timing attacks. Faster than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
+Algorithmically resistant to timing attacks. [Faster](#speed) than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
 
 Check out a blog post about this library: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
@@ -20,55 +20,32 @@ Check out a blog post about this library: [Learning fast elliptic-curve cryptogr
   [bls12-381](https://github.com/paulmillr/noble-bls12-381),
   [ripemd160](https://github.com/paulmillr/noble-ripemd160)
 
-## Speed
-
-Benchmarks measured with 2.9Ghz Coffee Lake.
-
-    getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
-    sign x 2620 ops/sec @ 381μs/op
-    verify x 558 ops/sec @ 1ms/op
-    recoverPublicKey x 301 ops/sec @ 3ms/op
-    getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
-    getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
-
-Compare to other libraries:
-
-    elliptic#sign x 1,326 ops/sec
-    sjcl#sign x 185 ops/sec
-    openssl#sign x 1,926 ops/sec
-    ecdsa#sign x 69.32 ops/sec
-
-    elliptic#verify x 575 ops/sec
-    sjcl#verify x 155 ops/sec
-    openssl#verify x 2,392 ops/sec
-    ecdsa#verify x 45.64 ops/sec
-
-    (gen is getPublicKey)
-    elliptic#gen x 1,434 ops/sec
-    sjcl#gen x 194 ops/sec
-
-    elliptic#ecdh x 704 ops/sec
-
 ## Usage
 
 > npm install noble-secp256k1
 
 ```js
-import * as secp256k1 from "noble-secp256k1";
+import * as secp from "noble-secp256k1";
 
-// You can also pass Uint8Array and BigInt.
-const privateKey = "00000000000000000000000000000000000000a665a45920422f9d417e4867ef";
+(async () => {
+  // You can also pass Uint8Array and BigInt.
+  const privateKey = "6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e";
+  const messageHash = "9c1185a5c5e9fc54612808977ee8f548b2258d31";
+  const publicKey = secp.getPublicKey(privateKey);
+  const signature = await secp.sign(messageHash, privateKey);
+  const isSigned = secp.verify(signature, messageHash, publicKey);
+})();
+```
+
+Deno:
+
+```typescript
+import * as secp from "https://deno.land/x/secp256k1/mod.ts";
+const privateKey = "6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e";
 const messageHash = "9c1185a5c5e9fc54612808977ee8f548b2258d31";
-const publicKey = secp256k1.getPublicKey(privateKey);
-const signature = secp256k1.sign(messageHash, privateKey);
-const isMessageSigned = secp256k1.verify(signature, messageHash, publicKey);
-
-// Or:
-// const privateKey = Uint8Array.from([
-//   0xa6, 0x65, 0xa4, 0x59, 0x20, 0x42, 0x2f,
-//   0x9d, 0x41, 0x7e, 0x48, 0x67, 0xef
-// ]);
-// const privateKey = 0xa665a45920422f9d417e4867efn;
+const publicKey = secp.getPublicKey(privateKey);
+const signature = await secp.sign(messageHash, privateKey);
+const isSigned = secp.verify(signature, messageHash, publicKey);
 ```
 
 ## API
@@ -217,6 +194,35 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 3. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
 4. We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
 5. Nonetheless we've hardened implementation of koblitz curve multiplication to be algorithmically constant time.
+
+## Speed
+
+Benchmarks measured with 2.9Ghz Coffee Lake.
+
+    getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
+    sign x 2620 ops/sec @ 381μs/op
+    verify x 558 ops/sec @ 1ms/op
+    recoverPublicKey x 301 ops/sec @ 3ms/op
+    getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
+    getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
+
+Compare to other libraries:
+
+    elliptic#sign x 1,326 ops/sec
+    sjcl#sign x 185 ops/sec
+    openssl#sign x 1,926 ops/sec
+    ecdsa#sign x 69.32 ops/sec
+
+    elliptic#verify x 575 ops/sec
+    sjcl#verify x 155 ops/sec
+    openssl#verify x 2,392 ops/sec
+    ecdsa#verify x 45.64 ops/sec
+
+    (gen is getPublicKey)
+    elliptic#gen x 1,434 ops/sec
+    sjcl#gen x 194 ops/sec
+
+    elliptic#ecdh x 704 ops/sec
 
 ## Contributing
 
