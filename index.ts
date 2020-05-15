@@ -876,6 +876,7 @@ export const utils = {
         ['sign', 'verify']
       );
       const message = concatTypedArrays(...messages);
+      // @ts-ignore
       const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
       return new Uint8Array(buffer);
       // @ts-ignore
