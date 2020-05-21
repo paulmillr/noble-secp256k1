@@ -401,15 +401,10 @@ export class Point {
     if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) {
       throw new TypeError('Point is not on elliptic curve');
     }
-
-    const sqrY = mod(y * y);
-    const yEquivalence = weistrass(x);
-    const left1 = sqrY;
-    const left2 = mod(-sqrY);
-    const right1 = yEquivalence;
-    const right2 = mod(-yEquivalence);
-    const res = left1 === right1 || left1 === right2 || left2 === right1 || left2 === right2;
-    if (!res) throw new TypeError('Point is not on elliptic curve');
+    const left = mod(y * y);
+    const right = weistrass(x);
+    const valid = (left - right) % CURVE.P === 0n;
+    if (!valid) throw new TypeError('Point is not on elliptic curve');
   }
 
   equals(other: Point): boolean {
