@@ -1,6 +1,6 @@
 {
   "name": "noble-secp256k1",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Noble secp256k1. Very fast, high-security, auditable, 0-dep, 1-file pubkey & ECDSA.",
   "main": "index.js",
   "files": [
