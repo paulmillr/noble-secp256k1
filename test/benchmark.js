@@ -25,7 +25,7 @@ run(async (windowSize) => {
     pub = secp.getPublicKey(priv);
   });
 
-  await mark('getPublicKey(utils.randomPrivateKey())', samples, () => {
+  await mark('getPublicKey(utils.randomPrivateKey())', samples * 10, () => {
     pub = secp.getPublicKey(secp.utils.randomPrivateKey());
   });
 

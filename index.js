@@ -232,7 +232,7 @@ class JacobianPoint {
     }
 }
 JacobianPoint.BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
-JacobianPoint.ZERO = new JacobianPoint(0n, 0n, 1n);
+JacobianPoint.ZERO = new JacobianPoint(0n, 1n, 0n);
 const pointPrecomputes = new WeakMap();
 class Point {
     constructor(x, y) {

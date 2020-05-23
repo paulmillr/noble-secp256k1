@@ -53,7 +53,7 @@ class JacobianPoint {
   constructor(public x: bigint, public y: bigint, public z: bigint) {}
 
   static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
-  static ZERO = new JacobianPoint(0n, 0n, 1n);
+  static ZERO = new JacobianPoint(0n, 1n, 0n);
   static fromAffine(p: Point): JacobianPoint {
     if (!(p instanceof Point)) {
       throw new TypeError('JacobianPoint#fromAffine: expected Point');
