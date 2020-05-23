@@ -20,6 +20,7 @@ const CURVE = {
   beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
 };
 
+const PRIME_SIZE = 256;
 const P_DIV4_1 = (CURVE.P + 1n) / 4n;
 
 // Cleaner js output if that's on a separate line.
@@ -38,8 +39,7 @@ type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type Signature = Hex | SignResult;
 
-const PRIME_SIZE = 256;
-
+// Note: cannot be reused for other curves when a != 0.
 // If we're using Koblitz curve, we can improve efficiency by using endomorphism.
 // Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
 // Should always be used for Jacobian's double-and-add multiplication.
@@ -47,8 +47,9 @@ const PRIME_SIZE = 256;
 // https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 const USE_ENDOMORPHISM = CURVE.a === 0n;
 
-// Default Point works in default aka affine coordinates: (x, y)
-// Jacobian Point works in jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
+// Default Point works in 2d / affine coordinates: (x, y)
+// Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
+// We're doing calculations in jacobi, because its operations don't require costly inversion.
 class JacobianPoint {
   constructor(public x: bigint, public y: bigint, public z: bigint) {}
 
@@ -90,6 +91,7 @@ class JacobianPoint {
   }
 
   // Fast algo for doubling 2 Jacobian Points when curve's a=0.
+  // Note: cannot be reused for other curves when a != 0.
   // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
   // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
   double(): JacobianPoint {
@@ -109,6 +111,7 @@ class JacobianPoint {
   }
 
   // Fast algo for adding 2 Jacobian Points when curve's a=0.
+  // Note: cannot be reused for other curves when a != 0.
   // http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-1998-cmo-2
   // Cost: 12M + 4S + 6add + 1*2.
   // Note: 2007 Bernstein-Lange (11M + 5S + 9add + 4*2) is actually *slower*. No idea why.
@@ -151,7 +154,7 @@ class JacobianPoint {
 
   // Non-constant-time multiplication. Uses double-and-add algorithm.
   // It's faster, but should only be used when you don't care about
-  // an exposed private key e.g. sig verification.
+  // an exposed private key e.g. sig verification, which works over *public* keys.
   multiplyUnsafe(scalar: bigint): JacobianPoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
@@ -427,7 +430,6 @@ export class Point {
     return this.add(other.negate());
   }
 
-  // Constant time multiplication.
   multiply(scalar: number | bigint) {
     return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
   }
