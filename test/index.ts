@@ -175,7 +175,31 @@ describe('secp256k1', () => {
       expect(async () => await secp.sign()).rejects.toThrowError();
       // @ts-ignore
       expect(async () => await secp.sign('')).rejects.toThrowError();
-    })
+    });
+
+    it('should create correct DER encoding against libsecp256k1', async () => {
+      const CASES = [
+        [
+          'd1a9dc8ed4e46a6a3e5e594615ca351d7d7ef44df1e4c94c1802f3592183794b',
+          '304402203de2559fccb00c148574997f660e4d6f40605acc71267ee38101abf15ff467af02200950abdf40628fd13f547792ba2fc544681a485f2fdafb5c3b909a4df7350e6b'
+        ],
+        [
+          '5f97983254982546d3976d905c6165033976ee449d300d0e382099fa74deaf82',
+          '3045022100c046d9ff0bd2845b9aa9dff9f997ecebb31e52349f80fe5a5a869747d31dcb88022011f72be2a6d48fe716b825e4117747b397783df26914a58139c3f4c5cbb0e66c'
+        ],
+        [
+          '0d7017a96b97cd9be21cf28aada639827b2814a654a478c81945857196187808',
+          '3045022100d18990bba7832bb283e3ecf8700b67beb39acc73f4200ed1c331247c46edccc602202e5c8bbfe47ae159512c583b30a3fa86575cddc62527a03de7756517ae4c6c73'
+        ]
+      ];
+      const privKey = hexToArray(
+        '0101010101010101010101010101010101010101010101010101010101010101'
+      );
+      for (let [msg, exp] of CASES) {
+        const res = await secp.sign(msg, privKey, { canonical: true });
+        expect(res).toBe(exp);
+      }
+    });
   });
 
   describe('.verify()', () => {
@@ -213,7 +237,7 @@ describe('secp256k1', () => {
       const privateKey = 123456789n;
       const publicKey = secp.getPublicKey(privateKey.toString(16));
       const [signature, recovery] = await secp.sign(message, privateKey, {
-        recovered: true,
+        recovered: true
       });
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);
@@ -252,7 +276,7 @@ describe('secp256k1', () => {
     });
     it('rejects invalid keys', () => {
       expect(() => secp.getSharedSecret('01', '02')).toThrowError();
-    })
+    });
   });
 
   describe('utils', () => {
