@@ -435,11 +435,10 @@ export class Point {
   }
 }
 
-function sliceDer(s: Uint8Array): Uint8Array {
-  if (s.length < 33) s = concatTypedArrays(new Uint8Array(33 - s.length), s);
-  let i;
-  for (i = 0; i < s.length - 1 && s[i] == 0 && s[i + 1] < 0x80; i++);
-  return s.slice(i);
+function sliceDer(s: string): string {
+  // Proof: any([(i>=0x80) == (int(hex(i).replace('0x', '').zfill(2)[0], 16)>=8)  for i in range(0, 256)])
+  // Padding done by numberToHex
+  return parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 
 export class SignResult {
@@ -481,9 +480,9 @@ export class SignResult {
   }
 
   toHex(isCompressed = false) {
-    const sHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.s))));
+    const sHex = sliceDer(numberToHex(this.s));
     if (isCompressed) return sHex;
-    const rHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.r))));
+    const rHex = sliceDer(numberToHex(this.r));
     const rLen = numberToHex(rHex.length / 2);
     const sLen = numberToHex(sHex.length / 2);
     const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
