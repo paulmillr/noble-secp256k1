@@ -435,7 +435,7 @@ export class Point {
   }
 }
 
-function derIntegerSlice(s: Uint8Array): Uint8Array {
+function sliceDer(s: Uint8Array): Uint8Array {
   if (s.length < 33) s = concatTypedArrays(new Uint8Array(33 - s.length), s);
   let i;
   for (i = 0; i < s.length - 1 && s[i] == 0 && s[i + 1] < 0x80; i++);
@@ -481,9 +481,9 @@ export class SignResult {
   }
 
   toHex(isCompressed = false) {
-    const sHex = arrayToHex(derIntegerSlice(hexToArray(numberToHex(this.s))));
+    const sHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.s))));
     if (isCompressed) return sHex;
-    const rHex = arrayToHex(derIntegerSlice(hexToArray(numberToHex(this.r))));
+    const rHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.r))));
     const rLen = numberToHex(rHex.length / 2);
     const sLen = numberToHex(sHex.length / 2);
     const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);

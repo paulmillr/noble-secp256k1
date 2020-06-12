@@ -341,7 +341,7 @@ class Point {
 exports.Point = Point;
 Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
 Point.ZERO = new Point(0n, 0n);
-function derIntegerSlice(s) {
+function sliceDer(s) {
     if (s.length < 33)
         s = concatTypedArrays(new Uint8Array(33 - s.length), s);
     let i;
@@ -380,10 +380,10 @@ class SignResult {
         return hexToArray(this.toHex(isCompressed));
     }
     toHex(isCompressed = false) {
-        const sHex = arrayToHex(derIntegerSlice(hexToArray(numberToHex(this.s))));
+        const sHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.s))));
         if (isCompressed)
             return sHex;
-        const rHex = arrayToHex(derIntegerSlice(hexToArray(numberToHex(this.r))));
+        const rHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.r))));
         const rLen = numberToHex(rHex.length / 2);
         const sLen = numberToHex(sHex.length / 2);
         const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
