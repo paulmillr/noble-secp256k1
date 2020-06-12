@@ -8,15 +8,15 @@ const CURVE = {
     h: 1n,
     Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
     Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
-    beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
+    beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een
 };
 exports.CURVE = CURVE;
+const PRIME_SIZE = 256;
 const P_DIV4_1 = (CURVE.P + 1n) / 4n;
 function weistrass(x) {
     const { a, b } = CURVE;
     return mod(x ** 3n + a * x + b);
 }
-const PRIME_SIZE = 256;
 const USE_ENDOMORPHISM = CURVE.a === 0n;
 class JacobianPoint {
     constructor(x, y, z) {
@@ -341,6 +341,14 @@ class Point {
 exports.Point = Point;
 Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
 Point.ZERO = new Point(0n, 0n);
+function derIntegerSlice(s) {
+    if (s.length < 33)
+        s = concatTypedArrays(new Uint8Array(33 - s.length), s);
+    let i;
+    for (i = 0; i < s.length - 1 && s[i] == 0 && s[i + 1] < 0x80; i++)
+        ;
+    return s.slice(i);
+}
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -372,10 +380,10 @@ class SignResult {
         return hexToArray(this.toHex(isCompressed));
     }
     toHex(isCompressed = false) {
-        const sHex = numberToHex(this.s);
+        const sHex = arrayToHex(derIntegerSlice(hexToArray(numberToHex(this.s))));
         if (isCompressed)
             return sHex;
-        const rHex = numberToHex(this.r);
+        const rHex = arrayToHex(derIntegerSlice(hexToArray(numberToHex(this.r))));
         const rLen = numberToHex(rHex.length / 2);
         const sLen = numberToHex(sHex.length / 2);
         const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
@@ -684,5 +692,5 @@ exports.utils = {
         cached._setWindowSize(windowSize);
         cached.multiply(3n);
         return cached;
-    },
+    }
 };
