@@ -173,7 +173,7 @@ class JacobianPoint {
       }
       return p;
     }
-    let [k1neg, k1, k2neg, k2] = splitScalar(n);
+    let [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
     let k1p = JacobianPoint.ZERO;
     let k2p = JacobianPoint.ZERO;
     let d: JacobianPoint = this;
@@ -275,7 +275,7 @@ class JacobianPoint {
     // Fake point, we use it to achieve constant-time multiplication.
     let fake: JacobianPoint;
     if (USE_ENDOMORPHISM) {
-      const [k1neg, k1, k2neg, k2] = splitScalar(n);
+      const [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
       let k1p, k2p, f1p, f2p;
       [k1p, f1p] = this.wNAF(k1, affinePoint);
       [k2p, f2p] = this.wNAF(k2, affinePoint);
@@ -327,7 +327,7 @@ export class Point {
     if (bytes.length !== 33) {
       throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
     }
-    const x = arrayToNumber(bytes.slice(1));
+    const x = bytesToNumber(bytes.slice(1));
     const sqrY = weistrass(x);
     let y = powMod(sqrY, P_DIV4_1, CURVE.P);
     const isFirstByteOdd = (bytes[0] & 1) === 1;
@@ -344,8 +344,8 @@ export class Point {
     if (bytes.length !== 65) {
       throw new TypeError(`Point.fromHex: uncompressed expects 130 bytes, not ${bytes.length * 2}`);
     }
-    const x = arrayToNumber(bytes.slice(1, 33));
-    const y = arrayToNumber(bytes.slice(33));
+    const x = bytesToNumber(bytes.slice(1, 33));
+    const y = bytesToNumber(bytes.slice(33));
     const point = new Point(x, y);
     point.assertValidity();
     return point;
@@ -375,7 +375,7 @@ export class Point {
     const { r, s } = sign;
     if (r === 0n || s === 0n) return;
     const rinv = invert(r, CURVE.n);
-    const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
+    const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
     const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
     const hG = JacobianPoint.BASE.multiply(h).negate();
@@ -448,7 +448,7 @@ export class SignResult {
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromHex(hex: Hex) {
     // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
-    const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
+    const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
     if (typeof str !== 'string') throw new TypeError({}.toString.call(hex));
 
     const check1 = str.slice(0, 2);
@@ -490,7 +490,7 @@ export class SignResult {
   }
 }
 
-function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -504,7 +504,7 @@ function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
-function arrayToHex(uint8a: Uint8Array): string {
+function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
@@ -541,8 +541,8 @@ function hexToArray(hex: string): Uint8Array {
 }
 
 // Big Endian
-function arrayToNumber(bytes: Uint8Array): bigint {
-  return hexToNumber(arrayToHex(bytes));
+function bytesToNumber(bytes: Uint8Array): bigint {
+  return hexToNumber(bytesToHex(bytes));
 }
 
 function parseByte(str: string): number {
@@ -581,7 +581,7 @@ function egcd(a: bigint, b: bigint) {
     [x, y] = [u, v];
     [u, v] = [m, n];
   }
-  let gcd = b;
+  const gcd = b;
   return [gcd, x, y];
 }
 
@@ -589,7 +589,7 @@ function invert(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('invert: expected positive integers');
   }
-  let [gcd, x] = egcd(mod(number, modulo), modulo);
+  const [gcd, x] = egcd(mod(number, modulo), modulo);
   if (gcd !== 1n) {
     throw new Error('invert: does not exist');
   }
@@ -616,8 +616,9 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
 }
 
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
+// Used for endomorphism.
 // https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
-function splitScalar(k: bigint): [boolean, bigint, boolean, bigint] {
+function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
   const { n } = CURVE;
   const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
   const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
@@ -634,7 +635,7 @@ function splitScalar(k: bigint): [boolean, bigint, boolean, bigint] {
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
-  hash = typeof hash === 'string' ? hash : arrayToHex(hash);
+  hash = typeof hash === 'string' ? hash : bytesToHex(hash);
   let msg = hexToNumber(hash || '0');
   const delta = (hash.length / 2) * 8 - PRIME_SIZE;
   if (delta > 0) {
@@ -653,10 +654,10 @@ type QRS = [Point, bigint, bigint];
 // https://tools.ietf.org/html/rfc6979#section-3.1
 async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   // Step A is ignored, since we already provide hash instead of msg
-  const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
+  const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
   const h1 = hexToArray(pad64(num));
   const x = hexToArray(pad64(privateKey));
-  const h1n = arrayToNumber(h1);
+  const h1n = bytesToNumber(h1);
 
   // Step B
   let v = new Uint8Array(32).fill(1);
@@ -677,7 +678,7 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   // Step H3, repeat until 1 < T < n - 1
   for (let i = 0; i < 1000; i++) {
     v = await utils.hmacSha256(k, v);
-    const T = arrayToNumber(v);
+    const T = bytesToNumber(v);
     let qrs: QRS;
     if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!)) {
       return qrs;
@@ -706,7 +707,7 @@ function normalizePrivateKey(privateKey: PrivKey): bigint {
   if (!privateKey) throw new Error(`Expected receive valid private key, not "${privateKey}"`);
   let key: bigint;
   if (privateKey instanceof Uint8Array) {
-    key = arrayToNumber(privateKey);
+    key = bytesToNumber(privateKey);
   } else if (typeof privateKey === 'string') {
     key = hexToNumber(privateKey);
   } else {
@@ -878,7 +879,7 @@ export const utils = {
         false,
         ['sign', 'verify']
       );
-      const message = concatTypedArrays(...messages);
+      const message = concatBytes(...messages);
       // @ts-ignore
       const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
       return new Uint8Array(buffer);

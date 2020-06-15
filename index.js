@@ -121,7 +121,7 @@ class JacobianPoint {
             }
             return p;
         }
-        let [k1neg, k1, k2neg, k2] = splitScalar(n);
+        let [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
         let k1p = JacobianPoint.ZERO;
         let k2p = JacobianPoint.ZERO;
         let d = this;
@@ -208,7 +208,7 @@ class JacobianPoint {
         let point;
         let fake;
         if (USE_ENDOMORPHISM) {
-            const [k1neg, k1, k2neg, k2] = splitScalar(n);
+            const [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
             let k1p, k2p, f1p, f2p;
             [k1p, f1p] = this.wNAF(k1, affinePoint);
             [k2p, f2p] = this.wNAF(k2, affinePoint);
@@ -247,7 +247,7 @@ class Point {
         if (bytes.length !== 33) {
             throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
         }
-        const x = arrayToNumber(bytes.slice(1));
+        const x = bytesToNumber(bytes.slice(1));
         const sqrY = weistrass(x);
         let y = powMod(sqrY, P_DIV4_1, CURVE.P);
         const isFirstByteOdd = (bytes[0] & 1) === 1;
@@ -263,8 +263,8 @@ class Point {
         if (bytes.length !== 65) {
             throw new TypeError(`Point.fromHex: uncompressed expects 130 bytes, not ${bytes.length * 2}`);
         }
-        const x = arrayToNumber(bytes.slice(1, 33));
-        const y = arrayToNumber(bytes.slice(33));
+        const x = bytesToNumber(bytes.slice(1, 33));
+        const y = bytesToNumber(bytes.slice(33));
         const point = new Point(x, y);
         point.assertValidity();
         return point;
@@ -287,7 +287,7 @@ class Point {
         if (r === 0n || s === 0n)
             return;
         const rinv = invert(r, CURVE.n);
-        const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
+        const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
         const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
         const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
         const hG = JacobianPoint.BASE.multiply(h).negate();
@@ -342,12 +342,7 @@ exports.Point = Point;
 Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
 Point.ZERO = new Point(0n, 0n);
 function sliceDer(s) {
-    if (s.length < 33)
-        s = concatTypedArrays(new Uint8Array(33 - s.length), s);
-    let i;
-    for (i = 0; i < s.length - 1 && s[i] == 0 && s[i + 1] < 0x80; i++)
-        ;
-    return s.slice(i);
+    return parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 class SignResult {
     constructor(r, s) {
@@ -355,7 +350,7 @@ class SignResult {
         this.s = s;
     }
     static fromHex(hex) {
-        const str = hex instanceof Uint8Array ? arrayToHex(hex) : hex;
+        const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
         if (typeof str !== 'string')
             throw new TypeError({}.toString.call(hex));
         const check1 = str.slice(0, 2);
@@ -380,10 +375,10 @@ class SignResult {
         return hexToArray(this.toHex(isCompressed));
     }
     toHex(isCompressed = false) {
-        const sHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.s))));
+        const sHex = sliceDer(numberToHex(this.s));
         if (isCompressed)
             return sHex;
-        const rHex = arrayToHex(sliceDer(hexToArray(numberToHex(this.r))));
+        const rHex = sliceDer(numberToHex(this.r));
         const rLen = numberToHex(rHex.length / 2);
         const sLen = numberToHex(sHex.length / 2);
         const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
@@ -391,7 +386,7 @@ class SignResult {
     }
 }
 exports.SignResult = SignResult;
-function concatTypedArrays(...arrays) {
+function concatBytes(...arrays) {
     if (arrays.length === 1)
         return arrays[0];
     const length = arrays.reduce((a, arr) => a + arr.length, 0);
@@ -403,7 +398,7 @@ function concatTypedArrays(...arrays) {
     }
     return result;
 }
-function arrayToHex(uint8a) {
+function bytesToHex(uint8a) {
     let hex = '';
     for (let i = 0; i < uint8a.length; i++) {
         hex += uint8a[i].toString(16).padStart(2, '0');
@@ -432,8 +427,8 @@ function hexToArray(hex) {
     }
     return array;
 }
-function arrayToNumber(bytes) {
-    return hexToNumber(arrayToHex(bytes));
+function bytesToNumber(bytes) {
+    return hexToNumber(bytesToHex(bytes));
 }
 function parseByte(str) {
     return Number.parseInt(str, 16) * 2;
@@ -464,14 +459,14 @@ function egcd(a, b) {
         [x, y] = [u, v];
         [u, v] = [m, n];
     }
-    let gcd = b;
+    const gcd = b;
     return [gcd, x, y];
 }
 function invert(number, modulo = CURVE.P) {
     if (number === 0n || modulo <= 0n) {
         throw new Error('invert: expected positive integers');
     }
-    let [gcd, x] = egcd(mod(number, modulo), modulo);
+    const [gcd, x] = egcd(mod(number, modulo), modulo);
     if (gcd !== 1n) {
         throw new Error('invert: does not exist');
     }
@@ -497,7 +492,7 @@ function invertBatch(nums, n = CURVE.P) {
     }
     return nums;
 }
-function splitScalar(k) {
+function splitScalarEndo(k) {
     const { n } = CURVE;
     const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
     const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
@@ -512,7 +507,7 @@ function splitScalar(k) {
     return [k1neg, k1neg ? -k1 : k1, k2neg, k2neg ? -k2 : k2];
 }
 function truncateHash(hash) {
-    hash = typeof hash === 'string' ? hash : arrayToHex(hash);
+    hash = typeof hash === 'string' ? hash : bytesToHex(hash);
     let msg = hexToNumber(hash || '0');
     const delta = (hash.length / 2) * 8 - PRIME_SIZE;
     if (delta > 0) {
@@ -524,10 +519,10 @@ function truncateHash(hash) {
     return msg;
 }
 async function getQRSrfc6979(msgHash, privateKey) {
-    const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : arrayToNumber(msgHash);
+    const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
     const h1 = hexToArray(pad64(num));
     const x = hexToArray(pad64(privateKey));
-    const h1n = arrayToNumber(h1);
+    const h1n = bytesToNumber(h1);
     let v = new Uint8Array(32).fill(1);
     let k = new Uint8Array(32).fill(0);
     const b0 = Uint8Array.from([0x00]);
@@ -538,7 +533,7 @@ async function getQRSrfc6979(msgHash, privateKey) {
     v = await exports.utils.hmacSha256(k, v);
     for (let i = 0; i < 1000; i++) {
         v = await exports.utils.hmacSha256(k, v);
-        const T = arrayToNumber(v);
+        const T = bytesToNumber(v);
         let qrs;
         if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey))) {
             return qrs;
@@ -565,7 +560,7 @@ function normalizePrivateKey(privateKey) {
         throw new Error(`Expected receive valid private key, not "${privateKey}"`);
     let key;
     if (privateKey instanceof Uint8Array) {
-        key = arrayToNumber(privateKey);
+        key = bytesToNumber(privateKey);
     }
     else if (typeof privateKey === 'string') {
         key = hexToNumber(privateKey);
@@ -671,7 +666,7 @@ exports.utils = {
     hmacSha256: async (key, ...messages) => {
         if (typeof window == 'object' && 'crypto' in window) {
             const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
-            const message = concatTypedArrays(...messages);
+            const message = concatBytes(...messages);
             const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
             return new Uint8Array(buffer);
         }
