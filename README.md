@@ -193,14 +193,14 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 ## Speed
 
-Benchmarks measured with 2.9Ghz Coffee Lake.
+Benchmarks measured with 2.9Ghz i9-8950HK.
 
-    getPublicKey(utils.randomPrivateKey()) x 4017 ops/sec @ 248μs/op
-    sign x 2620 ops/sec @ 381μs/op
+    getPublicKey(utils.randomPrivateKey()) x 4,017 ops/sec @ 248μs/op
+    sign x 2,620 ops/sec @ 381μs/op
     verify x 558 ops/sec @ 1ms/op
     recoverPublicKey x 301 ops/sec @ 3ms/op
     getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
-    getSharedSecret (precomputed) x 4079 ops/sec @ 245μs/op
+    getSharedSecret (precomputed) x 4,079 ops/sec @ 245μs/op
 
 Compare to other libraries:
 
