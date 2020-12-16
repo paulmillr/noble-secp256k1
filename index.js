@@ -270,7 +270,7 @@ class Point {
         return point;
     }
     static fromHex(hex) {
-        const bytes = hex instanceof Uint8Array ? hex : hexToArray(hex);
+        const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
         const header = bytes[0];
         if (header === 0x02 || header === 0x03)
             return this.fromCompressedHex(bytes);
@@ -297,7 +297,7 @@ class Point {
         return point;
     }
     toRawBytes(isCompressed = false) {
-        return hexToArray(this.toHex(isCompressed));
+        return hexToBytes(this.toHex(isCompressed));
     }
     toHex(isCompressed = false) {
         const x = pad64(this.x);
@@ -372,7 +372,7 @@ class SignResult {
         return new SignResult(r, s);
     }
     toRawBytes(isCompressed = false) {
-        return hexToArray(this.toHex(isCompressed));
+        return hexToBytes(this.toHex(isCompressed));
     }
     toHex(isCompressed = false) {
         const sHex = sliceDer(numberToHex(this.s));
@@ -408,6 +408,9 @@ function bytesToHex(uint8a) {
 function pad64(num) {
     return num.toString(16).padStart(64, '0');
 }
+function pad32b(num) {
+    return hexToBytes(pad64(num));
+}
 function numberToHex(num) {
     const hex = num.toString(16);
     return hex.length & 1 ? `0${hex}` : hex;
@@ -418,7 +421,7 @@ function hexToNumber(hex) {
     }
     return BigInt(`0x${hex}`);
 }
-function hexToArray(hex) {
+function hexToBytes(hex) {
     hex = hex.length & 1 ? `0${hex}` : hex;
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
@@ -520,8 +523,8 @@ function truncateHash(hash) {
 }
 async function getQRSrfc6979(msgHash, privateKey) {
     const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
-    const h1 = hexToArray(pad64(num));
-    const x = hexToArray(pad64(privateKey));
+    const h1 = pad32b(num);
+    const x = pad32b(privateKey);
     const h1n = bytesToNumber(h1);
     let v = new Uint8Array(32).fill(1);
     let k = new Uint8Array(32).fill(0);
@@ -646,6 +649,60 @@ function verify(signature, msgHash, publicKey) {
     return res.x === r;
 }
 exports.verify = verify;
+function rawX(point) {
+    return point.toRawBytes(true).slice(1);
+}
+async function taggedHash(tag, ...messages) {
+    const tagB = new Uint8Array(tag.split('').map((c) => c.charCodeAt(0)));
+    const tagH = await exports.utils.sha256(tagB);
+    const h = await exports.utils.sha256(concatBytes(tagH, tagH, ...messages));
+    return bytesToNumber(h);
+}
+async function createChallenge(x, p, message) {
+    const rx = pad32b(x);
+    const t = await taggedHash('BIP0340/challenge', rx, rawX(p), message);
+    return mod(t, CURVE.n);
+}
+function hasEvenY(point) {
+    return mod(point.y, 2n) === 0n;
+}
+exports.schnorr = {
+    SignResult: class {
+        constructor(r, s) {
+            this.r = r;
+            this.s = s;
+        }
+        toHex() {
+            return pad64(this.r) + pad64(this.s);
+        }
+        toRawBytes() {
+            return hexToBytes(this.toHex());
+        }
+    },
+    async sign(message, privateKey, auxRand = exports.utils.randomPrivateKey()) {
+        if (message == null)
+            throw new TypeError(`Expected valid message, not "${message}"`);
+        if (privateKey == null)
+            throw new TypeError('Expected valid private key');
+        const msg = typeof message === 'string' ? hexToBytes(message) : message;
+        const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
+        const order = CURVE.n;
+        const d0 = normalizePrivateKey(privateKey);
+        let p = Point.fromPrivateKey(d0);
+        let d = hasEvenY(p) ? d0 : order - d0;
+        let t0h = await taggedHash('BIP0340/aux', rand);
+        let t = d ^ t0h;
+        let k0h = await taggedHash('BIP0340/nonce', pad32b(t), rawX(p), msg);
+        let k0 = mod(k0h, order);
+        if (k0 === 0n)
+            throw new Error('Creation of signature failed. k is zero');
+        let r = Point.fromPrivateKey(k0);
+        let k = hasEvenY(r) ? k0 : order - k0;
+        let e = await createChallenge(r.x, p, msg);
+        let sig = new exports.schnorr.SignResult(r.x, mod(k + e * d, order));
+        return sig;
+    },
+};
 Point.BASE._setWindowSize(8);
 exports.utils = {
     isValidPrivateKey(privateKey) {
@@ -663,9 +720,22 @@ exports.utils = {
             throw new Error("The environment doesn't have randomBytes function");
         }
     },
+    sha256: async (message) => {
+        if (typeof window == 'object' && 'crypto' in window) {
+            const buffer = await window.crypto.subtle.digest('SHA-256', message.buffer);
+            return new Uint8Array(buffer);
+        }
+        else if (typeof process === 'object' && 'node' in process.versions) {
+            const { createHash } = require('crypto');
+            return Uint8Array.from(createHash('sha256').update(message).digest());
+        }
+        else {
+            throw new Error("The environment doesn't have sha256 function");
+        }
+    },
     hmacSha256: async (key, ...messages) => {
         if (typeof window == 'object' && 'crypto' in window) {
-            const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
+            const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
             const message = concatBytes(...messages);
             const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
             return new Uint8Array(buffer);

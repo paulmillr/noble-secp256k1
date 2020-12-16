@@ -15,13 +15,13 @@ run(async (windowSize) => {
   let pub;
   let priv;
 
-  priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
-  await mark('getPublicKey 256 bit', samples * 10, () => {
+  priv = '0000000000000000000000000000000000000000000000000000000000000003';
+  await mark('getPublicKey 1 bit', samples * 10, () => {
     pub = secp.getPublicKey(priv);
   });
 
-  priv = '0000000000000000000000000000000000000000000000000000000000000003';
-  await mark('getPublicKey 1 bit', samples * 10, () => {
+  priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
+  await mark('getPublicKey 256 bit', samples * 10, () => {
     pub = secp.getPublicKey(priv);
   });
 

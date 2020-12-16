@@ -21,6 +21,15 @@ function hexToArray(hex: string): Uint8Array {
 }
 
 describe('secp256k1', () => {
+  it.only('schnorr', async () => {
+    const sec = '0000000000000000000000000000000000000000000000000000000000000003';
+    const pub = 'F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9';
+    const rnd = '0000000000000000000000000000000000000000000000000000000000000000';
+    const msg = '0000000000000000000000000000000000000000000000000000000000000000';
+    const exp = 'E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA821525F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0';
+    const sig = await secp.schnorr.sign(msg, sec, rnd);
+    expect(sig.toHex()).toBe(exp.toLowerCase());
+  });
   it('.getPublicKey()', () => {
     const data = privatesTxt
       .split('\n')

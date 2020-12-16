@@ -1,8 +1,10 @@
 # noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-[secp256k1](https://www.secg.org/sec2-v2.pdf), an elliptic curve that could be used for asymmetric encryption, ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979.
+[Fastest](#speed) JS implementattion of [secp256k1](https://www.secg.org/sec2-v2.pdf),
+an elliptic curve that could be used for asymmetric encryption,
+ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979. Supports Schnorr signatures.
 
-Algorithmically resistant to timing attacks. [Faster](#speed) than indutny/elliptic, ecdsa.js and sjcl. Tested against thousands of vectors from tiny-secp256k1.
+Algorithmically resistant to timing attacks. Tested against thousands of vectors from tiny-secp256k1.
 
 Check out a blog post about this library: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
@@ -34,6 +36,9 @@ import * as secp from "noble-secp256k1";
   const publicKey = secp.getPublicKey(privateKey);
   const signature = await secp.sign(messageHash, privateKey);
   const isSigned = secp.verify(signature, messageHash, publicKey);
+
+  // Supports Schnorr signatures.
+  const signature2 = await secp.schnorr.sign(messageHash, privateKey);
 })();
 ```
 

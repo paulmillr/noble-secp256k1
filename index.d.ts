@@ -63,9 +63,26 @@ export declare function sign(msgHash: Uint8Array, privateKey: PrivKey, opts?: Op
 export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
 export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
+export declare const schnorr: {
+    SignResult: {
+        new (r: bigint, s: bigint): {
+            readonly r: bigint;
+            readonly s: bigint;
+            toHex(): string;
+            toRawBytes(): Uint8Array;
+        };
+    };
+    sign(message: Hex, privateKey: PrivKey, auxRand?: Hex): Promise<{
+        readonly r: bigint;
+        readonly s: bigint;
+        toHex(): string;
+        toRawBytes(): Uint8Array;
+    }>;
+};
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
     randomPrivateKey: (bytesLength?: number) => Uint8Array;
+    sha256: (message: Uint8Array) => Promise<Uint8Array>;
     hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
     precompute(windowSize?: number, point?: Point): Point;
 };
