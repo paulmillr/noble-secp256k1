@@ -1,6 +1,17 @@
 const {run, mark, logMem} = require('micro-bmark');
 const secp = require('..');
 
+
+function hexToBytes(hex) {
+  hex = hex.length & 1 ? `0${hex}` : hex;
+  const array = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < array.length; i++) {
+    let j = i * 2;
+    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
+  }
+  return array;
+}
+
 // run([4, 8, 16], async (windowSize) => {
 run(async (windowSize) => {
   const samples = 1000;
@@ -54,6 +65,12 @@ run(async (windowSize) => {
   await mark('getSharedSecret (precomputed)', samples, () => {
     secp.getSharedSecret(priv, pubKeyPre);
   });
+
+  await mark('schnorr.sign', samples, () => secp.schnorr.sign(
+    '0000000000000000000000000000000000000000000000000000000000000000',
+    '0000000000000000000000000000000000000000000000000000000000000003',
+    '0000000000000000000000000000000000000000000000000000000000000000'
+  ))
 
   console.log();
   logMem();

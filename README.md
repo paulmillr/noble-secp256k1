@@ -206,6 +206,7 @@ Benchmarks measured with 2.9Ghz i9-8950HK.
     recoverPublicKey x 301 ops/sec @ 3ms/op
     getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
     getSharedSecret (precomputed) x 4,079 ops/sec @ 245μs/op
+    schnorr.sign x 1643 ops/sec @ 608μs/op
 
 Compare to other libraries:
 
