@@ -21,6 +21,7 @@ export declare class Point {
     _WINDOW_SIZE?: number;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
+    private static fromX;
     private static fromCompressedHex;
     private static fromUncompressedHex;
     static fromHex(hex: Hex): Point;
@@ -73,10 +74,9 @@ declare class SchnorrSignature {
     toHex(): string;
     toRawBytes(): Uint8Array;
 }
-declare function schnorrSign(messageHash: string, privateKey: string, auxRand: Hex): Promise<string>;
-declare function schnorrSign(messageHash: Uint8Array, privateKey: Uint8Array, auxRand: Hex): Promise<Uint8Array>;
-declare type SchnorrSig = SchnorrSignature | string | Uint8Array;
-declare function schnorrVerify(signature: SchnorrSig, messageHash: Hex, publicKey: PubKey): Promise<boolean>;
+declare function schnorrSign(messageHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
+declare function schnorrSign(messageHash: Uint8Array, privateKey: Uint8Array, auxRand?: Hex): Promise<Uint8Array>;
+declare function schnorrVerify(signature: Hex, messageHash: Hex, publicKey: Hex): Promise<boolean>;
 export declare const schnorr: {
     Signature: typeof SchnorrSignature;
     sign: typeof schnorrSign;

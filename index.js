@@ -243,6 +243,17 @@ class Point {
         this._WINDOW_SIZE = windowSize;
         pointPrecomputes.delete(this);
     }
+    static fromX(bytes) {
+        const x = bytesToNumber(bytes);
+        const sqrY = weistrass(x);
+        let y = powMod(sqrY, P_DIV4_1, CURVE.P);
+        const isYOdd = (y & 1n) === 1n;
+        if (isYOdd)
+            y = mod(-y);
+        const point = new Point(x, y);
+        point.assertValidity();
+        return point;
+    }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
             throw new TypeError(`Point.fromHex: compressed expects 33 bytes, not ${bytes.length * 2}`);
@@ -252,9 +263,8 @@ class Point {
         let y = powMod(sqrY, P_DIV4_1, CURVE.P);
         const isFirstByteOdd = (bytes[0] & 1) === 1;
         const isYOdd = (y & 1n) === 1n;
-        if (isFirstByteOdd !== isYOdd) {
+        if (isFirstByteOdd !== isYOdd)
             y = mod(-y);
-        }
         const point = new Point(x, y);
         point.assertValidity();
         return point;
@@ -271,6 +281,8 @@ class Point {
     }
     static fromHex(hex) {
         const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
+        if (bytes.length === 32)
+            return this.fromX(bytes);
         const header = bytes[0];
         if (header === 0x02 || header === 0x03)
             return this.fromCompressedHex(bytes);
@@ -693,11 +705,13 @@ class SchnorrSignature {
 async function schnorrSign(messageHash, privateKey, auxRand = exports.utils.randomPrivateKey()) {
     if (messageHash == null)
         throw new TypeError(`Expected valid message, not "${messageHash}"`);
-    if (privateKey == null)
-        throw new TypeError('Expected valid private key');
+    if (!privateKey)
+        privateKey = 0n;
     const { n } = CURVE;
     const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
     const d0 = normalizePrivateKey(privateKey);
+    if (!(0 < d0 && d0 < n))
+        throw new Error('Invalid private key');
     const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
     if (rand.length !== 32)
         throw new TypeError('Expected 32 bytes of aux randomness');
@@ -713,7 +727,7 @@ async function schnorrSign(messageHash, privateKey, auxRand = exports.utils.rand
     const k = hasEvenY(R) ? k0 : n - k0;
     const e = await createChallenge(R.x, P, m);
     const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
-    const isValid = await exports.schnorr.verify(sig, m, P);
+    const isValid = await exports.schnorr.verify(sig.toRawBytes(), m, P.toRawX());
     if (!isValid)
         throw new Error('Invalid signature produced');
     return typeof messageHash === 'string' ? sig.toHex() : sig.toRawBytes();
@@ -725,7 +739,7 @@ async function schnorrVerify(signature, messageHash, publicKey) {
     const e = await createChallenge(sig.r, P, m);
     const sG = Point.fromPrivateKey(sig.s);
     const eP = P.multiply(e);
-    const R = sG.add(eP.negate());
+    const R = sG.subtract(eP);
     if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== sig.r)
         return false;
     return true;

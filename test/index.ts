@@ -237,12 +237,13 @@ describe('secp256k1', () => {
     const vectors = schCsv.split('\n').map((line: string) => line.split(',')).slice(1, -1);
     for (let vec of vectors) {
       const [index, sec, pub, rnd, msg, expSig, passes, comment] = vec;
-      if (index == '4') continue; // pass test for now — it has invalid private key?
+      if (index == '4' && !sec) continue; // pass test for now — it has invalid private key?
+
       it(`should sign with Schnorr scheme vector ${index}`, async () => {
         if (passes === 'TRUE') {
           const sig = await secp.schnorr.sign(msg, sec, rnd);
           expect(sig).toBe(expSig.toLowerCase());
-          expect(await secp.schnorr.verify(sig, msg, secp.Point.fromPrivateKey(sec))).toBe(true);
+          expect(await secp.schnorr.verify(sig, msg, secp.Point.fromPrivateKey(sec).toRawX())).toBe(true);
         } else {
           try {
             await secp.schnorr.sign(msg, sec, rnd);
