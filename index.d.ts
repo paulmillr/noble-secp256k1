@@ -12,7 +12,7 @@ export { CURVE };
 declare type Hex = Uint8Array | string;
 declare type PrivKey = Hex | bigint | number;
 declare type PubKey = Hex | Point;
-declare type Signature = Hex | SignResult;
+declare type Sig = Hex | Signature;
 export declare class Point {
     x: bigint;
     y: bigint;
@@ -25,9 +25,10 @@ export declare class Point {
     private static fromUncompressedHex;
     static fromHex(hex: Hex): Point;
     static fromPrivateKey(privateKey: PrivKey): Point;
-    static fromSignature(msgHash: Hex, signature: Signature, recovery: number): Point | undefined;
+    static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point | undefined;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
+    toRawX(): Uint8Array;
     assertValidity(): void;
     equals(other: Point): boolean;
     negate(): Point;
@@ -36,14 +37,15 @@ export declare class Point {
     subtract(other: Point): Point;
     multiply(scalar: number | bigint): Point;
 }
-export declare class SignResult {
+export declare class Signature {
     r: bigint;
     s: bigint;
     constructor(r: bigint, s: bigint);
-    static fromHex(hex: Hex): SignResult;
+    static fromHex(hex: Hex): Signature;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
 }
+export declare const SignResult: typeof Signature;
 export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
@@ -62,18 +64,23 @@ export declare function sign(msgHash: string, privateKey: PrivKey, opts: OptsRec
 export declare function sign(msgHash: Uint8Array, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<Uint8Array>;
 export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
 export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
-export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
-declare class SchnorrSignResult {
+export declare function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean;
+declare class SchnorrSignature {
     readonly r: bigint;
     readonly s: bigint;
     constructor(r: bigint, s: bigint);
+    static fromHex(hex: Hex): SchnorrSignature;
     toHex(): string;
     toRawBytes(): Uint8Array;
 }
+declare function schnorrSign(messageHash: string, privateKey: string, auxRand: Hex): Promise<string>;
+declare function schnorrSign(messageHash: Uint8Array, privateKey: Uint8Array, auxRand: Hex): Promise<Uint8Array>;
+declare type SchnorrSig = SchnorrSignature | string | Uint8Array;
+declare function schnorrVerify(signature: SchnorrSig, messageHash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const schnorr: {
-    SignResult: typeof SchnorrSignResult;
-    sign(message: Hex, privateKey: PrivKey, auxRand?: Hex): Promise<SchnorrSignResult>;
-    verify(signature: SchnorrSignResult, message: Hex, publicKey: PubKey): Promise<boolean>;
+    Signature: typeof SchnorrSignature;
+    sign: typeof schnorrSign;
+    verify: typeof schnorrVerify;
 };
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;

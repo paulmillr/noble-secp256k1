@@ -245,7 +245,7 @@ class Point {
     }
     static fromCompressedHex(bytes) {
         if (bytes.length !== 33) {
-            throw new TypeError(`Point.fromHex: compressed expects 66 bytes, not ${bytes.length * 2}`);
+            throw new TypeError(`Point.fromHex: compressed expects 33 bytes, not ${bytes.length * 2}`);
         }
         const x = bytesToNumber(bytes.slice(1));
         const sqrY = weistrass(x);
@@ -261,7 +261,7 @@ class Point {
     }
     static fromUncompressedHex(bytes) {
         if (bytes.length !== 65) {
-            throw new TypeError(`Point.fromHex: uncompressed expects 130 bytes, not ${bytes.length * 2}`);
+            throw new TypeError(`Point.fromHex: uncompressed expects 65 bytes, not ${bytes.length * 2}`);
         }
         const x = bytesToNumber(bytes.slice(1, 33));
         const y = bytesToNumber(bytes.slice(33));
@@ -308,6 +308,9 @@ class Point {
             return `04${x}${pad64(this.y)}`;
         }
     }
+    toRawX() {
+        return this.toRawBytes(true).slice(1);
+    }
     assertValidity() {
         const { x, y } = this;
         if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) {
@@ -344,7 +347,7 @@ Point.ZERO = new Point(0n, 0n);
 function sliceDer(s) {
     return parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
-class SignResult {
+class Signature {
     constructor(r, s) {
         this.r = r;
         this.s = s;
@@ -357,7 +360,7 @@ class SignResult {
         const length = parseByte(str.slice(2, 4));
         const check2 = str.slice(4, 6);
         if (check1 !== '30' || length !== str.length - 4 || check2 !== '02') {
-            throw new Error('SignResult.fromHex: Invalid signature');
+            throw new Error('Signature.fromHex: Invalid signature');
         }
         const rLen = parseByte(str.slice(6, 8));
         const rEnd = 8 + rLen;
@@ -369,7 +372,7 @@ class SignResult {
         const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
         const sStart = rEnd + 4;
         const s = hexToNumber(str.slice(sStart, sStart + sLen));
-        return new SignResult(r, s);
+        return new Signature(r, s);
     }
     toRawBytes(isCompressed = false) {
         return hexToBytes(this.toHex(isCompressed));
@@ -385,7 +388,8 @@ class SignResult {
         return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
     }
 }
-exports.SignResult = SignResult;
+exports.Signature = Signature;
+exports.SignResult = Signature;
 function concatBytes(...arrays) {
     if (arrays.length === 1)
         return arrays[0];
@@ -577,7 +581,7 @@ function normalizePublicKey(publicKey) {
     return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
 function normalizeSignature(signature) {
-    return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
+    return signature instanceof Signature ? signature : Signature.fromHex(signature);
 }
 function getPublicKey(privateKey, isCompressed = false) {
     const point = Point.fromPrivateKey(privateKey);
@@ -633,7 +637,7 @@ async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
         adjustedS = CURVE.n - s;
         recovery ^= 1;
     }
-    const sig = new SignResult(r, adjustedS);
+    const sig = new Signature(r, adjustedS);
     const hashed = typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
     return recovered ? [hashed, recovery] : hashed;
 }
@@ -649,27 +653,34 @@ function verify(signature, msgHash, publicKey) {
     return res.x === r;
 }
 exports.verify = verify;
-function rawX(point) {
-    return point.toRawBytes(true).slice(1);
-}
 async function taggedHash(tag, ...messages) {
     const tagB = new Uint8Array(tag.split('').map((c) => c.charCodeAt(0)));
     const tagH = await exports.utils.sha256(tagB);
     const h = await exports.utils.sha256(concatBytes(tagH, tagH, ...messages));
     return bytesToNumber(h);
 }
-async function createChallenge(x, p, message) {
+async function createChallenge(x, P, message) {
     const rx = pad32b(x);
-    const t = await taggedHash('BIP0340/challenge', rx, rawX(p), message);
+    const t = await taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
     return mod(t, CURVE.n);
 }
 function hasEvenY(point) {
     return mod(point.y, 2n) === 0n;
 }
-class SchnorrSignResult {
+class SchnorrSignature {
     constructor(r, s) {
         this.r = r;
         this.s = s;
+    }
+    static fromHex(hex) {
+        const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
+        if (bytes.length !== 64) {
+            throw new TypeError(`SchnorrSignature.fromHex: expected 64 bytes, not ${bytes.length}`);
+        }
+        const r = bytesToNumber(bytes.slice(0, 32));
+        const s = bytesToNumber(bytes.slice(32));
+        const sig = new SchnorrSignature(r, s);
+        return sig;
     }
     toHex() {
         return pad64(this.r) + pad64(this.s);
@@ -678,43 +689,52 @@ class SchnorrSignResult {
         return hexToBytes(this.toHex());
     }
 }
+async function schnorrSign(messageHash, privateKey, auxRand = exports.utils.randomPrivateKey()) {
+    if (messageHash == null)
+        throw new TypeError(`Expected valid message, not "${messageHash}"`);
+    if (privateKey == null)
+        throw new TypeError('Expected valid private key');
+    const { n } = CURVE;
+    const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
+    const d0 = normalizePrivateKey(privateKey);
+    const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
+    if (rand.length !== 32)
+        throw new TypeError('Expected 32 bytes of aux randomness');
+    const P = Point.fromPrivateKey(d0);
+    const d = hasEvenY(P) ? d0 : n - d0;
+    const t0h = await taggedHash('BIP0340/aux', rand);
+    const t = d ^ t0h;
+    const k0h = await taggedHash('BIP0340/nonce', pad32b(t), P.toRawX(), m);
+    const k0 = mod(k0h, n);
+    if (k0 === 0n)
+        throw new Error('Creation of signature failed. k is zero');
+    const R = Point.fromPrivateKey(k0);
+    const k = hasEvenY(R) ? k0 : n - k0;
+    const e = await createChallenge(R.x, P, m);
+    const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
+    const isValid = await exports.schnorr.verify(sig, m, P);
+    if (!isValid)
+        throw new Error('Invalid signature produced');
+    return typeof messageHash === 'string' ? sig.toHex() : sig.toRawBytes();
+}
+async function schnorrVerify(signature, messageHash, publicKey) {
+    const sig = signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
+    if (sig.r === 0n || sig.s === 0n || sig.r >= CURVE.P || sig.s >= CURVE.n)
+        return false;
+    const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
+    const P = normalizePublicKey(publicKey);
+    const e = await createChallenge(sig.r, P, m);
+    const sG = Point.fromPrivateKey(sig.s);
+    const eP = P.multiply(e);
+    const R = sG.add(eP.negate());
+    if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== sig.r)
+        return false;
+    return true;
+}
 exports.schnorr = {
-    SignResult: SchnorrSignResult,
-    async sign(message, privateKey, auxRand = exports.utils.randomPrivateKey()) {
-        if (message == null)
-            throw new TypeError(`Expected valid message, not "${message}"`);
-        if (privateKey == null)
-            throw new TypeError('Expected valid private key');
-        const msg = typeof message === 'string' ? hexToBytes(message) : message;
-        const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
-        const order = CURVE.n;
-        const d0 = normalizePrivateKey(privateKey);
-        const p = Point.fromPrivateKey(d0);
-        const d = hasEvenY(p) ? d0 : order - d0;
-        const t0h = await taggedHash('BIP0340/aux', rand);
-        const t = d ^ t0h;
-        const k0h = await taggedHash('BIP0340/nonce', pad32b(t), rawX(p), msg);
-        const k0 = mod(k0h, order);
-        if (k0 === 0n)
-            throw new Error('Creation of signature failed. k is zero');
-        const r = Point.fromPrivateKey(k0);
-        const k = hasEvenY(r) ? k0 : order - k0;
-        const e = await createChallenge(r.x, p, msg);
-        const sig = new SchnorrSignResult(r.x, mod(k + e * d, order));
-        return sig;
-    },
-    async verify(signature, message, publicKey) {
-        const { r, s } = signature;
-        const msg = typeof message === 'string' ? hexToBytes(message) : message;
-        const pub = normalizePublicKey(publicKey);
-        if (r === 0n || s === 0n || r >= CURVE.P || s >= CURVE.n)
-            return false;
-        const e = await createChallenge(r, pub, msg);
-        const vr = Point.fromPrivateKey(s).add(pub.multiply(CURVE.n - e));
-        if (vr.equals(Point.BASE) || !hasEvenY(vr) || vr.x !== r)
-            return false;
-        return true;
-    },
+    Signature: SchnorrSignature,
+    sign: schnorrSign,
+    verify: schnorrVerify,
 };
 Point.BASE._setWindowSize(8);
 exports.utils = {

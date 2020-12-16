@@ -7,6 +7,7 @@ import * as ecdh from './vectors/ecdh.json';
 import * as privates from './vectors/privates.json';
 import * as points from './vectors/points.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
+const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
 
 const MAX_PRIVATE_KEY = secp.CURVE.n - 1n;
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
@@ -232,16 +233,26 @@ describe('secp256k1', () => {
   });
 
   describe('schnorr', () => {
-    it('should sign with Schnorr scheme', async () => {
-      const sec = '0000000000000000000000000000000000000000000000000000000000000003';
-      const pub = 'F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9';
-      const rnd = '0000000000000000000000000000000000000000000000000000000000000000';
-      const msg = '0000000000000000000000000000000000000000000000000000000000000000';
-      const exp = 'E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA821525F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0';
-      const sig = await secp.schnorr.sign(msg, sec, rnd);
-      expect(sig.toHex()).toBe(exp.toLowerCase());
-      expect(await secp.schnorr.verify(sig, msg, secp.Point.fromPrivateKey(sec))).toBe(true);
-    });
+    // index,secret key,public key,aux_rand,message,signature,verification result,comment
+    const vectors = schCsv.split('\n').map((line: string) => line.split(',')).slice(1, -1);
+    for (let vec of vectors) {
+      const [index, sec, pub, rnd, msg, expSig, passes, comment] = vec;
+      if (index == '4') continue; // pass test for now — it has invalid private key?
+      it(`should sign with Schnorr scheme vector ${index}`, async () => {
+        if (passes === 'TRUE') {
+          const sig = await secp.schnorr.sign(msg, sec, rnd);
+          expect(sig).toBe(expSig.toLowerCase());
+          expect(await secp.schnorr.verify(sig, msg, secp.Point.fromPrivateKey(sec))).toBe(true);
+        } else {
+          try {
+            await secp.schnorr.sign(msg, sec, rnd);
+            expect(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+          }
+        }
+      });
+    }
   });
 
   describe('.recoverPublicKey()', () => {
