@@ -671,6 +671,8 @@ class SchnorrSignature {
     constructor(r, s) {
         this.r = r;
         this.s = s;
+        if (r === 0n || s === 0n || r >= CURVE.P || s >= CURVE.n)
+            throw new Error('Invalid signature');
     }
     static fromHex(hex) {
         const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
@@ -679,8 +681,7 @@ class SchnorrSignature {
         }
         const r = bytesToNumber(bytes.slice(0, 32));
         const s = bytesToNumber(bytes.slice(32));
-        const sig = new SchnorrSignature(r, s);
-        return sig;
+        return new SchnorrSignature(r, s);
     }
     toHex() {
         return pad64(this.r) + pad64(this.s);
@@ -719,8 +720,6 @@ async function schnorrSign(messageHash, privateKey, auxRand = exports.utils.rand
 }
 async function schnorrVerify(signature, messageHash, publicKey) {
     const sig = signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
-    if (sig.r === 0n || sig.s === 0n || sig.r >= CURVE.P || sig.s >= CURVE.n)
-        return false;
     const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
     const P = normalizePublicKey(publicKey);
     const e = await createChallenge(sig.r, P, m);

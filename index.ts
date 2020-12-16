@@ -870,7 +870,9 @@ function hasEvenY(point: Point) {
 }
 
 class SchnorrSignature {
-  constructor(readonly r: bigint, readonly s: bigint) {}
+  constructor(readonly r: bigint, readonly s: bigint) {
+    if (r === 0n || s === 0n || r >= CURVE.P || s >= CURVE.n) throw new Error('Invalid signature');
+  }
   static fromHex(hex: Hex) {
     const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
     if (bytes.length !== 64) {
@@ -878,9 +880,7 @@ class SchnorrSignature {
     }
     const r = bytesToNumber(bytes.slice(0, 32));
     const s = bytesToNumber(bytes.slice(32));
-    const sig = new SchnorrSignature(r, s);
-    // sig.assertValidity();
-    return sig;
+    return new SchnorrSignature(r, s);
   }
   toHex(): string {
     return pad64(this.r) + pad64(this.s);
@@ -937,8 +937,6 @@ async function schnorrVerify(
 ): Promise<boolean> {
   const sig =
     signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
-  if (sig.r === 0n || sig.s === 0n || sig.r >= CURVE.P || sig.s >= CURVE.n) return false;
-
   const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
   const P = normalizePublicKey(publicKey);
   const e = await createChallenge(sig.r, P, m);
