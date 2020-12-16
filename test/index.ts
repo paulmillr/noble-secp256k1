@@ -242,8 +242,9 @@ describe('secp256k1', () => {
       it(`should sign with Schnorr scheme vector ${index}`, async () => {
         if (passes === 'TRUE') {
           const sig = await secp.schnorr.sign(msg, sec, rnd);
+          expect(secp.schnorr.getPublicKey(sec)).toBe(pub.toLowerCase());
           expect(sig).toBe(expSig.toLowerCase());
-          expect(await secp.schnorr.verify(sig, msg, secp.Point.fromPrivateKey(sec).toRawX())).toBe(true);
+          expect(await secp.schnorr.verify(sig, msg, pub)).toBe(true);
         } else {
           try {
             await secp.schnorr.sign(msg, sec, rnd);

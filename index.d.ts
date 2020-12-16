@@ -29,6 +29,7 @@ export declare class Point {
     static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point | undefined;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
+    toHexX(): string;
     toRawX(): Uint8Array;
     assertValidity(): void;
     equals(other: Point): boolean;
@@ -74,11 +75,14 @@ declare class SchnorrSignature {
     toHex(): string;
     toRawBytes(): Uint8Array;
 }
-declare function schnorrSign(messageHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
-declare function schnorrSign(messageHash: Uint8Array, privateKey: Uint8Array, auxRand?: Hex): Promise<Uint8Array>;
-declare function schnorrVerify(signature: Hex, messageHash: Hex, publicKey: Hex): Promise<boolean>;
+declare function schnorrGetPublicKey(privateKey: Uint8Array): Uint8Array;
+declare function schnorrGetPublicKey(privateKey: string): string;
+declare function schnorrSign(msgHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
+declare function schnorrSign(msgHash: Uint8Array, privateKey: Uint8Array, auxRand?: Hex): Promise<Uint8Array>;
+declare function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Promise<boolean>;
 export declare const schnorr: {
     Signature: typeof SchnorrSignature;
+    getPublicKey: typeof schnorrGetPublicKey;
     sign: typeof schnorrSign;
     verify: typeof schnorrVerify;
 };

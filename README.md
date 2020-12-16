@@ -129,9 +129,20 @@ export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Ar
 
 To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
 
+##### `schnorr.getPublicKey(privateKey)`
+```typescript
+function schnorrGetPublicKey(privateKey: Uint8Array): Uint8Array;
+function schnorrGetPublicKey(privateKey: string): string;
+```
+
+Returns 32-byte public key. *Warning:* it is incompatible with non-schnorr pubkey.
+
+Specifically, its *y* coordinate may be flipped. See BIP0340 for clarification.
+
 ##### `schnorr.sign(hash, privateKey)`
 ```typescript
-function schnorrSign(msgHash: Uint8Array, privateKey: Uint8Array, auxilaryRandom?: Uint8Array): Promise<schnorr.SignResult>;
+function schnorrSign(msgHash: Uint8Array, privateKey: Uint8Array, auxilaryRandom?: Uint8Array): Promise<Uint8Array>;
+function schnorrSign(msgHash: string, privateKey: string, auxilaryRandom?: string): Promise<string>;
 ```
 
 Generates Schnorr signature as per BIP0340. Asynchronous, so use `await`.
@@ -139,11 +150,11 @@ Generates Schnorr signature as per BIP0340. Asynchronous, so use `await`.
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `auxilaryRandom?: Uint8Array` — optional 32 random bytes. By default, the method gathers cryptogarphically secure random.
-- Returns Schnorr signature.
+- Returns Schnorr signature in Hex format.
 
 ##### `schnorr.verify(signature, hash, publicKey)`
 ```typescript
-function schnorrVerify(signature: Uint8Array, msgHash: Uint8Array, publicKey: Uint8Array): boolean
+function schnorrVerify(signature: Uint8Array | string, msgHash: Uint8Array | string, publicKey: Uint8Array | string): boolean
 ```
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
 - `msgHash: Uint8Array | string` - message hash that needs to be verified

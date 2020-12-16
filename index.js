@@ -320,6 +320,9 @@ class Point {
             return `04${x}${pad64(this.y)}`;
         }
     }
+    toHexX() {
+        return this.toHex(true).slice(2);
+    }
     toRawX() {
         return this.toRawBytes(true).slice(1);
     }
@@ -702,13 +705,17 @@ class SchnorrSignature {
         return hexToBytes(this.toHex());
     }
 }
-async function schnorrSign(messageHash, privateKey, auxRand = exports.utils.randomPrivateKey()) {
-    if (messageHash == null)
-        throw new TypeError(`Expected valid message, not "${messageHash}"`);
+function schnorrGetPublicKey(privateKey) {
+    const P = Point.fromPrivateKey(privateKey);
+    return typeof privateKey === 'string' ? P.toHexX() : P.toRawX();
+}
+async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomPrivateKey()) {
+    if (msgHash == null)
+        throw new TypeError(`Expected valid message, not "${msgHash}"`);
     if (!privateKey)
         privateKey = 0n;
     const { n } = CURVE;
-    const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
+    const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
     const d0 = normalizePrivateKey(privateKey);
     if (!(0 < d0 && d0 < n))
         throw new Error('Invalid private key');
@@ -727,14 +734,14 @@ async function schnorrSign(messageHash, privateKey, auxRand = exports.utils.rand
     const k = hasEvenY(R) ? k0 : n - k0;
     const e = await createChallenge(R.x, P, m);
     const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
-    const isValid = await exports.schnorr.verify(sig.toRawBytes(), m, P.toRawX());
+    const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
     if (!isValid)
         throw new Error('Invalid signature produced');
-    return typeof messageHash === 'string' ? sig.toHex() : sig.toRawBytes();
+    return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
-async function schnorrVerify(signature, messageHash, publicKey) {
+async function schnorrVerify(signature, msgHash, publicKey) {
     const sig = signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
-    const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
+    const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
     const P = normalizePublicKey(publicKey);
     const e = await createChallenge(sig.r, P, m);
     const sG = Point.fromPrivateKey(sig.s);
@@ -746,6 +753,7 @@ async function schnorrVerify(signature, messageHash, publicKey) {
 }
 exports.schnorr = {
     Signature: SchnorrSignature,
+    getPublicKey: schnorrGetPublicKey,
     sign: schnorrSign,
     verify: schnorrVerify,
 };

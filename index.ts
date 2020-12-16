@@ -906,22 +906,29 @@ class SchnorrSignature {
   }
 }
 
-async function schnorrSign(messageHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
+function schnorrGetPublicKey(privateKey: Uint8Array): Uint8Array;
+function schnorrGetPublicKey(privateKey: string): string;
+function schnorrGetPublicKey(privateKey: PrivKey): Hex {
+  const P = Point.fromPrivateKey(privateKey);
+  return typeof privateKey === 'string' ? P.toHexX() : P.toRawX();
+}
+
+async function schnorrSign(msgHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
 async function schnorrSign(
-  messageHash: Uint8Array,
+  msgHash: Uint8Array,
   privateKey: Uint8Array,
   auxRand?: Hex
 ): Promise<Uint8Array>;
 async function schnorrSign(
-  messageHash: Hex,
+  msgHash: Hex,
   privateKey: PrivKey,
   auxRand: Hex = utils.randomPrivateKey()
 ): Promise<Hex> {
-  if (messageHash == null) throw new TypeError(`Expected valid message, not "${messageHash}"`);
+  if (msgHash == null) throw new TypeError(`Expected valid message, not "${msgHash}"`);
   // if (privateKey == null) throw new TypeError('Expected valid private key');
   if (!privateKey) privateKey = 0n;
   const { n } = CURVE;
-  const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
+  const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
   const d0 = normalizePrivateKey(privateKey);
   if (!(0 < d0 && d0 < n)) throw new Error('Invalid private key');
   const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
@@ -942,20 +949,16 @@ async function schnorrSign(
   const k = hasEvenY(R) ? k0 : n - k0;
   const e = await createChallenge(R.x, P, m);
   const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
-  const isValid = await schnorr.verify(sig.toRawBytes(), m, P.toRawX());
+  const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
 
   if (!isValid) throw new Error('Invalid signature produced');
-  return typeof messageHash === 'string' ? sig.toHex() : sig.toRawBytes();
+  return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 
-async function schnorrVerify(
-  signature: Hex,
-  messageHash: Hex,
-  publicKey: Hex
-): Promise<boolean> {
+async function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Promise<boolean> {
   const sig =
     signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
-  const m = typeof messageHash === 'string' ? hexToBytes(messageHash) : messageHash;
+  const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
 
   const P = normalizePublicKey(publicKey);
   const e = await createChallenge(sig.r, P, m);
@@ -971,6 +974,7 @@ async function schnorrVerify(
 
 export const schnorr = {
   Signature: SchnorrSignature,
+  getPublicKey: schnorrGetPublicKey,
   sign: schnorrSign,
   verify: schnorrVerify,
 };
