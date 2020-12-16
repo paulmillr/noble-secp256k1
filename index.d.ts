@@ -63,21 +63,17 @@ export declare function sign(msgHash: Uint8Array, privateKey: PrivKey, opts?: Op
 export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
 export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
 export declare function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): boolean;
+declare class SchnorrSignResult {
+    readonly r: bigint;
+    readonly s: bigint;
+    constructor(r: bigint, s: bigint);
+    toHex(): string;
+    toRawBytes(): Uint8Array;
+}
 export declare const schnorr: {
-    SignResult: {
-        new (r: bigint, s: bigint): {
-            readonly r: bigint;
-            readonly s: bigint;
-            toHex(): string;
-            toRawBytes(): Uint8Array;
-        };
-    };
-    sign(message: Hex, privateKey: PrivKey, auxRand?: Hex): Promise<{
-        readonly r: bigint;
-        readonly s: bigint;
-        toHex(): string;
-        toRawBytes(): Uint8Array;
-    }>;
+    SignResult: typeof SchnorrSignResult;
+    sign(message: Hex, privateKey: PrivKey, auxRand?: Hex): Promise<SchnorrSignResult>;
+    verify(signature: SchnorrSignResult, message: Hex, publicKey: PubKey): Promise<boolean>;
 };
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;

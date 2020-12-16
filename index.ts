@@ -871,16 +871,18 @@ function hasEvenY(point: Point) {
   return mod(point.y, 2n) === 0n;
 }
 
+class SchnorrSignResult {
+  constructor(readonly r: bigint, readonly s: bigint) {}
+  toHex() {
+    return pad64(this.r) + pad64(this.s);
+  }
+  toRawBytes() {
+    return hexToBytes(this.toHex());
+  }
+}
+
 export const schnorr = {
-  SignResult: class {
-    constructor(readonly r: bigint, readonly s: bigint) {}
-    toHex() {
-      return pad64(this.r) + pad64(this.s);
-    }
-    toRawBytes() {
-      return hexToBytes(this.toHex());
-    }
-  },
+  SignResult: SchnorrSignResult,
 
   async sign(message: Hex, privateKey: PrivKey, auxRand: Hex = utils.randomPrivateKey()) {
     if (message == null) throw new TypeError(`Expected valid message, not "${message}"`);
@@ -903,9 +905,20 @@ export const schnorr = {
     const r = Point.fromPrivateKey(k0);
     const k = hasEvenY(r) ? k0 : order - k0;
     const e = await createChallenge(r.x, p, msg);
-    const sig = new schnorr.SignResult(r.x, mod(k + e * d, order));
+    const sig = new SchnorrSignResult(r.x, mod(k + e * d, order));
     // console.log({d, t0h, t, k0h, k0, r, k, e});
     return sig;
+  },
+
+  async verify(signature: SchnorrSignResult, message: Hex, publicKey: PubKey) {
+    const { r, s } = signature;
+    const msg = typeof message === 'string' ? hexToBytes(message) : message;
+    const pub = normalizePublicKey(publicKey);
+    if (r === 0n || s === 0n || r >= CURVE.P || s >= CURVE.n) return false;
+    const e = await createChallenge(r, pub, msg);
+    const vr = Point.fromPrivateKey(s).add(pub.multiply(CURVE.n - e));
+    if (vr.equals(Point.BASE) || !hasEvenY(vr) || vr.x !== r) return false;
+    return true;
   },
 };
 

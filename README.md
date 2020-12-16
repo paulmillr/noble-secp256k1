@@ -207,6 +207,7 @@ Benchmarks measured with 2.9Ghz i9-8950HK.
     getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
     getSharedSecret (precomputed) x 4,079 ops/sec @ 245μs/op
     schnorr.sign x 1,643 ops/sec @ 608μs/op
+    schnorr.verify x 316 ops/sec @ 3ms/op
 
 Compare to other libraries:
 
