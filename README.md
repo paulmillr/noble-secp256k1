@@ -2,7 +2,9 @@
 
 [Very fast](#speed) JS implementattion of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and deterministic ECDSA signature scheme from RFC6979. Supports **Schnorr** signatures as per BIP0340.
+ECDH key agreement protocol and signature schemes.
+
+Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BIP0340.
 
 Algorithmically resistant to timing attacks. Tested against thousands of vectors from tiny-secp256k1.
 
