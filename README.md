@@ -59,6 +59,7 @@ const publicKey = secp.getPublicKey("6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9
 - [`sign(hash, privateKey)`](#signhash-privatekey)
 - [`verify(signature, hash, publicKey)`](#verifysignature-hash-publickey)
 - [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
+- [`schnorr.getPublicKey(privateKey)`](#schnorrgetpublickeyprivatekey)
 - [`schnorr.sign(hash, privateKey)`](#schnorrsignhash-privatekey)
 - [`schnorr.verify(signature, hash, publicKey)`](#schnorrverifysignature-hash-publickey)
 - [Helpers](#helpers)
