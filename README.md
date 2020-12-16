@@ -40,8 +40,9 @@ import * as secp from "noble-secp256k1";
   const isSigned = secp.verify(signature, messageHash, publicKey);
 
   // Supports Schnorr signatures.
-  const signature2 = await secp.schnorr.sign(messageHash, privateKey);
-  const isSigned2 = await secp.schnorr.verify(signature2, messageHash, secp.schnorr.getPublicKey(privateKey));
+  const pubs = secp.schnorr.getPublicKey(privateKey);
+  const signatures = await secp.schnorr.sign(messageHash, privateKey);
+  const isSigneds = await secp.schnorr.verify(signature2, messageHash, pubs);
 })();
 ```
 
