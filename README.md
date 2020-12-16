@@ -39,6 +39,7 @@ import * as secp from "noble-secp256k1";
 
   // Supports Schnorr signatures.
   const signature2 = await secp.schnorr.sign(messageHash, privateKey);
+  const isSigned2 = await secp.schnorr.verify(signature2, messageHash, privateKey);
 })();
 ```
 
@@ -56,6 +57,8 @@ const publicKey = secp.getPublicKey("6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9
 - [`sign(hash, privateKey)`](#signhash-privatekey)
 - [`verify(signature, hash, publicKey)`](#verifysignature-hash-publickey)
 - [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
+- [`schnorr.sign(hash, privateKey)`](#schnorrsignhash-privatekey)
+- [`schnorr.verify(signature, hash, publicKey)`](#schnorrverifysignature-hash-publickey)
 - [Helpers](#helpers)
 
 ##### `getPublicKey(privateKey)`
@@ -125,6 +128,27 @@ export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Ar
   If signature is invalid - function will return `undefined` as result.
 
 To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
+
+##### `schnorr.sign(hash, privateKey)`
+```typescript
+function schnorrSign(msgHash: Uint8Array, privateKey: Uint8Array, auxilaryRandom?: Uint8Array): Promise<schnorr.SignResult>;
+```
+
+Generates Schnorr signature as per BIP0340. Asynchronous, so use `await`.
+
+- `msgHash: Uint8Array | string` - message hash which would be signed
+- `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
+- `auxilaryRandom?: Uint8Array` — optional 32 random bytes. By default, the method gathers cryptogarphically secure random.
+- Returns Schnorr signature.
+
+##### `schnorr.verify(signature, hash, publicKey)`
+```typescript
+function schnorrVerify(signature: Uint8Array, msgHash: Uint8Array, publicKey: Uint8Array): boolean
+```
+- `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
+- `msgHash: Uint8Array | string` - message hash that needs to be verified
+- `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
+- Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
 #### Point methods
 
