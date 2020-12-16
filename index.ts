@@ -850,6 +850,7 @@ export function verify(signature: Signature, msgHash: Hex, publicKey: PubKey): b
 }
 
 // Schnorr-specific code
+// Strip first byte that signifies whether y is positive or negative, leave only x.
 function rawX(point: Point) {
   return point.toRawBytes(true).slice(1);
 }
@@ -887,25 +888,23 @@ export const schnorr = {
     const msg = typeof message === 'string' ? hexToBytes(message) : message;
     const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
     const order = CURVE.n;
+
     const d0 = normalizePrivateKey(privateKey);
+    const p = Point.fromPrivateKey(d0);
+    const d = hasEvenY(p) ? d0 : order - d0;
 
-    let p = Point.fromPrivateKey(d0);
-    let d = hasEvenY(p) ? d0 : order - d0;
+    const t0h = await taggedHash('BIP0340/aux', rand);
+    const t = d ^ t0h;
 
-    let t0h = await taggedHash('BIP0340/aux', rand);
-    let t = d ^ t0h;
-
-    let k0h = await taggedHash('BIP0340/nonce', pad32b(t), rawX(p), msg);
-    let k0 = mod(k0h, order);
+    const k0h = await taggedHash('BIP0340/nonce', pad32b(t), rawX(p), msg);
+    const k0 = mod(k0h, order);
     if (k0 === 0n) throw new Error('Creation of signature failed. k is zero');
 
-    let r = Point.fromPrivateKey(k0);
-    let k = hasEvenY(r) ? k0 : order - k0;
-    let e = await createChallenge(r.x, p, msg);
-    let sig = new schnorr.SignResult(r.x, mod(k + e * d, order));
-
+    const r = Point.fromPrivateKey(k0);
+    const k = hasEvenY(r) ? k0 : order - k0;
+    const e = await createChallenge(r.x, p, msg);
+    const sig = new schnorr.SignResult(r.x, mod(k + e * d, order));
     // console.log({d, t0h, t, k0h, k0, r, k, e});
-
     return sig;
   },
 };
