@@ -1,6 +1,6 @@
 # noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-[Very fast](#speed) JS implementattion of [secp256k1](https://www.secg.org/sec2-v2.pdf),
+[Very fast](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
 ECDH key agreement protocol and signature schemes.
 
