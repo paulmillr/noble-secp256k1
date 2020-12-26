@@ -32,17 +32,17 @@ Check out a blog post about this library: [Learning fast elliptic-curve cryptogr
 import * as secp from "noble-secp256k1";
 
 (async () => {
-  // You can also pass Uint8Array and BigInt.
+  // You can also pass Uint8Array
   const privateKey = "6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e";
   const messageHash = "9c1185a5c5e9fc54612808977ee8f548b2258d31";
   const publicKey = secp.getPublicKey(privateKey);
   const signature = await secp.sign(messageHash, privateKey);
   const isSigned = secp.verify(signature, messageHash, publicKey);
 
-  // Supports Schnorr signatures.
-  const pubs = secp.schnorr.getPublicKey(privateKey);
-  const signatures = await secp.schnorr.sign(messageHash, privateKey);
-  const isSigneds = await secp.schnorr.verify(signature2, messageHash, pubs);
+  // Supports Schnorr signatures
+  const rpub = secp.schnorr.getPublicKey(privateKey);
+  const rsignature = await secp.schnorr.sign(messageHash, privateKey);
+  const risSigned = await secp.schnorr.verify(rsignature, messageHash, rpub);
 })();
 ```
 
@@ -215,7 +215,7 @@ secp256k1.Point {
   // Constant-time scalar multiplication.
   multiply(scalar: bigint | Uint8Array): Point;
 }
-secp256k1.SignResult {
+secp256k1.Signature {
   constructor(r: bigint, s: bigint);
   // DER encoded ECDSA signature
   static fromHex(hex: Uint8Array | string);
