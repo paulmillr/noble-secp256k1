@@ -39,8 +39,10 @@ type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type Sig = Hex | Signature;
 
-// Note: cannot be reused for other curves when a != 0.
-// If we're using Koblitz curve, we can improve efficiency by using endomorphism.
+// Would always be true for secp256k1, but if you're reusing code for another elliptic curve,
+// or want to disable endo, just set it to false.
+// Cannot be reused for curves with a != 0.
+// We're using Koblitz curve, which means the efficiency could be improved with endomorphism.
 // Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
 // Should always be used for Jacobian's double-and-add multiplication.
 // For affines cached multiplication, it trades off 1/2 init time & 1/3 ram for 20% perf hit.
@@ -323,30 +325,24 @@ export class Point {
     pointPrecomputes.delete(this);
   }
 
-  private static fromX(bytes: Uint8Array) {
-    const x = bytesToNumber(bytes);
-    const sqrY = weistrass(x);
-    let y = powMod(sqrY, P_DIV4_1, CURVE.P);
-    const isYOdd = (y & 1n) === 1n;
-    if (isYOdd) y = mod(-y);
-    const point = new Point(x, y);
-    point.assertValidity();
-    return point;
-  }
-
   private static fromCompressedHex(bytes: Uint8Array) {
-    if (bytes.length !== 33) {
-      throw new TypeError(`Point.fromHex: compressed expects 33 bytes, not ${bytes.length * 2}`);
+    const isShort = bytes.length === 32;
+    if (!isShort && bytes.length !== 33) {
+      throw new TypeError(`Point.fromHex: compressed expects 32/33 bytes, not ${bytes.length * 2}`);
     }
-    const x = bytesToNumber(bytes.slice(1));
-    // y^2 = x^3 + ax + b
-    const sqrY = weistrass(x);
-    // square root
-    // y = y2 ^ (p+1)/4
-    let y = powMod(sqrY, P_DIV4_1, CURVE.P);
-    const isFirstByteOdd = (bytes[0] & 1) === 1;
-    const isYOdd = (y & 1n) === 1n;
-    if (isFirstByteOdd !== isYOdd) y = mod(-y);
+    const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
+    const sqrY = weistrass(x); // y^2 = x^3 + ax + b
+    let y = powMod(sqrY, P_DIV4_1, CURVE.P); // y = y2 ^ (p+1)/4
+    if (isShort) {
+      // Schnorr
+      const isYOdd = (y & 1n) === 1n;
+      if (isYOdd) y = mod(-y);
+    } else {
+      // ECDSA
+      const isFirstByteOdd = (bytes[0] & 1) === 1;
+      const isYOdd = (y & 1n) === 1n;
+      if (isFirstByteOdd !== isYOdd) y = mod(-y);
+    }
     const point = new Point(x, y);
     point.assertValidity();
     return point;
@@ -366,9 +362,10 @@ export class Point {
   // Converts hash string or Uint8Array to Point.
   static fromHex(hex: Hex) {
     const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
-    if (bytes.length === 32) return this.fromX(bytes);
     const header = bytes[0];
-    if (header === 0x02 || header === 0x03) return this.fromCompressedHex(bytes);
+    if (bytes.length === 32 || header === 0x02 || header === 0x03) {
+      return this.fromCompressedHex(bytes);
+    }
     if (header === 0x04) return this.fromUncompressedHex(bytes);
     throw new TypeError('Point.fromHex: received invalid point');
   }

@@ -21,7 +21,6 @@ export declare class Point {
     _WINDOW_SIZE?: number;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
-    private static fromX;
     private static fromCompressedHex;
     private static fromUncompressedHex;
     static fromHex(hex: Hex): Point;

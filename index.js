@@ -243,28 +243,25 @@ class Point {
         this._WINDOW_SIZE = windowSize;
         pointPrecomputes.delete(this);
     }
-    static fromX(bytes) {
-        const x = bytesToNumber(bytes);
-        const sqrY = weistrass(x);
-        let y = powMod(sqrY, P_DIV4_1, CURVE.P);
-        const isYOdd = (y & 1n) === 1n;
-        if (isYOdd)
-            y = mod(-y);
-        const point = new Point(x, y);
-        point.assertValidity();
-        return point;
-    }
     static fromCompressedHex(bytes) {
-        if (bytes.length !== 33) {
-            throw new TypeError(`Point.fromHex: compressed expects 33 bytes, not ${bytes.length * 2}`);
+        const isShort = bytes.length === 32;
+        if (!isShort && bytes.length !== 33) {
+            throw new TypeError(`Point.fromHex: compressed expects 32/33 bytes, not ${bytes.length * 2}`);
         }
-        const x = bytesToNumber(bytes.slice(1));
+        const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
         const sqrY = weistrass(x);
         let y = powMod(sqrY, P_DIV4_1, CURVE.P);
-        const isFirstByteOdd = (bytes[0] & 1) === 1;
-        const isYOdd = (y & 1n) === 1n;
-        if (isFirstByteOdd !== isYOdd)
-            y = mod(-y);
+        if (isShort) {
+            const isYOdd = (y & 1n) === 1n;
+            if (isYOdd)
+                y = mod(-y);
+        }
+        else {
+            const isFirstByteOdd = (bytes[0] & 1) === 1;
+            const isYOdd = (y & 1n) === 1n;
+            if (isFirstByteOdd !== isYOdd)
+                y = mod(-y);
+        }
         const point = new Point(x, y);
         point.assertValidity();
         return point;
@@ -281,11 +278,10 @@ class Point {
     }
     static fromHex(hex) {
         const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
-        if (bytes.length === 32)
-            return this.fromX(bytes);
         const header = bytes[0];
-        if (header === 0x02 || header === 0x03)
+        if (bytes.length === 32 || header === 0x02 || header === 0x03) {
             return this.fromCompressedHex(bytes);
+        }
         if (header === 0x04)
             return this.fromUncompressedHex(bytes);
         throw new TypeError('Point.fromHex: received invalid point');

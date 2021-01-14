@@ -237,16 +237,16 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 ## Speed
 
-Benchmarks measured with 2.9Ghz i9-8950HK.
+Benchmarks measured with Apple M1.
 
-    getPublicKey(utils.randomPrivateKey()) x 4,017 ops/sec @ 248μs/op
-    sign x 2,620 ops/sec @ 381μs/op
-    verify x 558 ops/sec @ 1ms/op
-    recoverPublicKey x 301 ops/sec @ 3ms/op
-    getSharedSecret aka ecdh x 435 ops/sec @ 2ms/op
-    getSharedSecret (precomputed) x 4,079 ops/sec @ 245μs/op
-    schnorr.sign x 252 ops/sec @ 3ms/op
-    schnorr.verify x 319 ops/sec @ 3ms/op
+    getPublicKey(utils.randomPrivateKey()) x 5,605 ops/sec @ 178μs/op
+    sign x 3,915 ops/sec @ 255μs/op
+    verify x 820 ops/sec @ 1ms/op
+    recoverPublicKey x 436 ops/sec @ 2ms/op
+    getSharedSecret aka ecdh x 482 ops/sec @ 2ms/op
+    getSharedSecret (precomputed) x 6,152 ops/sec @ 162μs/op
+    schnorr.sign x 371 ops/sec @ 2ms/op
+    schnorr.verify x 469 ops/sec @ 2ms/op
 
 Compare to other libraries:
 
