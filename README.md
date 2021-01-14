@@ -250,21 +250,20 @@ Benchmarks measured with Apple M1.
 
 Compare to other libraries:
 
-    elliptic#sign x 1,326 ops/sec
-    sjcl#sign x 185 ops/sec
-    openssl#sign x 1,926 ops/sec
-    ecdsa#sign x 69.32 ops/sec
+    elliptic#sign x 1,808 ops/sec
+    sjcl#sign x 199 ops/sec
+    openssl#sign x 4,243 ops/sec
+    ecdsa#sign x 116 ops/sec
 
-    elliptic#verify x 575 ops/sec
-    sjcl#verify x 155 ops/sec
-    openssl#verify x 2,392 ops/sec
-    ecdsa#verify x 45.64 ops/sec
+    elliptic#verify x 812 ops/sec
+    sjcl#verify x 166 ops/sec
+    openssl#verify x 4,452 ops/sec
+    ecdsa#verify x 80 ops/sec
 
-    (gen is getPublicKey)
-    elliptic#gen x 1,434 ops/sec
-    sjcl#gen x 194 ops/sec
+    elliptic#getPublicKey x 1,940 ops/sec
+    sjcl#getPublicKey x 211 ops/sec
 
-    elliptic#ecdh x 704 ops/sec
+    elliptic#ecdh x 971 ops/sec
 
 ## Contributing
 
