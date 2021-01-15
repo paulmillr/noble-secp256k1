@@ -1,6 +1,6 @@
 # noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-[Very fast](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
+The [fastest](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
 ECDH key agreement protocol and signature schemes.
 
@@ -248,7 +248,7 @@ Benchmarks measured with Apple M1.
     schnorr.sign x 371 ops/sec @ 2ms/op
     schnorr.verify x 469 ops/sec @ 2ms/op
 
-Compare to other libraries:
+Compare to other libraries (`openssl` uses native bindings, not JS):
 
     elliptic#sign x 1,808 ops/sec
     sjcl#sign x 199 ops/sec
