@@ -16,8 +16,8 @@ Check out a blog post about this library: [Learning fast elliptic-curve cryptogr
 
 - No dependencies, one small file
 - Easily auditable TypeScript/JS code
-- Uses es2020 bigint. Supported in Chrome, Firefox, Safari, node 10+
-- All releases are signed and trusted
+- Supported in all major browsers and stable node.js versions
+- All releases are signed with PGP keys
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519),
