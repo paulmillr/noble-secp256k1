@@ -8,7 +8,7 @@ Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BI
 
 Algorithmically resistant to timing attacks. Tested against thousands of vectors from tiny-secp256k1.
 
-Blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/), [online demo](https://paulmillr.com/ecc)
+Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
 
 ### This library belongs to *noble* crypto
 
