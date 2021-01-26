@@ -225,7 +225,7 @@ secp256k1.Signature {
 
 ## Security
 
-Noble is production-ready & secure. Our goal is to have it audited by a good security expert.
+Noble is production-ready. Our goal is to have it audited by a good security expert.
 
 We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But:
 
