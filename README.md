@@ -250,20 +250,20 @@ Benchmarks measured with Apple M1.
 
 Compare to other libraries (`openssl` uses native bindings, not JS):
 
+    elliptic#getPublicKey x 1,940 ops/sec
+    sjcl#getPublicKey x 211 ops/sec
+    
     elliptic#sign x 1,808 ops/sec
     sjcl#sign x 199 ops/sec
     openssl#sign x 4,243 ops/sec
     ecdsa#sign x 116 ops/sec
-    bip-schnorr#sign x 60 ops/sec @ 17ms/op
+    bip-schnorr#sign x 60 ops/sec
 
     elliptic#verify x 812 ops/sec
     sjcl#verify x 166 ops/sec
     openssl#verify x 4,452 ops/sec
     ecdsa#verify x 80 ops/sec
-    bip-schnorr#verify x 56 ops/sec @ 18ms/op
-
-    elliptic#getPublicKey x 1,940 ops/sec
-    sjcl#getPublicKey x 211 ops/sec
+    bip-schnorr#verify x 56 ops/sec
 
     elliptic#ecdh x 971 ops/sec
 
