@@ -32,7 +32,7 @@ Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning 
 import * as secp from "noble-secp256k1";
 
 (async () => {
-  // You can also pass Uint8Array
+  // You pass either a hex string, or Uint8Array
   const privateKey = "6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e";
   const messageHash = "9c1185a5c5e9fc54612808977ee8f548b2258d31";
   const publicKey = secp.getPublicKey(privateKey);
@@ -189,8 +189,8 @@ but allows to speed-up subsequent getPublicKey() calls up to 20x.
 You may want to precompute values for your own point.
 
 ```typescript
-secp256k1.CURVE.P // 2 ** 256 - 2 ** 32 - 977
-secp256k1.CURVE.n // 2 ** 256 - 432420386565659656852420866394968145599
+secp256k1.CURVE.P // Field, 2 ** 256 - 2 ** 32 - 977
+secp256k1.CURVE.n // Order, 2 ** 256 - 432420386565659656852420866394968145599
 secp256k1.Point.BASE // new secp256k1.Point(Gx, Gy) where
 // Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240n
 // Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
@@ -252,7 +252,7 @@ Compare to other libraries (`openssl` uses native bindings, not JS):
 
     elliptic#getPublicKey x 1,940 ops/sec
     sjcl#getPublicKey x 211 ops/sec
-    
+
     elliptic#sign x 1,808 ops/sec
     sjcl#sign x 199 ops/sec
     openssl#sign x 4,243 ops/sec

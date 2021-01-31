@@ -39,10 +39,11 @@ type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type Sig = Hex | Signature;
 
-// Would always be true for secp256k1, but if you're reusing code for another elliptic curve,
-// or want to disable endo, just set it to false.
-// Cannot be reused for curves with a != 0.
-// We're using Koblitz curve, which means the efficiency could be improved with endomorphism.
+// Always true for secp256k1.
+// We're including it here if you'll want to reuse code to support
+// different curve (e.g. secp256r1) - just set it to false then.
+// Endomorphism only works for Koblitz curves with a == 0.
+// It improves efficiency:
 // Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
 // Should always be used for Jacobian's double-and-add multiplication.
 // For affines cached multiplication, it trades off 1/2 init time & 1/3 ram for 20% perf hit.
@@ -53,7 +54,7 @@ const USE_ENDOMORPHISM = CURVE.a === 0n;
 // Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
 // We're doing calculations in jacobi, because its operations don't require costly inversion.
 class JacobianPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+  constructor(public x: bigint, public y: bigint, public z: bigint) { }
 
   static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
   static ZERO = new JacobianPoint(0n, 1n, 0n);
@@ -317,7 +318,7 @@ export class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) {}
+  constructor(public x: bigint, public y: bigint) { }
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
@@ -459,7 +460,7 @@ function sliceDer(s: string): string {
 }
 
 export class Signature {
-  constructor(public r: bigint, public s: bigint) {}
+  constructor(public r: bigint, public s: bigint) { }
 
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
