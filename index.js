@@ -102,6 +102,9 @@ class JacobianPoint {
         const Z3 = mod(Z1 * Z2 * H);
         return new JacobianPoint(X3, Y3, Z3);
     }
+    subtract(other) {
+        return this.add(other.negate());
+    }
     multiplyUnsafe(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
@@ -245,9 +248,6 @@ class Point {
     }
     static fromCompressedHex(bytes) {
         const isShort = bytes.length === 32;
-        if (!isShort && bytes.length !== 33) {
-            throw new TypeError(`Point.fromHex: compressed expects 32/33 bytes, not ${bytes.length * 2}`);
-        }
         const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
         const sqrY = weistrass(x);
         let y = powMod(sqrY, P_DIV4_1, CURVE.P);
@@ -267,9 +267,6 @@ class Point {
         return point;
     }
     static fromUncompressedHex(bytes) {
-        if (bytes.length !== 65) {
-            throw new TypeError(`Point.fromHex: uncompressed expects 65 bytes, not ${bytes.length * 2}`);
-        }
         const x = bytesToNumber(bytes.slice(1, 33));
         const y = bytesToNumber(bytes.slice(33));
         const point = new Point(x, y);
@@ -279,27 +276,42 @@ class Point {
     static fromHex(hex) {
         const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
         const header = bytes[0];
-        if (bytes.length === 32 || header === 0x02 || header === 0x03) {
+        if (bytes.length === 32 || (bytes.length === 33 && (header === 0x02 || header === 0x03))) {
             return this.fromCompressedHex(bytes);
         }
-        if (header === 0x04)
+        if (bytes.length === 65 && header === 0x04)
             return this.fromUncompressedHex(bytes);
-        throw new TypeError('Point.fromHex: received invalid point');
+        throw new TypeError(`Point.fromHex: received invalid point. Expected 32-33 compressed bytes or 65 uncompressed bytes, not ${bytes.length}`);
     }
     static fromPrivateKey(privateKey) {
         return Point.BASE.multiply(normalizePrivateKey(privateKey));
     }
     static fromSignature(msgHash, signature, recovery) {
-        const sign = normalizeSignature(signature);
-        const { r, s } = sign;
+        let h;
+        if (typeof msgHash === 'string') {
+            if (msgHash.length !== 64)
+                throw new TypeError('Message hash must have 32 bytes');
+            h = hexToNumber(msgHash);
+        }
+        else if (msgHash instanceof Uint8Array) {
+            if (msgHash.length !== 32)
+                throw new TypeError('Message hash must have 32 bytes');
+            h = bytesToNumber(msgHash);
+        }
+        else {
+            throw new TypeError('Message hash must be a hex string or Uint8Array');
+        }
+        const { r, s } = normalizeSignature(signature);
         if (r === 0n || s === 0n)
-            return;
-        const rinv = invert(r, CURVE.n);
-        const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
-        const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
+            throw new Error('Invalid signature');
+        if (recovery !== 0 && recovery !== 1)
+            throw new Error('Invalid yParity bit');
+        const prefix = 2 + (recovery & 1);
+        const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
         const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-        const hG = JacobianPoint.BASE.multiply(h).negate();
-        const Q = sP.add(hG).multiplyUnsafe(rinv);
+        const hG = JacobianPoint.BASE.multiply(h);
+        const rinv = invert(r, CURVE.n);
+        const Q = sP.subtract(hG).multiplyUnsafe(rinv);
         const point = Q.toAffine();
         point.assertValidity();
         return point;
@@ -364,13 +376,12 @@ class Signature {
         this.s = s;
     }
     static fromHex(hex) {
+        if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
+            throw new TypeError(`Invalid signature. Expected string or Uint8Array`);
+        }
         const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-        if (typeof str !== 'string')
-            throw new TypeError({}.toString.call(hex));
-        const check1 = str.slice(0, 2);
         const length = parseByte(str.slice(2, 4));
-        const check2 = str.slice(4, 6);
-        if (check1 !== '30' || length !== str.length - 4 || check2 !== '02') {
+        if (str.slice(0, 2) !== '30' || length !== str.length - 4 || str.slice(4, 6) !== '02') {
             throw new Error('Signature.fromHex: Invalid signature');
         }
         const rLen = parseByte(str.slice(6, 8));
@@ -469,10 +480,10 @@ function powMod(x, power, order) {
 function egcd(a, b) {
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
     while (a !== 0n) {
-        let q = b / a;
-        let r = b % a;
-        let m = x - u * q;
-        let n = y - v * q;
+        const q = b / a;
+        const r = b % a;
+        const m = x - u * q;
+        const n = y - v * q;
         [b, a] = [a, r];
         [x, y] = [u, v];
         [u, v] = [m, n];
@@ -485,9 +496,8 @@ function invert(number, modulo = CURVE.P) {
         throw new Error('invert: expected positive integers');
     }
     const [gcd, x] = egcd(mod(number, modulo), modulo);
-    if (gcd !== 1n) {
+    if (gcd !== 1n)
         throw new Error('invert: does not exist');
-    }
     return mod(x, modulo);
 }
 function invertBatch(nums, n = CURVE.P) {
@@ -504,7 +514,7 @@ function invertBatch(nums, n = CURVE.P) {
     for (let i = len - 1; i >= 0; i--) {
         if (nums[i] === 0n)
             continue;
-        let tmp = mod(acc * nums[i], n);
+        const tmp = mod(acc * nums[i], n);
         nums[i] = mod(acc * scratch[i], n);
         acc = tmp;
     }
@@ -604,8 +614,6 @@ function getPublicKey(privateKey, isCompressed = false) {
 exports.getPublicKey = getPublicKey;
 function recoverPublicKey(msgHash, signature, recovery) {
     const point = Point.fromSignature(msgHash, signature, recovery);
-    if (!point)
-        return;
     return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 exports.recoverPublicKey = recoverPublicKey;
@@ -656,6 +664,8 @@ exports.sign = sign;
 function verify(signature, msgHash, publicKey) {
     const h = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
+    if (r === 0n || s === 0n)
+        return false;
     const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
     const s1 = invert(s, CURVE.n);
     const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, CURVE.n));

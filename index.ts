@@ -54,7 +54,7 @@ const USE_ENDOMORPHISM = CURVE.a === 0n;
 // Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
 // We're doing calculations in jacobi, because its operations don't require costly inversion.
 class JacobianPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint) { }
+  constructor(public x: bigint, public y: bigint, public z: bigint) {}
 
   static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
   static ZERO = new JacobianPoint(0n, 1n, 0n);
@@ -155,6 +155,10 @@ class JacobianPoint {
     return new JacobianPoint(X3, Y3, Z3);
   }
 
+  subtract(other: JacobianPoint) {
+    return this.add(other.negate());
+  }
+
   // Non-constant-time multiplication. Uses double-and-add algorithm.
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification, which works over *public* keys.
@@ -180,6 +184,7 @@ class JacobianPoint {
     let k1p = JacobianPoint.ZERO;
     let k2p = JacobianPoint.ZERO;
     let d: JacobianPoint = this;
+    // TODO: see if we need to check for both zeros instead of one
     while (k1 > 0n || k2 > 0n) {
       if (k1 & 1n) k1p = k1p.add(d);
       if (k2 & 1n) k2p = k2p.add(d);
@@ -193,6 +198,10 @@ class JacobianPoint {
     return k1p.add(k2p);
   }
 
+  // Creates a wNAF precomputation window.
+  // Used for caching.
+  // Default window size is set by `utils.precompute()` and is equal to 8.
+  // Which means we are caching 65536 points: 256 points for every bit from 0 to 256.
   private precomputeWindow(W: number): JacobianPoint[] {
     const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
     let points: JacobianPoint[] = [];
@@ -210,6 +219,8 @@ class JacobianPoint {
     return points;
   }
 
+  // Implements w-ary non-adjacent form for calculating ec multiplication
+  // Optional `affinePoint` argument is used to save cached precompute windows on it.
   private wNAF(n: bigint, affinePoint?: Point): [JacobianPoint, JacobianPoint] {
     if (!affinePoint && this.equals(JacobianPoint.BASE)) affinePoint = Point.BASE;
     const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
@@ -217,6 +228,7 @@ class JacobianPoint {
       throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
     }
 
+    // Calculate precomputes on a first run, reuse them after
     let precomputes = affinePoint && pointPrecomputes.get(affinePoint);
     if (!precomputes) {
       precomputes = this.precomputeWindow(W);
@@ -226,6 +238,7 @@ class JacobianPoint {
       }
     }
 
+    // Initialize real and fake points for const-time
     let p = JacobianPoint.ZERO;
     let f = JacobianPoint.ZERO;
 
@@ -235,6 +248,7 @@ class JacobianPoint {
     const maxNumber = 2 ** W;
     const shiftBy = BigInt(W);
 
+    // TODO: review this more carefully
     for (let window = 0; window < windows; window++) {
       const offset = window * windowSize;
       // Extract W bits.
@@ -289,11 +303,13 @@ class JacobianPoint {
     } else {
       [point, fake] = this.wNAF(n, affinePoint);
     }
+    // Normalize `z` for both points, but return only real one
     return JacobianPoint.normalizeZ([point, fake])[0];
   }
 
-  // Converts Jacobian point to default (x, y) coordinates.
+  // Converts Jacobian point to affine (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
+  // (x, y, z) ∋ (x=x/z^2, y=y/z^3)
   toAffine(invZ: bigint = invert(this.z)): Point {
     const invZ2 = invZ ** 2n;
     const x = mod(this.x * invZ2);
@@ -318,19 +334,17 @@ export class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) { }
+  constructor(public x: bigint, public y: bigint) {}
 
-  // "Private method", don't use it directly.
+  // "Private method", don't use it directly
   _setWindowSize(windowSize: number) {
     this._WINDOW_SIZE = windowSize;
     pointPrecomputes.delete(this);
   }
 
+  // Supports compressed Schnorr (32-byte) and ECDSA (33-byte) points
   private static fromCompressedHex(bytes: Uint8Array) {
     const isShort = bytes.length === 32;
-    if (!isShort && bytes.length !== 33) {
-      throw new TypeError(`Point.fromHex: compressed expects 32/33 bytes, not ${bytes.length * 2}`);
-    }
     const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
     const sqrY = weistrass(x); // y^2 = x^3 + ax + b
     let y = powMod(sqrY, P_DIV4_1, CURVE.P); // y = y2 ^ (p+1)/4
@@ -349,10 +363,8 @@ export class Point {
     return point;
   }
 
+  // Schnorr doesn't support uncompressed points, so this is only for ECDSA
   private static fromUncompressedHex(bytes: Uint8Array) {
-    if (bytes.length !== 65) {
-      throw new TypeError(`Point.fromHex: uncompressed expects 65 bytes, not ${bytes.length * 2}`);
-    }
     const x = bytesToNumber(bytes.slice(1, 33));
     const y = bytesToNumber(bytes.slice(33));
     const point = new Point(x, y);
@@ -361,14 +373,16 @@ export class Point {
   }
 
   // Converts hash string or Uint8Array to Point.
-  static fromHex(hex: Hex) {
+  static fromHex(hex: Hex): Point {
     const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
     const header = bytes[0];
-    if (bytes.length === 32 || header === 0x02 || header === 0x03) {
+    if (bytes.length === 32 || (bytes.length === 33 && (header === 0x02 || header === 0x03))) {
       return this.fromCompressedHex(bytes);
     }
-    if (header === 0x04) return this.fromUncompressedHex(bytes);
-    throw new TypeError('Point.fromHex: received invalid point');
+    if (bytes.length === 65 && header === 0x04) return this.fromUncompressedHex(bytes);
+    throw new TypeError(
+      `Point.fromHex: received invalid point. Expected 32-33 compressed bytes or 65 uncompressed bytes, not ${bytes.length}`
+    );
   }
 
   // Multiplies generator point by privateKey.
@@ -377,30 +391,39 @@ export class Point {
   }
 
   // Recovers public key from ECDSA signature.
-  // TODO: Ensure proper hash length
+  // https://crypto.stackexchange.com/questions/60218
   // Uses following formula:
   // Q = (r ** -1)(sP - hG)
-  // https://crypto.stackexchange.com/questions/60218
-  static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point | undefined {
-    const sign = normalizeSignature(signature);
-    const { r, s } = sign;
-    if (r === 0n || s === 0n) return;
-    const rinv = invert(r, CURVE.n);
-    const h = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
-    const P_ = Point.fromHex(`0${2 + (recovery & 1)}${pad64(r)}`);
+  static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
+    let h: bigint;
+    if (typeof msgHash === 'string') {
+      if (msgHash.length !== 64) throw new TypeError('Message hash must have 32 bytes');
+      h = hexToNumber(msgHash);
+    } else if (msgHash instanceof Uint8Array) {
+      if (msgHash.length !== 32) throw new TypeError('Message hash must have 32 bytes');
+      h = bytesToNumber(msgHash);
+    } else {
+      throw new TypeError('Message hash must be a hex string or Uint8Array');
+    }
+    const { r, s } = normalizeSignature(signature);
+    if (r === 0n || s === 0n) throw new Error('Invalid signature');
+    if (recovery !== 0 && recovery !== 1) throw new Error('Invalid yParity bit');
+    const prefix = 2 + (recovery & 1);
+    const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-    const hG = JacobianPoint.BASE.multiply(h).negate();
-    const Q = sP.add(hG).multiplyUnsafe(rinv);
+    const hG = JacobianPoint.BASE.multiply(h);
+    const rinv = invert(r, CURVE.n);
+    const Q = sP.subtract(hG).multiplyUnsafe(rinv);
     const point = Q.toAffine();
     point.assertValidity();
     return point;
   }
 
-  toRawBytes(isCompressed = false) {
+  toRawBytes(isCompressed = false): Uint8Array {
     return hexToBytes(this.toHex(isCompressed));
   }
 
-  toHex(isCompressed = false) {
+  toHex(isCompressed = false): string {
     const x = pad64(this.x);
     if (isCompressed) {
       return `${this.y & 1n ? '03' : '02'}${x}`;
@@ -409,9 +432,11 @@ export class Point {
     }
   }
 
+  // Schnorr-related function
   toHexX() {
     return this.toHex(true).slice(2);
   }
+
   toRawX() {
     return this.toRawBytes(true).slice(1);
   }
@@ -432,18 +457,22 @@ export class Point {
     return this.x === other.x && this.y === other.y;
   }
 
+  // Returns the same point with inverted `y`
   negate() {
     return new Point(this.x, mod(-this.y));
   }
 
+  // Adds point to itself
   double() {
     return JacobianPoint.fromAffine(this).double().toAffine();
   }
 
+  // Adds point to other point
   add(other: Point) {
     return JacobianPoint.fromAffine(this).add(JacobianPoint.fromAffine(other)).toAffine();
   }
 
+  // Subtracts other point from the point
   subtract(other: Point) {
     return this.add(other.negate());
   }
@@ -459,20 +488,22 @@ function sliceDer(s: string): string {
   return parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 
+// Represents ECDSA signature with its (r, s) properties
 export class Signature {
-  constructor(public r: bigint, public s: bigint) { }
+  constructor(public r: bigint, public s: bigint) {}
 
   // DER encoded ECDSA signature
+  // TODO: verify more thoroughly
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromHex(hex: Hex) {
-    // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
+    if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
+      throw new TypeError(`Invalid signature. Expected string or Uint8Array`);
+    }
     const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-    if (typeof str !== 'string') throw new TypeError({}.toString.call(hex));
 
-    const check1 = str.slice(0, 2);
+    // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
     const length = parseByte(str.slice(2, 4));
-    const check2 = str.slice(4, 6);
-    if (check1 !== '30' || length !== str.length - 4 || check2 !== '02') {
+    if (str.slice(0, 2) !== '30' || length !== str.length - 4 || str.slice(4, 6) !== '02') {
       throw new Error('Signature.fromHex: Invalid signature');
     }
 
@@ -509,6 +540,8 @@ export class Signature {
 }
 export const SignResult = Signature; // backwards compatibility
 
+// Concatenates two Uint8Arrays into one.
+// TODO: check if we're copying data instead of moving it and if that's ok
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
@@ -574,11 +607,13 @@ function parseByte(str: string): number {
 
 // -------------------------
 
+// Calculates a modulo b
 function mod(a: bigint, b: bigint = CURVE.P): bigint {
   const result = a % b;
   return result >= 0 ? result : b + result;
 }
 
+// Modular exponentiation
 function powMod(x: bigint, power: bigint, order: bigint) {
   let res = 1n;
   while (power > 0) {
@@ -596,10 +631,10 @@ function powMod(x: bigint, power: bigint, order: bigint) {
 function egcd(a: bigint, b: bigint) {
   let [x, y, u, v] = [0n, 1n, 1n, 0n];
   while (a !== 0n) {
-    let q = b / a;
-    let r = b % a;
-    let m = x - u * q;
-    let n = y - v * q;
+    const q = b / a;
+    const r = b % a;
+    const m = x - u * q;
+    const n = y - v * q;
     [b, a] = [a, r];
     [x, y] = [u, v];
     [u, v] = [m, n];
@@ -608,17 +643,17 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
+// Inverses number over modulo
 function invert(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('invert: expected positive integers');
   }
   const [gcd, x] = egcd(mod(number, modulo), modulo);
-  if (gcd !== 1n) {
-    throw new Error('invert: does not exist');
-  }
+  if (gcd !== 1n) throw new Error('invert: does not exist');
   return mod(x, modulo);
 }
 
+// Takes a bunch of numbers, inverses all of them
 function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
@@ -631,7 +666,7 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   acc = invert(acc, n);
   for (let i = len - 1; i >= 0; i--) {
     if (nums[i] === 0n) continue;
-    let tmp = mod(acc * nums[i], n);
+    const tmp = mod(acc * nums[i], n);
     nums[i] = mod(acc * scratch[i], n);
     acc = tmp;
   }
@@ -670,6 +705,7 @@ function truncateHash(hash: string | Uint8Array): bigint {
   return msg;
 }
 
+// RFC6979 related code
 type QRS = [Point, bigint, bigint];
 
 // Deterministic k generation as per RFC6979.
@@ -713,6 +749,7 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 
+// Private key must be in bounds 0 < key < n
 function isValidPrivateKey(privateKey: bigint): boolean {
   return 0 < privateKey && privateKey < CURVE.n;
 }
@@ -772,7 +809,6 @@ export function recoverPublicKey(
 ): Uint8Array | undefined;
 export function recoverPublicKey(msgHash: Hex, signature: Sig, recovery: number): Hex | undefined {
   const point = Point.fromSignature(msgHash, signature, recovery);
-  if (!point) return;
   return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
 }
 
@@ -856,6 +892,7 @@ export async function sign(
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
   const h = truncateHash(msgHash);
   const { r, s } = normalizeSignature(signature);
+  if (r === 0n || s === 0n) return false;
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
   const s1 = invert(s, CURVE.n);
   const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, CURVE.n));
@@ -864,7 +901,8 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean
   return res.x === r;
 }
 
-// Schnorr-specific code. Matches BIP0340.
+// Schnorr-specific code as per BIP0340.
+
 // Strip first byte that signifies whether y is positive or negative, leave only x.
 async function taggedHash(tag: string, ...messages: Uint8Array[]): Promise<bigint> {
   const tagB = new Uint8Array(tag.split('').map((c) => c.charCodeAt(0)));
@@ -904,6 +942,7 @@ class SchnorrSignature {
   }
 }
 
+// Schnorr's pubkey is just `x` of Point
 function schnorrGetPublicKey(privateKey: Uint8Array): Uint8Array;
 function schnorrGetPublicKey(privateKey: string): string;
 function schnorrGetPublicKey(privateKey: PrivKey): Hex {

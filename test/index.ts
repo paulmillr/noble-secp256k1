@@ -259,7 +259,7 @@ describe('secp256k1', () => {
 
   describe('.recoverPublicKey()', () => {
     it('should recover public key from recovery bit', async () => {
-      const message = 'deadbeef';
+      const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
       const privateKey = 123456789n;
       const publicKey = secp.getPublicKey(privateKey.toString(16));
       const [signature, recovery] = await secp.sign(message, privateKey, {

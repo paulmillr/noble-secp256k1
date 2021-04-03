@@ -25,7 +25,7 @@ export declare class Point {
     private static fromUncompressedHex;
     static fromHex(hex: Hex): Point;
     static fromPrivateKey(privateKey: PrivKey): Point;
-    static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point | undefined;
+    static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
     toHexX(): string;
