@@ -1,4 +1,5 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+
 'use strict';
 // https://www.secg.org/sec2-v2.pdf
 // Curve fomula is y^2 = x^3 + ax + b

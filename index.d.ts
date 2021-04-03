@@ -1,3 +1,4 @@
+/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 declare const CURVE: {
     a: bigint;
     b: bigint;
