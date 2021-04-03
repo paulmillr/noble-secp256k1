@@ -289,13 +289,9 @@ class Point {
     static fromSignature(msgHash, signature, recovery) {
         let h;
         if (typeof msgHash === 'string') {
-            if (msgHash.length !== 64)
-                throw new TypeError('Message hash must have 32 bytes');
             h = hexToNumber(msgHash);
         }
         else if (msgHash instanceof Uint8Array) {
-            if (msgHash.length !== 32)
-                throw new TypeError('Message hash must have 32 bytes');
             h = bytesToNumber(msgHash);
         }
         else {
