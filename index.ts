@@ -204,7 +204,8 @@ class JacobianPoint {
   // Default window size is set by `utils.precompute()` and is equal to 8.
   // Which means we are caching 65536 points: 256 points for every bit from 0 to 256.
   private precomputeWindow(W: number): JacobianPoint[] {
-    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+    // Do we need 128 / W + 2 here?!
+    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
     let points: JacobianPoint[] = [];
     let p: JacobianPoint = this;
     let base = p;
@@ -243,11 +244,12 @@ class JacobianPoint {
     let p = JacobianPoint.ZERO;
     let f = JacobianPoint.ZERO;
 
-    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
-    const windowSize = 2 ** (W - 1);
-    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
-    const maxNumber = 2 ** W;
-    const shiftBy = BigInt(W);
+    // Do we need 128 / W + 2 here?!
+    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
+    const windowSize = 2 ** (W - 1); // W=8 128
+    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b11111111 for W=8
+    const maxNumber = 2 ** W; // W=8 256
+    const shiftBy = BigInt(W); // W=8 8
 
     // TODO: review this more carefully
     for (let window = 0; window < windows; window++) {
@@ -268,6 +270,7 @@ class JacobianPoint {
       // Check if we're onto Zero point.
       // Add random point inside current window to f.
       if (wbits === 0) {
+        // The most important part for const-time getPublicKey
         f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
       } else {
         const cached = precomputes[offset + Math.abs(wbits) - 1];

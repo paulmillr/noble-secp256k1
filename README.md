@@ -239,14 +239,14 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 Benchmarks measured with Apple M1.
 
-    getPublicKey(utils.randomPrivateKey()) x 5,605 ops/sec @ 178μs/op
-    sign x 3,915 ops/sec @ 255μs/op
-    verify x 820 ops/sec @ 1ms/op
-    recoverPublicKey x 436 ops/sec @ 2ms/op
-    getSharedSecret aka ecdh x 482 ops/sec @ 2ms/op
-    getSharedSecret (precomputed) x 6,152 ops/sec @ 162μs/op
-    schnorr.sign x 371 ops/sec @ 2ms/op
-    schnorr.verify x 469 ops/sec @ 2ms/op
+    getPublicKey(utils.randomPrivateKey()) x 5,808 ops/sec @ 173μs/op
+    sign x 4,075 ops/sec @ 245μs/op
+    verify x 832 ops/sec @ 1ms/op
+    recoverPublicKey x 438 ops/sec @ 2ms/op
+    getSharedSecret aka ecdh x 488 ops/sec @ 2ms/op
+    getSharedSecret (precomputed) x 6,495 ops/sec @ 153μs/op
+    schnorr.sign x 372 ops/sec @ 2ms/op
+    schnorr.verify x 471 ops/sec @ 2ms/op
 
 Compare to other libraries (`openssl` uses native bindings, not JS):
 
