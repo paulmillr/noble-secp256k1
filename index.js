@@ -145,7 +145,7 @@ class JacobianPoint {
         return k1p.add(k2p);
     }
     precomputeWindow(W) {
-        const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
+        const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
         let points = [];
         let p = this;
         let base = p;
@@ -177,7 +177,7 @@ class JacobianPoint {
         }
         let p = JacobianPoint.ZERO;
         let f = JacobianPoint.ZERO;
-        const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
+        const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
         const windowSize = 2 ** (W - 1);
         const mask = BigInt(2 ** W - 1);
         const maxNumber = 2 ** W;

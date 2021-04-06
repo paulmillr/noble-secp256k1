@@ -204,8 +204,10 @@ class JacobianPoint {
   // Default window size is set by `utils.precompute()` and is equal to 8.
   // Which means we are caching 65536 points: 256 points for every bit from 0 to 256.
   private precomputeWindow(W: number): JacobianPoint[] {
-    // Do we need 128 / W + 2 here?!
-    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
+    // splitScalarEndo could return 129-bit numbers, so we need at least
+    // 128 / W + 1. It seems to be possible to receive 130-bit numbers?
+    // So, using +2 to protect against this
+    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
     let points: JacobianPoint[] = [];
     let p: JacobianPoint = this;
     let base = p;
@@ -244,8 +246,8 @@ class JacobianPoint {
     let p = JacobianPoint.ZERO;
     let f = JacobianPoint.ZERO;
 
-    // Do we need 128 / W + 2 here?!
-    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
+    // See notice in precomputeWindow why W + 2
+    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
     const windowSize = 2 ** (W - 1); // W=8 128
     const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b11111111 for W=8
     const maxNumber = 2 ** W; // W=8 256
