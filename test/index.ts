@@ -41,6 +41,12 @@ describe('secp256k1', () => {
       expect(toBEHex(point3.y)).toBe(y);
     }
   });
+  it('.getPublicKey() rejects invalid keys', () => {
+    const invalid = [0, true, false, undefined, null, 1.1, -5, 'deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy'];
+    for (const item of invalid) {
+      expect(() => secp.getPublicKey(item as any)).toThrowError();
+    }
+  });
   it('precompute', () => {
     secp.utils.precompute(4);
     const data = privatesTxt
@@ -206,16 +212,16 @@ describe('secp256k1', () => {
   describe('.verify()', () => {
     it('should verify signature', async () => {
       const MSG = '1';
-      const PRIV_KEY = '2';
+      const PRIV_KEY = 0x2n;
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
-      expect(publicKey.length).toBe(130);
+      expect(publicKey.length).toBe(65);
       expect(secp.verify(signature, MSG, publicKey)).toBe(true);
     });
     it('should not verify signature with wrong public key', async () => {
       const MSG = '1';
-      const PRIV_KEY = '2';
-      const WRONG_PRIV_KEY = '22';
+      const PRIV_KEY = 0x2n;
+      const WRONG_PRIV_KEY = 0x22n;
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.Point.fromPrivateKey(WRONG_PRIV_KEY).toHex();
       expect(publicKey.length).toBe(130);
@@ -223,11 +229,11 @@ describe('secp256k1', () => {
     });
     it('should not verify signature with wrong hash', async () => {
       const MSG = '1';
-      const PRIV_KEY = '2';
+      const PRIV_KEY = 0x2n;
       const WRONG_MSG = '11';
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
-      expect(publicKey.length).toBe(130);
+      expect(publicKey.length).toBe(65);
       expect(secp.verify(signature, WRONG_MSG, publicKey)).toBe(false);
     });
   });
@@ -261,7 +267,7 @@ describe('secp256k1', () => {
     it('should recover public key from recovery bit', async () => {
       const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
       const privateKey = 123456789n;
-      const publicKey = secp.getPublicKey(privateKey.toString(16));
+      const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
       const [signature, recovery] = await secp.sign(message, privateKey, {
         recovered: true
       });
@@ -280,7 +286,7 @@ describe('secp256k1', () => {
     it('should produce correct results', () => {
       // TODO: Once der is there, run all tests.
       for (const vector of ecdh.testGroups[0].tests.slice(0, 230)) {
-        if (vector.result === 'invalid') {
+        if (vector.result === 'invalid' || vector.private.length !== 64) {
           expect(() => {
             secp.getSharedSecret(vector.private, derToPub(vector.public), true);
           }).toThrowError();
@@ -290,13 +296,12 @@ describe('secp256k1', () => {
         }
       }
     });
-    it('priv/pub order does not matter', () => {
+    it('priv/pub order matters', () => {
       for (const vector of ecdh.testGroups[0].tests.slice(0, 100)) {
         if (vector.result === 'valid') {
           let priv = vector.private;
           priv = priv.length === 66 ? priv.slice(2) : priv;
-          const res = secp.getSharedSecret(derToPub(vector.public), priv, true);
-          expect(res.slice(2)).toBe(`${vector.shared}`);
+          expect(() => secp.getSharedSecret(derToPub(vector.public), priv, true)).toThrowError();
         }
       }
     });

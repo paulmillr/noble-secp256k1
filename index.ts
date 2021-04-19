@@ -768,14 +768,19 @@ function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
 }
 
 function normalizePrivateKey(privateKey: PrivKey): bigint {
-  if (!privateKey) throw new Error(`Expected receive valid private key, not "${privateKey}"`);
   let key: bigint;
   if (privateKey instanceof Uint8Array) {
+    if (privateKey.length !== 32) throw new Error('Expected 32 bytes of private key');
     key = bytesToNumber(privateKey);
   } else if (typeof privateKey === 'string') {
+    if (privateKey.length !== 64) throw new Error('Expected 32 bytes of private key');
     key = hexToNumber(privateKey);
-  } else {
+  } else if (Number.isSafeInteger(privateKey) && privateKey > 0) {
     key = BigInt(privateKey);
+  } else if (typeof privateKey === 'bigint' && privateKey > 0n && privateKey < CURVE.P) {
+    key = privateKey;
+  } else {
+    throw new TypeError('Expected valid private key');
   }
   return key;
 }
@@ -789,7 +794,7 @@ function normalizeSignature(signature: Sig): Signature {
 }
 
 export function getPublicKey(
-  privateKey: Uint8Array | bigint | number,
+  privateKey: Uint8Array | number | bigint,
   isCompressed?: boolean
 ): Uint8Array;
 export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
@@ -828,11 +833,8 @@ function isPub(item: PrivKey | PubKey): boolean {
 
 // ECDH (Elliptic Curve Diffie Hellman) implementation.
 export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed = false): Hex {
-  if (isPub(privateA) && !isPub(publicB)) {
-    [privateA, publicB] = [publicB as PrivKey, privateA as PubKey];
-  } else if (!isPub(publicB)) {
-    throw new Error('Received invalid keys');
-  }
+  if (isPub(privateA)) throw new TypeError('getSharedSecret: first arg must be private key');
+  if (!isPub(publicB)) throw new TypeError('getSharedSecret: second arg must be public key');
   const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
   b.assertValidity();
   const shared = b.multiply(normalizePrivateKey(privateA));

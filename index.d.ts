@@ -48,7 +48,7 @@ export declare class Signature {
     toHex(isCompressed?: boolean): string;
 }
 export declare const SignResult: typeof Signature;
-export declare function getPublicKey(privateKey: Uint8Array | bigint | number, isCompressed?: boolean): Uint8Array;
+export declare function getPublicKey(privateKey: Uint8Array | number | bigint, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
 export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;

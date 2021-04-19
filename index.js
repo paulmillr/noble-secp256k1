@@ -581,17 +581,25 @@ function calcQRSFromK(k, msg, priv) {
     return [q, r, s];
 }
 function normalizePrivateKey(privateKey) {
-    if (!privateKey)
-        throw new Error(`Expected receive valid private key, not "${privateKey}"`);
     let key;
     if (privateKey instanceof Uint8Array) {
+        if (privateKey.length !== 32)
+            throw new Error('Expected 32 bytes of private key');
         key = bytesToNumber(privateKey);
     }
     else if (typeof privateKey === 'string') {
+        if (privateKey.length !== 64)
+            throw new Error('Expected 32 bytes of private key');
         key = hexToNumber(privateKey);
     }
-    else {
+    else if (Number.isSafeInteger(privateKey) && privateKey > 0) {
         key = BigInt(privateKey);
+    }
+    else if (typeof privateKey === 'bigint' && privateKey > 0n && privateKey < CURVE.P) {
+        key = privateKey;
+    }
+    else {
+        throw new TypeError(`Expected valid private key`);
     }
     return key;
 }
@@ -627,12 +635,10 @@ function isPub(item) {
     return false;
 }
 function getSharedSecret(privateA, publicB, isCompressed = false) {
-    if (isPub(privateA) && !isPub(publicB)) {
-        [privateA, publicB] = [publicB, privateA];
-    }
-    else if (!isPub(publicB)) {
-        throw new Error('Received invalid keys');
-    }
+    if (isPub(privateA))
+        throw new TypeError('getSharedSecret: first arg must be private key');
+    if (!isPub(publicB))
+        throw new TypeError('getSharedSecret: second arg must be public key');
     const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
     b.assertValidity();
     const shared = b.multiply(normalizePrivateKey(privateA));
