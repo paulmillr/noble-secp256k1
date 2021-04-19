@@ -591,10 +591,10 @@ function hexToNumber(hex: string): bigint {
 }
 
 function hexToBytes(hex: string): Uint8Array {
-  hex = hex.length & 1 ? `0${hex}` : hex;
+  if (hex.length & 1) throw new Error('Expected valid hex');
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
-    let j = i * 2;
+    const j = i * 2;
     array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
   }
   return array;
