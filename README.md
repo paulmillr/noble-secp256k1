@@ -6,7 +6,7 @@ ECDH key agreement protocol and signature schemes.
 
 Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BIP0340.
 
-Algorithmically resistant to timing attacks. Tested against thousands of vectors from tiny-secp256k1.
+Tested against thousands of test vectors from a different library.
 
 Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
 
