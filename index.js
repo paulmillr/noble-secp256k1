@@ -518,29 +518,27 @@ function invertBatch(nums, n = CURVE.P) {
     }
     return nums;
 }
+const divNearest = (a, b) => (a + b / 2n) / b;
+const POW_2_128 = 2n ** 128n;
 function splitScalarEndo(k) {
     const { n } = CURVE;
-    const POW_2_128 = 2n ** 128n;
-    const POW_2_383 = 2n ** 383n;
-    const POW_2_384 = POW_2_383 * 2n;
+    const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
     const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
-    const b2 = 0x3086d221a7d46bcde86c90e49284eb15n;
-    const g1 = 0x3086d221a7d46bcde86c90e49284eb153daa8a1471e8ca7fe893209a45dbb031n;
-    const g2 = 0xe4437ed6010e88286f547fa90abfe4c4221208ac9df506c61571b4ae8ac47f71n;
-    const lambda = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n;
-    const c1 = ((k * g1 + POW_2_383) / POW_2_384) * -b1;
-    const c2 = ((k * g2 + POW_2_383) / POW_2_384) * -b2;
-    let r2 = mod(c1 + c2, n);
-    let r1 = mod(k - r2 * lambda, n);
-    const r1neg = r1 > POW_2_128;
-    const r2neg = r2 > POW_2_128;
-    if (r1neg)
-        r1 = n - r1;
-    if (r2neg)
-        r2 = n - r2;
-    if (r1 > POW_2_128 || r2 > POW_2_128)
+    const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
+    const b2 = a1;
+    const c1 = divNearest(b2 * k, n);
+    const c2 = divNearest(-b1 * k, n);
+    let k1 = mod(k - c1 * a1 - c2 * a2, n);
+    let k2 = mod(-c1 * b1 - c2 * b2, n);
+    const k1neg = k1 > POW_2_128;
+    const k2neg = k2 > POW_2_128;
+    if (k1neg)
+        k1 = n - k1;
+    if (k2neg)
+        k2 = n - k2;
+    if (k1 > POW_2_128 || k2 > POW_2_128)
         throw new Error('Endomorphism failed');
-    return [r1neg, r1, r2neg, r2];
+    return [k1neg, k1, k2neg, k2];
 }
 function truncateHash(hash) {
     hash = typeof hash === 'string' ? hash : bytesToHex(hash);
