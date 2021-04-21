@@ -204,10 +204,8 @@ class JacobianPoint {
   // Default window size is set by `utils.precompute()` and is equal to 8.
   // Which means we are caching 65536 points: 256 points for every bit from 0 to 256.
   private precomputeWindow(W: number): JacobianPoint[] {
-    // splitScalarEndo could return 129-bit numbers, so we need at least
-    // 128 / W + 1. It seems to be possible to receive 130-bit numbers?
-    // So, using +2 to protect against this
-    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+    // splitScalarEndo could return 129-bit numbers, so we need at least 128 / W + 1
+    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
     let points: JacobianPoint[] = [];
     let p: JacobianPoint = this;
     let base = p;
@@ -246,8 +244,7 @@ class JacobianPoint {
     let p = JacobianPoint.ZERO;
     let f = JacobianPoint.ZERO;
 
-    // See notice in precomputeWindow why W + 2
-    const windows = USE_ENDOMORPHISM ? 128 / W + 2 : 256 / W + 1;
+    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
     const windowSize = 2 ** (W - 1); // W=8 128
     const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b11111111 for W=8
     const maxNumber = 2 ** W; // W=8 256
@@ -678,22 +675,27 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
 }
 
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
-// Used for endomorphism.
-// https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
+// Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
   const { n } = CURVE;
-  const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
+  const POW_2_128 = 2n ** 128n;
+  const POW_2_383 = 2n ** 383n;
+  const POW_2_384 = POW_2_383 * 2n;
   const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
-  const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
-  const b2 = a1;
-  const c1 = (b2 * k) / n;
-  const c2 = (-b1 * k) / n;
-  const k1 = k - c1 * a1 - c2 * a2;
-  const k2 = -c1 * b1 - c2 * b2;
-  const k1neg = k1 < 0;
-  const k2neg = k2 < 0;
-  // let lambda = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n;
-  return [k1neg, k1neg ? -k1 : k1, k2neg, k2neg ? -k2 : k2];
+  const b2 = 0x3086d221a7d46bcde86c90e49284eb15n;
+  const g1 = 0x3086d221a7d46bcde86c90e49284eb153daa8a1471e8ca7fe893209a45dbb031n;
+  const g2 = 0xe4437ed6010e88286f547fa90abfe4c4221208ac9df506c61571b4ae8ac47f71n;
+  const lambda = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n;
+  const c1 = ((k * g1 + POW_2_383) / POW_2_384) * -b1;
+  const c2 = ((k * g2 + POW_2_383) / POW_2_384) * -b2;
+  let r2 = mod(c1 + c2, n);
+  let r1 = mod(k - r2 * lambda, n);
+  const r1neg = r1 > POW_2_128;
+  const r2neg = r2 > POW_2_128;
+  if (r1neg) r1 = n - r1;
+  if (r2neg) r2 = n - r2;
+  if (r1 > POW_2_128 || r2 > POW_2_128) throw new Error('Endomorphism failed');
+  return [r1neg, r1, r2neg, r2];
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
