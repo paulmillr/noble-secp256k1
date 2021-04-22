@@ -1,4 +1,5 @@
-'use strict';
+"use strict";
+/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.utils = exports.schnorr = exports.verify = exports.sign = exports.getSharedSecret = exports.recoverPublicKey = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.CURVE = void 0;
 const CURVE = {
