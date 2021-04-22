@@ -2,13 +2,9 @@
 
 [Fastest](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and signature schemes.
+ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BIP0340.
 
-Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BIP0340.
-
-[**Audited**](#security) by an independent security firm. Tested against thousands of test vectors from a different library.
-
-Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
+[**Audited**](#security) by an independent security firm. Tested against thousands of test vectors from a different library. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
 
 ### This library belongs to *noble* crypto
 
