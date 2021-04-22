@@ -6,7 +6,7 @@ ECDH key agreement protocol and signature schemes.
 
 Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BIP0340.
 
-Tested against thousands of test vectors from a different library.
+[**Audited**](#security) by an independent security firm. Tested against thousands of test vectors from a different library.
 
 Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
 
@@ -225,7 +225,7 @@ secp256k1.Signature {
 
 ## Security
 
-Noble is production-ready. Our goal is to have it audited by a good security expert.
+Noble is production-ready. The library has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_noble-lib.pdf).
 
 We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But:
 
