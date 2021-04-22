@@ -1,6 +1,9 @@
 const {run, mark, logMem} = require('micro-bmark');
 const secp = require('..');
-
+const {join} = require('path');
+const points = require('fs').readFileSync(
+  join(__dirname, './vectors/points.txt'), 'utf-8'
+).split('\n').filter(a => a).slice(0, 1000);
 
 function hexToBytes(hex) {
   hex = hex.length & 1 ? `0${hex}` : hex;
@@ -65,6 +68,12 @@ run(async (windowSize) => {
   await mark('getSharedSecret (precomputed)', samples, () => {
     secp.getSharedSecret(priv, pubKeyPre);
   });
+
+  let i = 0;
+  await mark('Point.fromHex (decompression)', samples * 2, () => {
+    const p = points[i++ % points.length];
+    secp.Point.fromHex(p);
+  })
 
   const ss = await secp.schnorr.sign(
     '0000000000000000000000000000000000000000000000000000000000000000',

@@ -13,7 +13,6 @@ const CURVE = {
 };
 exports.CURVE = CURVE;
 const PRIME_SIZE = 256;
-const P_DIV4_1 = (CURVE.P + 1n) / 4n;
 function weistrass(x) {
     const { a, b } = CURVE;
     return mod(x ** 3n + a * x + b);
@@ -251,7 +250,7 @@ class Point {
         const isShort = bytes.length === 32;
         const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
         const sqrY = weistrass(x);
-        let y = powMod(sqrY, P_DIV4_1, CURVE.P);
+        let y = sqrtMod(sqrY);
         if (isShort) {
             const isYOdd = (y & 1n) === 1n;
             if (isYOdd)
@@ -464,16 +463,31 @@ function mod(a, b = CURVE.P) {
     const result = a % b;
     return result >= 0 ? result : b + result;
 }
-function powMod(x, power, order) {
-    let res = 1n;
-    while (power > 0) {
-        if (power & 1n) {
-            res = mod(res * x, order);
-        }
-        power >>= 1n;
-        x = mod(x * x, order);
+function powMod2(t, power) {
+    const { P } = CURVE;
+    let res = t;
+    while (power-- > 0n) {
+        res *= res;
+        res %= P;
     }
     return res;
+}
+function sqrtMod(a) {
+    const { P } = CURVE;
+    const x2 = (a * a * a) % P;
+    const x3 = (x2 * x2 * a) % P;
+    const x6 = (powMod2(x3, 3n) * x3) % P;
+    const x9 = (powMod2(x6, 3n) * x3) % P;
+    const x11 = (powMod2(x9, 2n) * x2) % P;
+    const x22 = (powMod2(x11, 11n) * x11) % P;
+    const x44 = (powMod2(x22, 22n) * x22) % P;
+    const x88 = (powMod2(x44, 44n) * x44) % P;
+    const x176 = (powMod2(x88, 88n) * x88) % P;
+    const x220 = (powMod2(x176, 44n) * x44) % P;
+    const x223 = (powMod2(x220, 3n) * x3) % P;
+    const t1 = (powMod2(x223, 23n) * x22) % P;
+    const t2 = (powMod2(t1, 6n) * x2) % P;
+    return powMod2(t2, 2n);
 }
 function egcd(a, b) {
     let [x, y, u, v] = [0n, 1n, 1n, 0n];

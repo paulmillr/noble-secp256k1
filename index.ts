@@ -22,7 +22,6 @@ const CURVE = {
 };
 
 const PRIME_SIZE = 256;
-const P_DIV4_1 = (CURVE.P + 1n) / 4n;
 
 // Cleaner js output if that's on a separate line.
 export { CURVE };
@@ -350,7 +349,7 @@ export class Point {
     const isShort = bytes.length === 32;
     const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
     const sqrY = weistrass(x); // y^2 = x^3 + ax + b
-    let y = powMod(sqrY, P_DIV4_1, CURVE.P); // y = y2 ^ (p+1)/4
+    let y = sqrtMod(sqrY); // y = y2 ^ (p+1)/4
     if (isShort) {
       // Schnorr
       const isYOdd = (y & 1n) === 1n;
@@ -614,17 +613,35 @@ function mod(a: bigint, b: bigint = CURVE.P): bigint {
   return result >= 0 ? result : b + result;
 }
 
-// Modular exponentiation
-function powMod(x: bigint, power: bigint, order: bigint) {
-  let res = 1n;
-  while (power > 0) {
-    if (power & 1n) {
-      res = mod(res * x, order);
-    }
-    power >>= 1n;
-    x = mod(x * x, order);
+// Does t ^ (2 ^ power). E.g. 30 ^ (2 ^ 4)
+function powMod2(t: bigint, power: bigint) {
+  const { P } = CURVE;
+  let res = t;
+  while (power-- > 0n) {
+    res *= res;
+    res %= P;
   }
   return res;
+}
+
+// Exponentiation to (CURVE.P + 1n) / 4n
+// We are unwrapping the loop because it's 2x faster.
+function sqrtMod(a: bigint): bigint {
+  const { P } = CURVE;
+  const x2 = (a * a * a) % P; // a^3
+  const x3 = (x2 * x2 * a) % P; // a^7
+  const x6 = (powMod2(x3, 3n) * x3) % P;
+  const x9 = (powMod2(x6, 3n) * x3) % P;
+  const x11 = (powMod2(x9, 2n) * x2) % P;
+  const x22 = (powMod2(x11, 11n) * x11) % P;
+  const x44 = (powMod2(x22, 22n) * x22) % P;
+  const x88 = (powMod2(x44, 44n) * x44) % P;
+  const x176 = (powMod2(x88, 88n) * x88) % P;
+  const x220 = (powMod2(x176, 44n) * x44) % P;
+  const x223 = (powMod2(x220, 3n) * x3) % P;
+  const t1 = (powMod2(x223, 23n) * x22) % P;
+  const t2 = (powMod2(t1, 6n) * x2) % P;
+  return powMod2(t2, 2n);
 }
 
 // Eucledian GCD
