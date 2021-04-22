@@ -445,7 +445,7 @@ function hexToNumber(hex) {
     return BigInt(`0x${hex}`);
 }
 function hexToBytes(hex) {
-    if (hex.length & 1)
+    if (typeof hex !== 'string' || hex.length % 2)
         throw new Error('Expected valid hex');
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
