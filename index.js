@@ -489,7 +489,12 @@ function sqrtMod(x) {
     const t2 = (pow2(t1, 6n) * b2) % P;
     return pow2(t2, 2n);
 }
-function egcd(a, b) {
+function invert(number, modulo = CURVE.P) {
+    if (number === 0n || modulo <= 0n) {
+        throw new Error('invert: expected positive integers');
+    }
+    let a = mod(number, modulo);
+    let b = modulo;
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
     while (a !== 0n) {
         const q = b / a;
@@ -501,13 +506,6 @@ function egcd(a, b) {
         [u, v] = [m, n];
     }
     const gcd = b;
-    return [gcd, x, y];
-}
-function invert(number, modulo = CURVE.P) {
-    if (number === 0n || modulo <= 0n) {
-        throw new Error('invert: expected positive integers');
-    }
-    const [gcd, x] = egcd(mod(number, modulo), modulo);
     if (gcd !== 1n)
         throw new Error('invert: does not exist');
     return mod(x, modulo);

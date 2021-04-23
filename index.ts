@@ -642,9 +642,14 @@ function sqrtMod(x: bigint): bigint {
   return pow2(t2, 2n);
 }
 
-// Eucledian GCD
-// https://brilliant.org/wiki/extended-euclidean-algorithm/
-function egcd(a: bigint, b: bigint) {
+// Inverses number over modulo
+function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
+  if (number === 0n || modulo <= 0n) {
+    throw new Error('invert: expected positive integers');
+  }
+  // Eucledian GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
+  let a = mod(number, modulo);
+  let b = modulo;
   let [x, y, u, v] = [0n, 1n, 1n, 0n];
   while (a !== 0n) {
     const q = b / a;
@@ -656,15 +661,6 @@ function egcd(a: bigint, b: bigint) {
     [u, v] = [m, n];
   }
   const gcd = b;
-  return [gcd, x, y];
-}
-
-// Inverses number over modulo
-function invert(number: bigint, modulo: bigint = CURVE.P) {
-  if (number === 0n || modulo <= 0n) {
-    throw new Error('invert: expected positive integers');
-  }
-  const [gcd, x] = egcd(mod(number, modulo), modulo);
   if (gcd !== 1n) throw new Error('invert: does not exist');
   return mod(x, modulo);
 }
