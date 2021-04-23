@@ -150,6 +150,9 @@ describe('secp256k1', () => {
           }).toThrowError();
         }
       }
+      for (const num of [0n, 0, -1n, -1, 1.1]) {
+        expect(() => secp.Point.BASE.multiply(num)).toThrowError();
+      }
     });
   });
 

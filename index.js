@@ -107,13 +107,9 @@ class JacobianPoint {
         return this.add(other.negate());
     }
     multiplyUnsafe(scalar) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-            throw new TypeError('Point#multiply: expected number or bigint');
-        }
+        if (!isValidScalar(scalar))
+            throw new TypeError('Point#multiply: expected valid scalar');
         let n = mod(BigInt(scalar), CURVE.n);
-        if (n <= 0) {
-            throw new Error('Point#multiply: invalid scalar, expected positive integer');
-        }
         if (!USE_ENDOMORPHISM) {
             let p = JacobianPoint.ZERO;
             let d = this;
@@ -202,13 +198,9 @@ class JacobianPoint {
         return [p, f];
     }
     multiply(scalar, affinePoint) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-            throw new TypeError('Point#multiply: expected number or bigint');
-        }
+        if (!isValidScalar(scalar))
+            throw new TypeError('Point#multiply: expected valid scalar');
         let n = mod(BigInt(scalar), CURVE.n);
-        if (n <= 0) {
-            throw new Error('Point#multiply: invalid scalar, expected positive integer');
-        }
         let point;
         let fake;
         if (USE_ENDOMORPHISM) {
@@ -459,6 +451,13 @@ function bytesToNumber(bytes) {
 }
 function parseByte(str) {
     return Number.parseInt(str, 16) * 2;
+}
+function isValidScalar(num) {
+    if (typeof num === 'bigint' && num > 0n)
+        return true;
+    if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
+        return true;
+    return false;
 }
 function mod(a, b = CURVE.P) {
     const result = a % b;

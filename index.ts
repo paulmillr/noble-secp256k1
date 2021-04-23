@@ -162,13 +162,8 @@ class JacobianPoint {
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification, which works over *public* keys.
   multiplyUnsafe(scalar: bigint): JacobianPoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
+    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected valid scalar');
     let n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
     if (!USE_ENDOMORPHISM) {
       let p = JacobianPoint.ZERO;
       let d: JacobianPoint = this;
@@ -281,13 +276,8 @@ class JacobianPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): JacobianPoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
+    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected valid scalar');
     let n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
     // Real point.
     let point: JacobianPoint;
     // Fake point, we use it to achieve constant-time multiplication.
@@ -602,6 +592,12 @@ function bytesToNumber(bytes: Uint8Array): bigint {
 
 function parseByte(str: string): number {
   return Number.parseInt(str, 16) * 2;
+}
+
+function isValidScalar(num: number | bigint): boolean {
+  if (typeof num === 'bigint' && num > 0n) return true;
+  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return true;
+  return false;
 }
 
 // -------------------------
@@ -975,6 +971,7 @@ function schnorrGetPublicKey(privateKey: PrivKey): Hex {
   return typeof privateKey === 'string' ? P.toHexX() : P.toRawX();
 }
 
+// Schnorr signature verifies itself before producing an output, which makes it safer
 async function schnorrSign(msgHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
 async function schnorrSign(
   msgHash: Uint8Array,
@@ -1017,6 +1014,7 @@ async function schnorrSign(
   return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 
+// Also used in sign() function.
 async function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Promise<boolean> {
   const sig =
     signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
