@@ -612,10 +612,10 @@ function mod(a: bigint, b: bigint = CURVE.P): bigint {
   return result >= 0 ? result : b + result;
 }
 
-// Does t ^ (2 ^ power). E.g. 30 ^ (2 ^ 4)
-function powMod2(t: bigint, power: bigint) {
+// Does x ^ (2 ^ power). E.g. 30 ^ (2 ^ 4)
+function pow2(x: bigint, power: bigint): bigint {
   const { P } = CURVE;
-  let res = t;
+  let res = x;
   while (power-- > 0n) {
     res *= res;
     res %= P;
@@ -623,24 +623,27 @@ function powMod2(t: bigint, power: bigint) {
   return res;
 }
 
-// Exponentiation to (CURVE.P + 1n) / 4n
+// Used to calculate y - the square root of y^2.
+// Exponentiates it to very big number (P+1)/4.
 // We are unwrapping the loop because it's 2x faster.
-function sqrtMod(a: bigint): bigint {
+// (P+1n/4n).toString(2) would produce bits [223x 1, 0, 22x 1, 4x 0, 11, 00]
+// We are multiplying it bit-by-bit
+function sqrtMod(x: bigint): bigint {
   const { P } = CURVE;
-  const x2 = (a * a * a) % P; // a^3
-  const x3 = (x2 * x2 * a) % P; // a^7
-  const x6 = (powMod2(x3, 3n) * x3) % P;
-  const x9 = (powMod2(x6, 3n) * x3) % P;
-  const x11 = (powMod2(x9, 2n) * x2) % P;
-  const x22 = (powMod2(x11, 11n) * x11) % P;
-  const x44 = (powMod2(x22, 22n) * x22) % P;
-  const x88 = (powMod2(x44, 44n) * x44) % P;
-  const x176 = (powMod2(x88, 88n) * x88) % P;
-  const x220 = (powMod2(x176, 44n) * x44) % P;
-  const x223 = (powMod2(x220, 3n) * x3) % P;
-  const t1 = (powMod2(x223, 23n) * x22) % P;
-  const t2 = (powMod2(t1, 6n) * x2) % P;
-  return powMod2(t2, 2n);
+  const b2 = (x * x * x) % P; // x^3, 11
+  const b3 = (b2 * b2 * x) % P; // x^7
+  const b6 = (pow2(b3, 3n) * b3) % P;
+  const b9 = (pow2(b6, 3n) * b3) % P;
+  const b11 = (pow2(b9, 2n) * b2) % P;
+  const b22 = (pow2(b11, 11n) * b11) % P;
+  const b44 = (pow2(b22, 22n) * b22) % P;
+  const b88 = (pow2(b44, 44n) * b44) % P;
+  const b176 = (pow2(b88, 88n) * b88) % P;
+  const b220 = (pow2(b176, 44n) * b44) % P;
+  const b223 = (pow2(b220, 3n) * b3) % P;
+  const t1 = (pow2(b223, 23n) * b22) % P;
+  const t2 = (pow2(t1, 6n) * b2) % P;
+  return pow2(t2, 2n);
 }
 
 // Eucledian GCD

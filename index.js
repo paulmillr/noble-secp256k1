@@ -464,31 +464,31 @@ function mod(a, b = CURVE.P) {
     const result = a % b;
     return result >= 0 ? result : b + result;
 }
-function powMod2(t, power) {
+function pow2(x, power) {
     const { P } = CURVE;
-    let res = t;
+    let res = x;
     while (power-- > 0n) {
         res *= res;
         res %= P;
     }
     return res;
 }
-function sqrtMod(a) {
+function sqrtMod(x) {
     const { P } = CURVE;
-    const x2 = (a * a * a) % P;
-    const x3 = (x2 * x2 * a) % P;
-    const x6 = (powMod2(x3, 3n) * x3) % P;
-    const x9 = (powMod2(x6, 3n) * x3) % P;
-    const x11 = (powMod2(x9, 2n) * x2) % P;
-    const x22 = (powMod2(x11, 11n) * x11) % P;
-    const x44 = (powMod2(x22, 22n) * x22) % P;
-    const x88 = (powMod2(x44, 44n) * x44) % P;
-    const x176 = (powMod2(x88, 88n) * x88) % P;
-    const x220 = (powMod2(x176, 44n) * x44) % P;
-    const x223 = (powMod2(x220, 3n) * x3) % P;
-    const t1 = (powMod2(x223, 23n) * x22) % P;
-    const t2 = (powMod2(t1, 6n) * x2) % P;
-    return powMod2(t2, 2n);
+    const b2 = (x * x * x) % P;
+    const b3 = (b2 * b2 * x) % P;
+    const b6 = (pow2(b3, 3n) * b3) % P;
+    const b9 = (pow2(b6, 3n) * b3) % P;
+    const b11 = (pow2(b9, 2n) * b2) % P;
+    const b22 = (pow2(b11, 11n) * b11) % P;
+    const b44 = (pow2(b22, 22n) * b22) % P;
+    const b88 = (pow2(b44, 44n) * b44) % P;
+    const b176 = (pow2(b88, 88n) * b88) % P;
+    const b220 = (pow2(b176, 44n) * b44) % P;
+    const b223 = (pow2(b220, 3n) * b3) % P;
+    const t1 = (pow2(b223, 23n) * b22) % P;
+    const t2 = (pow2(t1, 6n) * b2) % P;
+    return pow2(t2, 2n);
 }
 function egcd(a, b) {
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
