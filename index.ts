@@ -924,8 +924,6 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean
   const { r, s } = sig;
   const h = truncateHash(msgHash);
   if (h === 0n) return false; // Probably forged, protect against fault attacks
-
-  // if (h === 0n) return false;
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
   const s1 = invert(s, n);
   const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, n));
