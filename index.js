@@ -365,7 +365,7 @@ class Signature {
     }
     static fromHex(hex) {
         if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
-            throw new TypeError(`Invalid signature. Expected string or Uint8Array`);
+            throw new TypeError(`Signature.fromHex: Expected string or Uint8Array`);
         }
         const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
         const length = parseByte(str.slice(2, 4));
@@ -374,18 +374,32 @@ class Signature {
         }
         const rLen = parseByte(str.slice(6, 8));
         const rEnd = 8 + rLen;
-        const r = hexToNumber(str.slice(8, rEnd));
-        const check3 = str.slice(rEnd, rEnd + 2);
-        if (check3 !== '02') {
-            throw new Error('Signature.fromHex: Invalid signature');
+        const rr = str.slice(8, rEnd);
+        if (rr.startsWith('00') && parseByte(rr.slice(2, 4)) <= 0x7f) {
+            throw new Error('Signature.fromHex: Invalid r with trailing length');
+        }
+        const r = hexToNumber(rr);
+        const separator = str.slice(rEnd, rEnd + 2);
+        if (separator !== '02') {
+            throw new Error('Signature.fromHex: Invalid r-s separator');
         }
         const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
+        const diff = length - sLen - rLen - 10;
+        if (diff > 0 || diff === -4) {
+            throw new Error(`Signature.fromHex: Invalid total length`);
+        }
+        if (sLen > length - rLen - 4) {
+            throw new Error(`Signature.fromHex: Invalid s`);
+        }
         const sStart = rEnd + 4;
-        const s = hexToNumber(str.slice(sStart, sStart + sLen));
+        const ss = str.slice(sStart, sStart + sLen);
+        if (ss.startsWith('00') && parseByte(ss.slice(2, 4)) <= 0x7f) {
+            throw new Error(`Signature.fromHex: Invalid s with trailing length`);
+        }
+        const s = hexToNumber(ss);
         return new Signature(r, s);
     }
     assertValidity() {
-        const { n } = CURVE;
         const { r, s } = this;
         if (!isWithinCurveOrder(r))
             throw new Error('Invalid Signature: r must be 0 < r < n');
