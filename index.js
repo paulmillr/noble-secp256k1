@@ -711,10 +711,13 @@ function verify(signature, msgHash, publicKey) {
         return false;
     const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
     const s1 = invert(s, n);
-    const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, n));
-    const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, n));
-    const res = Ghs1.add(Prs1).toAffine();
-    return res.x === r;
+    const u1 = mod(h * s1, n);
+    const u2 = mod(r * s1, n);
+    const Ghs1 = JacobianPoint.BASE.multiply(u1);
+    const Prs1 = pubKey.multiplyUnsafe(u2);
+    const R = Ghs1.add(Prs1).toAffine();
+    const v = mod(R.x, n);
+    return v === r;
 }
 exports.verify = verify;
 async function taggedHash(tag, ...messages) {

@@ -9,7 +9,8 @@ import * as points from './vectors/points.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
 
-const MAX_PRIVATE_KEY = secp.CURVE.n - 1n;
+const FC_BIGINT = fc.bigInt(1n, secp.CURVE.n - 1n);
+
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 function hexToArray(hex: string): Uint8Array {
   hex = hex.length & 1 ? `0${hex}` : hex;
@@ -97,7 +98,8 @@ describe('secp256k1', () => {
 
     it('#toHex() roundtrip', () => {
       fc.assert(
-        fc.property(fc.bigInt(1n, MAX_PRIVATE_KEY), (x) => {
+        fc.property(FC_BIGINT, (x) => {
+
           const point1 = secp.Point.fromPrivateKey(x);
           const hex = point1.toHex(true);
           expect(secp.Point.fromHex(hex).toHex(true)).toBe(hex);
@@ -159,7 +161,7 @@ describe('secp256k1', () => {
   describe('Signature', () => {
     it('.fromHex() roundtrip', () => {
       fc.assert(
-        fc.property(fc.bigInt(1n, MAX_PRIVATE_KEY), fc.bigInt(1n, MAX_PRIVATE_KEY), (r, s) => {
+        fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
           const signature = new secp.Signature(r, s);
           const hex = signature.toHex();
           expect(secp.Signature.fromHex(hex)).toEqual(signature);
@@ -239,6 +241,15 @@ describe('secp256k1', () => {
       expect(publicKey.length).toBe(65);
       expect(secp.verify(signature, WRONG_MSG, publicKey)).toBe(false);
     });
+    it('should verify random signatures', async () => {
+      fc.assert(
+        fc.asyncProperty(FC_BIGINT, fc.hexaString(64, 64), async (privKey, msg) => {
+          const pub = secp.getPublicKey(privKey);
+          const sig = await secp.sign(msg, privKey);
+          expect(secp.verify(sig, msg, pub)).toBeTruthy();
+        })
+      );
+    });
     it('should not verify signature with invalid r/s', () => {
       const msg = new Uint8Array([0xbb, 0x5a, 0x52, 0xf4, 0x2f, 0x9c, 0x92, 0x61, 0xed, 0x43, 0x61, 0xf5, 0x94, 0x22, 0xa1, 0xe3, 0x00, 0x36, 0xe7, 0xc3, 0x2b, 0x27, 0x0c, 0x88, 0x07, 0xa4, 0x19, 0xfe, 0xca, 0x60, 0x50, 0x23]);
       const x = 100260381870027870612475458630405506840396644859280795015145920502443964769584n;
@@ -253,20 +264,25 @@ describe('secp256k1', () => {
       // Verifies, but it shouldn't, because signature S > curve order
       expect(verified).toBeFalsy();
     });
-    it('should not verify all-zero signature', async() => {
+    it('should not verify msg = curve order', async() => {
+      const msg = 'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141'
       const x = 55066263022277343669578718895168534326250603453777594175500187360389116729240n;
       const y = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
+      const r = 104546003225722045112039007203142344920046999340768276760147352389092131869133n;
+      const s = 96900796730960181123786672629079577025401317267213807243199432755332205217369n;
       const pub = new secp.Point(x, y);
-      const sig = new secp.Signature(
-        104546003225722045112039007203142344920046999340768276760147352389092131869133n,
-        96900796730960181123786672629079577025401317267213807243199432755332205217369n
-      );
-      const msg = '00'.repeat(32);
-      const msg2 = new Uint8Array([
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41
-      ]);
+      const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeFalsy();
-      expect(secp.verify(sig, msg2, pub)).toBeFalsy();
+    });
+    it('should verify msg bb5a...', async() => {
+      const msg = 'bb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023';
+      const x = 3252872872578928810725465493269682203671229454553002637820453004368632726370n
+      const y = 17482644437196207387910659778872952193236850502325156318830589868678978890912n;
+      const r = 432420386565659656852420866390673177323n;
+      const s = 115792089237316195423570985008687907852837564279074904382605163141518161494334n;
+      const pub = new secp.Point(x, y);
+      const sig = new secp.Signature(r, s);
+      expect(secp.verify(sig, msg, pub)).toBeTruthy();
     })
   });
 

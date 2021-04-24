@@ -865,6 +865,7 @@ type OptsRecovered = { recovered: true; canonical?: true };
 type OptsNoRecovered = { recovered?: false; canonical?: true };
 type Opts = { recovered?: boolean; canonical?: true };
 
+// https://www.secg.org/sec1-v2.pdf, section 4.1.3
 export async function sign(
   msgHash: Uint8Array,
   privateKey: PrivKey,
@@ -913,6 +914,7 @@ export async function sign(
   return recovered ? [hashed, recovery] : hashed;
 }
 
+// https://www.secg.org/sec1-v2.pdf, section 4.1.4
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
   const { n } = CURVE;
   const sig = normalizeSignature(signature);
@@ -925,11 +927,14 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean
   const h = truncateHash(msgHash);
   if (h === 0n) return false; // Probably forged, protect against fault attacks
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
-  const s1 = invert(s, n);
-  const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, n));
-  const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, n));
-  const res = Ghs1.add(Prs1).toAffine();
-  return res.x === r;
+  const s1 = invert(s, n); // s^-1
+  const u1 = mod(h * s1, n);
+  const u2 = mod(r * s1, n);
+  const Ghs1 = JacobianPoint.BASE.multiply(u1);
+  const Prs1 = pubKey.multiplyUnsafe(u2);
+  const R = Ghs1.add(Prs1).toAffine();
+  const v = mod(R.x, n);
+  return v === r;
 }
 
 // Schnorr-specific code as per BIP0340.
