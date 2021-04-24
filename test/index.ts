@@ -239,6 +239,20 @@ describe('secp256k1', () => {
       expect(publicKey.length).toBe(65);
       expect(secp.verify(signature, WRONG_MSG, publicKey)).toBe(false);
     });
+    it('should not verify signature with invalid r/s', () => {
+      const msg = new Uint8Array([0xbb, 0x5a, 0x52, 0xf4, 0x2f, 0x9c, 0x92, 0x61, 0xed, 0x43, 0x61, 0xf5, 0x94, 0x22, 0xa1, 0xe3, 0x00, 0x36, 0xe7, 0xc3, 0x2b, 0x27, 0x0c, 0x88, 0x07, 0xa4, 0x19, 0xfe, 0xca, 0x60, 0x50, 0x23]);
+      const x = 100260381870027870612475458630405506840396644859280795015145920502443964769584n;
+      const y = 41096923727651821103518389640356553930186852801619204169823347832429067794568n;
+      const r = 1n;
+      const s = 115792089237316195423570985008687907852837564279074904382605163141518162728904n;
+
+      const pub = new secp.Point(x, y);
+      const signature = new secp.Signature(r, s);
+
+      const verified = secp.verify(signature, msg, pub);
+      // Verifies, but it shouldn't, because signature S > curve order
+      expect(verified).toBeFalsy();
+    });
   });
 
   describe('schnorr', () => {

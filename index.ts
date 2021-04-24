@@ -20,8 +20,6 @@ const CURVE = {
   beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
 };
 
-const PRIME_SIZE = 256;
-
 // Cleaner js output if that's on a separate line.
 export { CURVE };
 
@@ -708,9 +706,10 @@ function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
-  hash = typeof hash === 'string' ? hash : bytesToHex(hash);
+  if (typeof hash !== 'string') hash = bytesToHex(hash);
   let msg = hexToNumber(hash || '0');
-  const delta = (hash.length / 2) * 8 - PRIME_SIZE;
+  const byteLength = hash.length / 2;
+  const delta = byteLength * 8 - 256; // size of curve.n
   if (delta > 0) {
     msg = msg >> BigInt(delta);
   }
@@ -907,13 +906,14 @@ export async function sign(
 }
 
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
-  const h = truncateHash(msgHash);
+  const { n } = CURVE;
   const { r, s } = normalizeSignature(signature);
-  if (r === 0n || s === 0n) return false;
+  if (r <= 0n || r >= n || s <= 0n || s >= n) return false;
+  const h = truncateHash(msgHash);
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
-  const s1 = invert(s, CURVE.n);
-  const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, CURVE.n));
-  const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, CURVE.n));
+  const s1 = invert(s, n);
+  const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, n));
+  const Prs1 = pubKey.multiplyUnsafe(mod(r * s1, n));
   const res = Ghs1.add(Prs1).toAffine();
   return res.x === r;
 }
