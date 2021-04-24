@@ -1,6 +1,6 @@
 {
   "name": "noble-secp256k1",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Fastest JS implementation of secp256k1. Zero-dependency, high-security, audited ECDSA & Schnorr",
   "main": "index.js",
   "files": [
