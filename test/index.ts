@@ -6,6 +6,7 @@ import * as ecdsa from './vectors/ecdsa.json';
 import * as ecdh from './vectors/ecdh.json';
 import * as privates from './vectors/privates.json';
 import * as points from './vectors/points.json';
+import * as wp from './vectors/wychenproof.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
 
@@ -367,4 +368,29 @@ describe('secp256k1', () => {
       }
     });
   });
+
+  describe('wychenproof vectors', () => {
+    it('should pass all tests', async () => {
+      for (let group of wp.testGroups) {
+        const pubKey = secp.Point.fromHex(group.key.uncompressed);
+        for (let test of group.tests) {
+          if (test.result === 'valid') {
+            const hash = await secp.utils.sha256(hexToArray(test.msg));
+            expect(secp.verify(test.sig, hash, pubKey)).toBeTruthy()
+          } else if (test.result === 'invalid') {
+            let fail = false;
+            const hash = await secp.utils.sha256(hexToArray(test.msg));
+            try {
+              if (!secp.verify(test.sig, hash, pubKey)) fail = true;
+            } catch (error) {
+              fail = true;
+            }
+            expect(fail).toBeTruthy();
+          } else {
+            expect(true).toBeTruthy();
+          }
+        }
+      }
+    })
+  })
 });
