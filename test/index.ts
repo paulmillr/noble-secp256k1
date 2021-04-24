@@ -260,11 +260,11 @@ describe('secp256k1', () => {
       const sig = new secp.Signature(
         104546003225722045112039007203142344920046999340768276760147352389092131869133n,
         96900796730960181123786672629079577025401317267213807243199432755332205217369n
-      )
+      );
+      const msg = '00'.repeat(32);
       const msg2 = new Uint8Array([
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41
       ]);
-      const msg = '00'.repeat(32);
       expect(secp.verify(sig, msg, pub)).toBeFalsy();
       expect(secp.verify(sig, msg2, pub)).toBeFalsy();
     })
