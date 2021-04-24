@@ -392,8 +392,9 @@ export class Point {
     } else {
       throw new TypeError('Message hash must be a hex string or Uint8Array');
     }
-    const { r, s } = normalizeSignature(signature);
-    if (r === 0n || s === 0n) throw new Error('Invalid signature');
+    const sig = normalizeSignature(signature);
+    sig.assertValidity();
+    const { r, s } = sig;
     if (recovery !== 0 && recovery !== 1) throw new Error('Invalid yParity bit');
     const prefix = 2 + (recovery & 1);
     const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
@@ -502,13 +503,20 @@ export class Signature {
     // s
     const check3 = str.slice(rEnd, rEnd + 2);
     if (check3 !== '02') {
-      throw new Error('SignResult.fromHex: Invalid signature');
+      throw new Error('Signature.fromHex: Invalid signature');
     }
     const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
     const sStart = rEnd + 4;
     const s = hexToNumber(str.slice(sStart, sStart + sLen));
 
     return new Signature(r, s);
+  }
+
+  assertValidity(): void {
+    const { n } = CURVE;
+    const { r, s } = this;
+    if (!isWithinCurveOrder(r)) throw new Error('Invalid Signature: r must be 0 < r < n');
+    if (!isWithinCurveOrder(s)) throw new Error('Invalid Signature: s must be 0 < s < n');
   }
 
   toRawBytes(isCompressed = false) {
@@ -753,7 +761,7 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
     v = await utils.hmacSha256(k, v);
     const T = bytesToNumber(v);
     let qrs: QRS;
-    if (isValidPrivateKey(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!)) {
+    if (isWithinCurveOrder(T) && (qrs = calcQRSFromK(T, h1n, privateKey)!)) {
       return qrs;
     }
     k = await utils.hmacSha256(k, v, b0);
@@ -763,9 +771,8 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: bigint) {
   throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 
-// Private key must be in bounds 0 < key < n
-function isValidPrivateKey(privateKey: bigint): boolean {
-  return 0 < privateKey && privateKey < CURVE.n;
+function isWithinCurveOrder(num: bigint): boolean {
+  return 0 < num && num < CURVE.n;
 }
 
 function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
@@ -777,22 +784,23 @@ function calcQRSFromK(k: bigint, msg: bigint, priv: bigint): QRS | undefined {
   return [q, r, s];
 }
 
-function normalizePrivateKey(privateKey: PrivKey): bigint {
-  let key: bigint;
-  if (privateKey instanceof Uint8Array) {
-    if (privateKey.length !== 32) throw new Error('Expected 32 bytes of private key');
-    key = bytesToNumber(privateKey);
-  } else if (typeof privateKey === 'string') {
-    if (privateKey.length !== 64) throw new Error('Expected 32 bytes of private key');
-    key = hexToNumber(privateKey);
-  } else if (Number.isSafeInteger(privateKey) && privateKey > 0) {
-    key = BigInt(privateKey);
-  } else if (typeof privateKey === 'bigint' && privateKey > 0n && privateKey < CURVE.P) {
-    key = privateKey;
+function normalizePrivateKey(key: PrivKey): bigint {
+  let num: bigint;
+  if (typeof key === 'bigint') {
+    num = key;
+  } else if (Number.isSafeInteger(key) && key > 0) {
+    num = BigInt(key);
+  } else if (typeof key === 'string') {
+    if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
+    num = hexToNumber(key);
+  } else if (key instanceof Uint8Array) {
+    if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
+    num = bytesToNumber(key);
   } else {
     throw new TypeError('Expected valid private key');
   }
-  return key;
+  if (!isWithinCurveOrder(num)) throw new Error('Expected private key 0 < key < n');
+  return num;
 }
 
 function normalizePublicKey(publicKey: PubKey): Point {
@@ -907,9 +915,17 @@ export async function sign(
 
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
   const { n } = CURVE;
-  const { r, s } = normalizeSignature(signature);
-  if (r <= 0n || r >= n || s <= 0n || s >= n) return false;
+  const sig = normalizeSignature(signature);
+  try {
+    sig.assertValidity();
+  } catch (error) {
+    return false;
+  }
+  const { r, s } = sig;
   const h = truncateHash(msgHash);
+  if (h === 0n) return false; // Probably forged, protect against fault attacks
+
+  // if (h === 0n) return false;
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
   const s1 = invert(s, n);
   const Ghs1 = JacobianPoint.BASE.multiply(mod(h * s1, n));
@@ -985,7 +1001,7 @@ async function schnorrSign(
   const { n } = CURVE;
   const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
   const d0 = normalizePrivateKey(privateKey);
-  if (!(0 < d0 && d0 < n)) throw new Error('Invalid private key');
+  if (!isWithinCurveOrder(d0)) throw new Error('Invalid private key');
   const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
   if (rand.length !== 32) throw new TypeError('Expected 32 bytes of aux randomness');
 
@@ -1040,7 +1056,12 @@ Point.BASE._setWindowSize(8);
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
-    return isValidPrivateKey(normalizePrivateKey(privateKey));
+    try {
+      normalizePrivateKey(privateKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
   },
 
   randomPrivateKey: (bytesLength: number = 32): Uint8Array => {

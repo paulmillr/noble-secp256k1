@@ -44,6 +44,7 @@ export declare class Signature {
     s: bigint;
     constructor(r: bigint, s: bigint);
     static fromHex(hex: Hex): Signature;
+    assertValidity(): void;
     toRawBytes(isCompressed?: boolean): Uint8Array;
     toHex(isCompressed?: boolean): string;
 }

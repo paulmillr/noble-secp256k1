@@ -42,7 +42,7 @@ describe('secp256k1', () => {
     }
   });
   it('.getPublicKey() rejects invalid keys', () => {
-    const invalid = [0, true, false, undefined, null, 1.1, -5, 'deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy'];
+    const invalid = [0, true, false, undefined, null, 1.1, -5, 'deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
     for (const item of invalid) {
       expect(() => secp.getPublicKey(item as any)).toThrowError();
     }
@@ -156,13 +156,13 @@ describe('secp256k1', () => {
     });
   });
 
-  describe('SignResult', () => {
+  describe('Signature', () => {
     it('.fromHex() roundtrip', () => {
       fc.assert(
         fc.property(fc.bigInt(1n, MAX_PRIVATE_KEY), fc.bigInt(1n, MAX_PRIVATE_KEY), (r, s) => {
-          const signature = new secp.SignResult(r, s);
+          const signature = new secp.Signature(r, s);
           const hex = signature.toHex();
-          expect(secp.SignResult.fromHex(hex)).toEqual(signature);
+          expect(secp.Signature.fromHex(hex)).toEqual(signature);
         })
       );
     });
@@ -174,7 +174,7 @@ describe('secp256k1', () => {
         const full = await secp.sign(vector.m, vector.d, { canonical: true });
         const vsig = vector.signature;
         const [vecR, vecS] = [vsig.slice(0, 64), vsig.slice(64, 128)];
-        const res = secp.SignResult.fromHex(full);
+        const res = secp.Signature.fromHex(full);
         expect(toBEHex(res.r)).toBe(vecR);
         expect(toBEHex(res.s)).toBe(vecS);
       }
@@ -253,6 +253,21 @@ describe('secp256k1', () => {
       // Verifies, but it shouldn't, because signature S > curve order
       expect(verified).toBeFalsy();
     });
+    it('should not verify all-zero signature', async() => {
+      const x = 55066263022277343669578718895168534326250603453777594175500187360389116729240n;
+      const y = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
+      const pub = new secp.Point(x, y);
+      const sig = new secp.Signature(
+        104546003225722045112039007203142344920046999340768276760147352389092131869133n,
+        96900796730960181123786672629079577025401317267213807243199432755332205217369n
+      )
+      const msg2 = new Uint8Array([
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41
+      ]);
+      const msg = '00'.repeat(32);
+      expect(secp.verify(sig, msg, pub)).toBeFalsy();
+      expect(secp.verify(sig, msg2, pub)).toBeFalsy();
+    })
   });
 
   describe('schnorr', () => {
