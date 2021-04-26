@@ -363,7 +363,7 @@ export class Point {
 
   // Converts hash string or Uint8Array to Point.
   static fromHex(hex: Hex): Point {
-    const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
+    const bytes = ensureBytes(hex);
     const header = bytes[0];
     if (bytes.length === 32 || (bytes.length === 33 && (header === 0x02 || header === 0x03))) {
       return this.fromCompressedHex(bytes);
@@ -467,7 +467,7 @@ export class Point {
 function sliceDer(s: string): string {
   // Proof: any([(i>=0x80) == (int(hex(i).replace('0x', '').zfill(2)[0], 16)>=8)  for i in range(0, 256)])
   // Padding done by numberToHex
-  return parseInt(s[0], 16) >= 8 ? '00' + s : s;
+  return Number.parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 
 // Represents ECDSA signature with its (r, s) properties
@@ -599,6 +599,10 @@ function hexToBytes(hex: string): Uint8Array {
     array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
   }
   return array;
+}
+
+function ensureBytes(hex: Hex): Uint8Array {
+  return hex instanceof Uint8Array ? hex : hexToBytes(hex);
 }
 
 // Big Endian
@@ -972,7 +976,7 @@ class SchnorrSignature {
     if (r === 0n || s === 0n || r >= CURVE.P || s >= CURVE.n) throw new Error('Invalid signature');
   }
   static fromHex(hex: Hex) {
-    const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
+    const bytes = ensureBytes(hex);
     if (bytes.length !== 64) {
       throw new TypeError(`SchnorrSignature.fromHex: expected 64 bytes, not ${bytes.length}`);
     }
@@ -1012,9 +1016,9 @@ async function schnorrSign(
   // if (privateKey == null) throw new TypeError('Expected valid private key');
   if (!privateKey) privateKey = 0n;
   const { n } = CURVE;
-  const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
+  const m = ensureBytes(msgHash);
   const d0 = normalizePrivateKey(privateKey); // <== does isWithinCurveOrder check
-  const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
+  const rand = ensureBytes(auxRand);
   if (rand.length !== 32) throw new TypeError('sign: Expected 32 bytes of aux randomness');
 
   const P = Point.fromPrivateKey(d0);

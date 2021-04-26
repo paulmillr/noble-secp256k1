@@ -266,7 +266,7 @@ class Point {
         return point;
     }
     static fromHex(hex) {
-        const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
+        const bytes = ensureBytes(hex);
         const header = bytes[0];
         if (bytes.length === 32 || (bytes.length === 33 && (header === 0x02 || header === 0x03))) {
             return this.fromCompressedHex(bytes);
@@ -348,7 +348,7 @@ exports.Point = Point;
 Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
 Point.ZERO = new Point(0n, 0n);
 function sliceDer(s) {
-    return parseInt(s[0], 16) >= 8 ? '00' + s : s;
+    return Number.parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 class Signature {
     constructor(r, s) {
@@ -461,6 +461,9 @@ function hexToBytes(hex) {
         array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
     }
     return array;
+}
+function ensureBytes(hex) {
+    return hex instanceof Uint8Array ? hex : hexToBytes(hex);
 }
 function bytesToNumber(bytes) {
     return hexToNumber(bytesToHex(bytes));
@@ -751,7 +754,7 @@ class SchnorrSignature {
             throw new Error('Invalid signature');
     }
     static fromHex(hex) {
-        const bytes = hex instanceof Uint8Array ? hex : hexToBytes(hex);
+        const bytes = ensureBytes(hex);
         if (bytes.length !== 64) {
             throw new TypeError(`SchnorrSignature.fromHex: expected 64 bytes, not ${bytes.length}`);
         }
@@ -776,9 +779,9 @@ async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomPr
     if (!privateKey)
         privateKey = 0n;
     const { n } = CURVE;
-    const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
+    const m = ensureBytes(msgHash);
     const d0 = normalizePrivateKey(privateKey);
-    const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
+    const rand = ensureBytes(auxRand);
     if (rand.length !== 32)
         throw new TypeError('sign: Expected 32 bytes of aux randomness');
     const P = Point.fromPrivateKey(d0);
