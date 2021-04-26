@@ -337,14 +337,13 @@ export class Point {
     const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
     const y2 = weistrass(x); // y^2 = x^3 + ax + b
     let y = sqrtMod(y2); // y = y2 ^ (p+1)/4
+    const isYOdd = (y & 1n) === 1n;
     if (isShort) {
       // Schnorr
-      const isYOdd = (y & 1n) === 1n;
       if (isYOdd) y = mod(-y);
     } else {
       // ECDSA
       const isFirstByteOdd = (bytes[0] & 1) === 1;
-      const isYOdd = (y & 1n) === 1n;
       if (isFirstByteOdd !== isYOdd) y = mod(-y);
     }
     const point = new Point(x, y);

@@ -243,14 +243,13 @@ class Point {
         const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
         const y2 = weistrass(x);
         let y = sqrtMod(y2);
+        const isYOdd = (y & 1n) === 1n;
         if (isShort) {
-            const isYOdd = (y & 1n) === 1n;
             if (isYOdd)
                 y = mod(-y);
         }
         else {
             const isFirstByteOdd = (bytes[0] & 1) === 1;
-            const isYOdd = (y & 1n) === 1n;
             if (isFirstByteOdd !== isYOdd)
                 y = mod(-y);
         }
