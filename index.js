@@ -241,8 +241,8 @@ class Point {
     static fromCompressedHex(bytes) {
         const isShort = bytes.length === 32;
         const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
-        const sqrY = weistrass(x);
-        let y = sqrtMod(sqrY);
+        const y2 = weistrass(x);
+        let y = sqrtMod(y2);
         if (isShort) {
             const isYOdd = (y & 1n) === 1n;
             if (isYOdd)
@@ -273,27 +273,19 @@ class Point {
         }
         if (bytes.length === 65 && header === 0x04)
             return this.fromUncompressedHex(bytes);
-        throw new TypeError(`Point.fromHex: received invalid point. Expected 32-33 compressed bytes or 65 uncompressed bytes, not ${bytes.length}`);
+        throw new Error(`Point.fromHex: received invalid point. Expected 32-33 compressed bytes or 65 uncompressed bytes, not ${bytes.length}`);
     }
     static fromPrivateKey(privateKey) {
         return Point.BASE.multiply(normalizePrivateKey(privateKey));
     }
     static fromSignature(msgHash, signature, recovery) {
-        let h;
-        if (typeof msgHash === 'string') {
-            h = hexToNumber(msgHash);
-        }
-        else if (msgHash instanceof Uint8Array) {
-            h = bytesToNumber(msgHash);
-        }
-        else {
-            throw new TypeError('Message hash must be a hex string or Uint8Array');
-        }
+        let h = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
         const sig = normalizeSignature(signature);
         sig.assertValidity();
         const { r, s } = sig;
-        if (recovery !== 0 && recovery !== 1)
-            throw new Error('Invalid yParity bit');
+        if (recovery !== 0 && recovery !== 1) {
+            throw new Error('Cannot recover signature: invalid yParity bit');
+        }
         const prefix = 2 + (recovery & 1);
         const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
         const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
@@ -323,15 +315,15 @@ class Point {
         return this.toRawBytes(true).slice(1);
     }
     assertValidity() {
+        const msg = 'Point is not on elliptic curve';
+        const { P } = CURVE;
         const { x, y } = this;
-        if (x === 0n || y === 0n || x >= CURVE.P || y >= CURVE.P) {
-            throw new TypeError('Point is not on elliptic curve');
-        }
+        if (x === 0n || y === 0n || x >= P || y >= P)
+            throw new Error(msg);
         const left = mod(y * y);
         const right = weistrass(x);
-        const valid = (left - right) % CURVE.P === 0n;
-        if (!valid)
-            throw new TypeError('Point is not on elliptic curve');
+        if ((left - right) % P !== 0n)
+            throw new Error(msg);
     }
     equals(other) {
         return this.x === other.x && this.y === other.y;
@@ -458,8 +450,11 @@ function hexToNumber(hex) {
     return BigInt(`0x${hex}`);
 }
 function hexToBytes(hex) {
-    if (typeof hex !== 'string' || hex.length % 2)
-        throw new Error('Expected valid hex');
+    if (typeof hex !== 'string') {
+        throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
+    }
+    if (hex.length % 2)
+        throw new Error('hexToBytes: received invalid unpadded hex');
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
         const j = i * 2;
@@ -512,7 +507,7 @@ function sqrtMod(x) {
 }
 function invert(number, modulo = CURVE.P) {
     if (number === 0n || modulo <= 0n) {
-        throw new Error('invert: expected positive integers');
+        throw new Error(`invert: expected positive integers, got n=${number} mod=${modulo}`);
     }
     let a = mod(number, modulo);
     let b = modulo;
@@ -570,7 +565,7 @@ function splitScalarEndo(k) {
     if (k2neg)
         k2 = n - k2;
     if (k1 > POW_2_128 || k2 > POW_2_128)
-        throw new Error('Endomorphism failed');
+        throw new Error('splitScalarEndo: Endomorphism failed');
     return [k1neg, k1, k2neg, k2];
 }
 function truncateHash(hash) {
@@ -646,7 +641,7 @@ function normalizePrivateKey(key) {
         throw new TypeError('Expected valid private key');
     }
     if (!isWithinCurveOrder(num))
-        throw new Error('Expected private key 0 < key < n');
+        throw new Error('Expected private key: 0 < key < n');
     return num;
 }
 function normalizePublicKey(publicKey) {
@@ -685,7 +680,7 @@ function getSharedSecret(privateA, publicB, isCompressed = false) {
         throw new TypeError('getSharedSecret: first arg must be private key');
     if (!isPub(publicB))
         throw new TypeError('getSharedSecret: second arg must be public key');
-    const b = publicB instanceof Point ? publicB : Point.fromHex(publicB);
+    const b = normalizePublicKey(publicB);
     b.assertValidity();
     const shared = b.multiply(normalizePrivateKey(privateA));
     return typeof privateA === 'string'
@@ -695,7 +690,7 @@ function getSharedSecret(privateA, publicB, isCompressed = false) {
 exports.getSharedSecret = getSharedSecret;
 async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
     if (msgHash == null)
-        throw new Error(`Expected valid msgHash, not "${msgHash}"`);
+        throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
     const priv = normalizePrivateKey(privateKey);
     const [q, r, s] = await getQRSrfc6979(msgHash, priv);
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
@@ -777,17 +772,15 @@ function schnorrGetPublicKey(privateKey) {
 }
 async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomPrivateKey()) {
     if (msgHash == null)
-        throw new TypeError(`Expected valid message, not "${msgHash}"`);
+        throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
     if (!privateKey)
         privateKey = 0n;
     const { n } = CURVE;
     const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
     const d0 = normalizePrivateKey(privateKey);
-    if (!isWithinCurveOrder(d0))
-        throw new Error('Invalid private key');
     const rand = typeof auxRand === 'string' ? hexToBytes(auxRand) : auxRand;
     if (rand.length !== 32)
-        throw new TypeError('Expected 32 bytes of aux randomness');
+        throw new TypeError('sign: Expected 32 bytes of aux randomness');
     const P = Point.fromPrivateKey(d0);
     const d = hasEvenY(P) ? d0 : n - d0;
     const t0h = await taggedHash('BIP0340/aux', rand);
@@ -795,14 +788,14 @@ async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomPr
     const k0h = await taggedHash('BIP0340/nonce', pad32b(t), P.toRawX(), m);
     const k0 = mod(k0h, n);
     if (k0 === 0n)
-        throw new Error('Creation of signature failed. k is zero');
+        throw new Error('sign: Creation of signature failed. k is zero');
     const R = Point.fromPrivateKey(k0);
     const k = hasEvenY(R) ? k0 : n - k0;
     const e = await createChallenge(R.x, P, m);
     const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
     const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
     if (!isValid)
-        throw new Error('Invalid signature produced');
+        throw new Error('sign: Invalid signature produced');
     return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 async function schnorrVerify(signature, msgHash, publicKey) {

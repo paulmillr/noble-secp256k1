@@ -1,19 +1,11 @@
-const {run, mark, logMem} = require('micro-bmark');
+const { run, mark, logMem } = require('micro-bmark');
 const secp = require('..');
-const {join} = require('path');
-const points = require('fs').readFileSync(
-  join(__dirname, './vectors/points.txt'), 'utf-8'
-).split('\n').filter(a => a).slice(0, 1000);
-
-function hexToBytes(hex) {
-  hex = hex.length & 1 ? `0${hex}` : hex;
-  const array = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < array.length; i++) {
-    let j = i * 2;
-    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
-  }
-  return array;
-}
+const { join } = require('path');
+const points = require('fs')
+  .readFileSync(join(__dirname, './vectors/points.txt'), 'utf-8')
+  .split('\n')
+  .filter((a) => a)
+  .slice(0, 1000);
 
 // run([4, 8, 16], async (windowSize) => {
 run(async (windowSize) => {
@@ -26,72 +18,58 @@ run(async (windowSize) => {
   logMem();
   console.log();
 
-  let pub;
-  let priv;
+  // await mark('getPublicKey 1 bit', samples * 10, () => {
+  //   secp.getPublicKey('0000000000000000000000000000000000000000000000000000000000000003');
+  // });
 
-  priv = '0000000000000000000000000000000000000000000000000000000000000003';
-  await mark('getPublicKey 1 bit', samples * 10, () => {
-    pub = secp.getPublicKey(priv);
-  });
-
-  priv = '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb';
-  await mark('getPublicKey 256 bit', samples * 10, () => {
-    pub = secp.getPublicKey(priv);
-  });
+  // await mark('getPublicKey 256 bit', samples * 10, () => {
+  //   secp.getPublicKey('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb');
+  // });
 
   await mark('getPublicKey(utils.randomPrivateKey())', samples * 10, () => {
-    pub = secp.getPublicKey(secp.utils.randomPrivateKey());
+    secp.getPublicKey(secp.utils.randomPrivateKey());
   });
 
-  const hex = '02cc734b5c09322e61a8f0762af66da3143ab06319d87a73063c1bca6f7719f0ce';
-  const msg = 'deadbeefdeadbeefdeadbeefdeadbeef';
+  const priv = 'f6fc7fd5acaf8603709160d203253d5cd17daa307483877ad811ec8411df56d2';
+  const pub = secp.getPublicKey(priv, false);
+  const priv2 = '2e63f49054e1e44ccc2e6ef6ce387936efb16158f89cc302a2426e0b7fd66f66';
+  const pub2 = secp.getPublicKey(priv2, false);
+  const msg = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+  const signature = await secp.sign(msg, priv);
   await mark('sign', samples, async () => {
     await secp.sign(msg, priv);
   });
 
-  let signed = await secp.sign(msg, priv);
   await mark('verify', samples, () => {
-    secp.verify(signed, msg, pub);
+    secp.verify(signature, msg, pub);
   });
 
-  let [sig, reco] = await secp.sign(msg, priv, { canonical: true, recovered: true });
+  const [rsig, reco] = await secp.sign(msg, priv, { canonical: true, recovered: true });
   await mark('recoverPublicKey', samples, () => {
-    secp.recoverPublicKey(msg, sig, reco);
+    secp.recoverPublicKey(msg, rsig, reco);
   });
 
-  const pubKey = secp.Point.fromHex(hex);
   await mark('getSharedSecret aka ecdh', samples, () => {
-    secp.getSharedSecret(priv, hex);
+    secp.getSharedSecret(priv, pub2);
   });
 
-  const pubKeyPre = secp.utils.precompute(windowSize, pubKey);
+  const pub2Pre = secp.utils.precompute(windowSize, secp.Point.fromHex(pub2));
   await mark('getSharedSecret (precomputed)', samples, () => {
-    secp.getSharedSecret(priv, pubKeyPre);
+    secp.getSharedSecret(priv, pub2Pre);
   });
 
   let i = 0;
   await mark('Point.fromHex (decompression)', samples * 2, () => {
     const p = points[i++ % points.length];
     secp.Point.fromHex(p);
-  })
+  });
 
-  const ss = await secp.schnorr.sign(
-    '0000000000000000000000000000000000000000000000000000000000000000',
-    '0000000000000000000000000000000000000000000000000000000000000003',
-    '0000000000000000000000000000000000000000000000000000000000000000'
-  );
-  await mark('schnorr.sign', samples, () => secp.schnorr.sign(
-    '0000000000000000000000000000000000000000000000000000000000000000',
-    '0000000000000000000000000000000000000000000000000000000000000003',
-    '0000000000000000000000000000000000000000000000000000000000000000'
-  ))
-
-  const spriv = secp.Point.fromPrivateKey('0000000000000000000000000000000000000000000000000000000000000003');
-  await mark('schnorr.verify', samples, () => secp.schnorr.verify(
-    ss,
-    '0000000000000000000000000000000000000000000000000000000000000000',
-    spriv
-  ))
+  const smsg = '0000000000000000000000000000000000000000000000000000000000000000';
+  const spri = '0000000000000000000000000000000000000000000000000000000000000003';
+  const spub = secp.Point.fromPrivateKey(spri);
+  const ssig = await secp.schnorr.sign(smsg, spri);
+  await mark('schnorr.sign', samples, () => secp.schnorr.sign(smsg, spri));
+  await mark('schnorr.verify', samples, () => secp.schnorr.verify(ssig, smsg, spub));
 
   console.log();
   logMem();
