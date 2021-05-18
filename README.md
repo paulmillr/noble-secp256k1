@@ -236,12 +236,12 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 Benchmarks measured with Apple M1.
 
     getPublicKey(utils.randomPrivateKey()) x 5,764 ops/sec @ 173μs/op
-    sign x 3,952 ops/sec @ 253μs/op
-    verify x 851 ops/sec @ 1ms/op
-    recoverPublicKey x 450 ops/sec @ 2ms/op
-    getSharedSecret aka ecdh x 507 ops/sec @ 2ms/op
-    getSharedSecret (precomputed) x 6,243 ops/sec @ 160μs/op
-    Point.fromHex (decompression) x 11,201 ops/sec @ 89μs/op
+    sign x 4,037 ops/sec @ 247μs/op
+    verify x 867 ops/sec @ 1ms/op
+    recoverPublicKey x 459 ops/sec @ 2ms/op
+    getSharedSecret aka ecdh x 524 ops/sec @ 1ms/op
+    getSharedSecret (precomputed) x 6,468 ops/sec @ 154μs/op
+    Point.fromHex (decompression) x 11,218 ops/sec @ 89μs/op
     schnorr.sign x 372 ops/sec @ 2ms/op
     schnorr.verify x 471 ops/sec @ 2ms/op
 
