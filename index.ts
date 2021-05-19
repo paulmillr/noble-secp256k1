@@ -1009,7 +1009,7 @@ async function schnorrSign(
 async function schnorrSign(
   msgHash: Hex,
   privateKey: PrivKey,
-  auxRand: Hex = utils.randomPrivateKey()
+  auxRand: Hex = utils.randomBytes()
 ): Promise<Hex> {
   if (msgHash == null) throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
   // if (privateKey == null) throw new TypeError('Expected valid private key');

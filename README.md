@@ -165,9 +165,9 @@ function schnorrVerify(signature: Uint8Array | string, msgHash: Uint8Array | str
 
 ##### Helpers
 
-###### `utils.generateRandomPrivateKey(): Uint8Array`
+###### `utils.randomPrivateKey(): Uint8Array`
 
-Returns `Uint8Array` of 32 cryptographically secure random bytes. You can use it as private key.
+Returns `Uint8Array` of 32 cryptographically secure random bytes that can be used as private key.
 
 ###### `utils.precompute(W = 8, point = BASE_POINT): Point`
 
