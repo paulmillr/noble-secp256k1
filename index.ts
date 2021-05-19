@@ -1079,7 +1079,7 @@ export const utils = {
     }
   },
 
-  randomPrivateKey: (bytesLength: number = 32): Uint8Array => {
+  randomBytes: (bytesLength: number = 32): Uint8Array => {
     // @ts-ignore
     if (typeof window == 'object' && 'crypto' in window) {
       // @ts-ignore
@@ -1092,6 +1092,17 @@ export const utils = {
     } else {
       throw new Error("The environment doesn't have randomBytes function");
     }
+  },
+
+  // NIST SP 800-56A rev 3, section 5.6.1.2.2
+  randomPrivateKey: (): Uint8Array => {
+    let i = 8;
+    while (i--) {
+      const b32 = utils.randomBytes(32);
+      const num = bytesToNumber(b32);
+      if (num > 1n && num < CURVE.n) return b32;
+    }
+    throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
   },
 
   sha256: async (message: Uint8Array): Promise<Uint8Array> => {
@@ -1129,7 +1140,7 @@ export const utils = {
       // @ts-ignore
     } else if (typeof process === 'object' && 'node' in process.versions) {
       // @ts-ignore
-      const { createHmac, randomBytes } = require('crypto');
+      const { createHmac } = require('crypto');
       const hash = createHmac('sha256', key);
       for (let message of messages) {
         hash.update(message);

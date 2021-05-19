@@ -89,7 +89,8 @@ export declare const schnorr: {
 };
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
-    randomPrivateKey: (bytesLength?: number) => Uint8Array;
+    randomBytes: (bytesLength?: number) => Uint8Array;
+    randomPrivateKey: () => Uint8Array;
     sha256: (message: Uint8Array) => Promise<Uint8Array>;
     hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
     precompute(windowSize?: number, point?: Point): Point;
