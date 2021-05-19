@@ -772,7 +772,7 @@ function schnorrGetPublicKey(privateKey) {
     const P = Point.fromPrivateKey(privateKey);
     return typeof privateKey === 'string' ? P.toHexX() : P.toRawX();
 }
-async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomPrivateKey()) {
+async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomBytes()) {
     if (msgHash == null)
         throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
     if (!privateKey)
