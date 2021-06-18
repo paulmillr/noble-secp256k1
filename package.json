@@ -28,6 +28,9 @@
     "url": "https://github.com/paulmillr/noble-secp256k1.git"
   },
   "license": "MIT",
+  "browser": {
+    "crypto": false
+  },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^19.0.0",
     "@rollup/plugin-node-resolve": "^13.0.0",
