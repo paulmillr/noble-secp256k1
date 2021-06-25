@@ -830,8 +830,8 @@ exports.utils = {
         }
     },
     randomBytes: (bytesLength = 32) => {
-        if (typeof window == 'object' && 'crypto' in window) {
-            return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+        if (typeof self == 'object' && 'crypto' in self) {
+            return self.crypto.getRandomValues(new Uint8Array(bytesLength));
         }
         else if (typeof process === 'object' && 'node' in process.versions) {
             const { randomBytes } = require('crypto');
@@ -852,8 +852,8 @@ exports.utils = {
         throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
     },
     sha256: async (message) => {
-        if (typeof window == 'object' && 'crypto' in window) {
-            const buffer = await window.crypto.subtle.digest('SHA-256', message.buffer);
+        if (typeof self == 'object' && 'crypto' in self) {
+            const buffer = await self.crypto.subtle.digest('SHA-256', message.buffer);
             return new Uint8Array(buffer);
         }
         else if (typeof process === 'object' && 'node' in process.versions) {
@@ -865,10 +865,10 @@ exports.utils = {
         }
     },
     hmacSha256: async (key, ...messages) => {
-        if (typeof window == 'object' && 'crypto' in window) {
-            const ckey = await window.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
+        if (typeof self == 'object' && 'crypto' in self) {
+            const ckey = await self.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
             const message = concatBytes(...messages);
-            const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
+            const buffer = await self.crypto.subtle.sign('HMAC', ckey, message);
             return new Uint8Array(buffer);
         }
         else if (typeof process === 'object' && 'node' in process.versions) {

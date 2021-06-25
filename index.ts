@@ -1081,9 +1081,9 @@ export const utils = {
 
   randomBytes: (bytesLength: number = 32): Uint8Array => {
     // @ts-ignore
-    if (typeof window == 'object' && 'crypto' in window) {
+    if (typeof self == 'object' && 'crypto' in self) {
       // @ts-ignore
-      return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+      return self.crypto.getRandomValues(new Uint8Array(bytesLength));
       // @ts-ignore
     } else if (typeof process === 'object' && 'node' in process.versions) {
       // @ts-ignore
@@ -1107,9 +1107,9 @@ export const utils = {
 
   sha256: async (message: Uint8Array): Promise<Uint8Array> => {
     // @ts-ignore
-    if (typeof window == 'object' && 'crypto' in window) {
+    if (typeof self == 'object' && 'crypto' in self) {
       // @ts-ignore
-      const buffer = await window.crypto.subtle.digest('SHA-256', message.buffer);
+      const buffer = await self.crypto.subtle.digest('SHA-256', message.buffer);
       // @ts-ignore
       return new Uint8Array(buffer);
       // @ts-ignore
@@ -1124,9 +1124,9 @@ export const utils = {
 
   hmacSha256: async (key: Uint8Array, ...messages: Uint8Array[]): Promise<Uint8Array> => {
     // @ts-ignore
-    if (typeof window == 'object' && 'crypto' in window) {
+    if (typeof self == 'object' && 'crypto' in self) {
       // @ts-ignore
-      const ckey = await window.crypto.subtle.importKey(
+      const ckey = await self.crypto.subtle.importKey(
         'raw',
         key,
         { name: 'HMAC', hash: { name: 'SHA-256' } },
@@ -1135,7 +1135,7 @@ export const utils = {
       );
       const message = concatBytes(...messages);
       // @ts-ignore
-      const buffer = await window.crypto.subtle.sign('HMAC', ckey, message);
+      const buffer = await self.crypto.subtle.sign('HMAC', ckey, message);
       return new Uint8Array(buffer);
       // @ts-ignore
     } else if (typeof process === 'object' && 'node' in process.versions) {
