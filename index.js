@@ -626,7 +626,7 @@ function normalizePrivateKey(key) {
     if (typeof key === 'bigint') {
         num = key;
     }
-    else if (Number.isSafeInteger(key) && key > 0) {
+    else if (typeof key === 'number' && Number.isSafeInteger(key) && key > 0) {
         num = BigInt(key);
     }
     else if (typeof key === 'string') {

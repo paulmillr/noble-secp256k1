@@ -799,7 +799,7 @@ function normalizePrivateKey(key: PrivKey): bigint {
   let num: bigint;
   if (typeof key === 'bigint') {
     num = key;
-  } else if (Number.isSafeInteger(key) && key > 0) {
+  } else if (typeof key === 'number' && Number.isSafeInteger(key) && key > 0) {
     num = BigInt(key);
   } else if (typeof key === 'string') {
     if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
