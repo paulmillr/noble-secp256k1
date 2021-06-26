@@ -1,31 +1,29 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 
 // https://www.secg.org/sec2-v2.pdf
-// Curve fomula is y^2 = x^3 + ax + b
+// Curve fomula is y² = x³ + ax + b
 const CURVE = {
   // Params: a, b
   a: 0n,
   b: 7n,
   // Field over which we'll do calculations
   P: 2n ** 256n - 2n ** 32n - 977n,
-  // Subgroup order aka prime_order
+  // Curve order. Specifically, it belongs to prime-order subgroup;
+  // but our curve is h=1, so other subgroups don't exist
   n: 2n ** 256n - 432420386565659656852420866394968145599n,
   // Cofactor
   h: 1n,
   // Base point (x, y) aka generator point
   Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
   Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
-
-  // For endomorphism, see below.
+  // For endomorphism, see below
   beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
 };
 
 // Cleaner js output if that's on a separate line.
 export { CURVE };
 
-// Short weistrass curve formula.
-// y^2 = x^3 + ax + b
-// Returns y^2
+// y² = x³ + ax + b: Short weistrass curve formula. Returns y²
 function weistrass(x: bigint) {
   const { a, b } = CURVE;
   return mod(x ** 3n + a * x + b);
@@ -48,7 +46,7 @@ type Sig = Hex | Signature;
 const USE_ENDOMORPHISM = CURVE.a === 0n;
 
 // Default Point works in 2d / affine coordinates: (x, y)
-// Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z^2, y=y/z^3)
+// Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z², y=y/z³)
 // We're doing calculations in jacobi, because its operations don't require costly inversion.
 class JacobianPoint {
   constructor(public x: bigint, public y: bigint, public z: bigint) {}
@@ -298,7 +296,7 @@ class JacobianPoint {
 
   // Converts Jacobian point to affine (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
-  // (x, y, z) ∋ (x=x/z^2, y=y/z^3)
+  // (x, y, z) ∋ (x=x/z², y=y/z³)
   toAffine(invZ: bigint = invert(this.z)): Point {
     const invZ2 = invZ ** 2n;
     const x = mod(this.x * invZ2);
@@ -335,8 +333,8 @@ export class Point {
   private static fromCompressedHex(bytes: Uint8Array) {
     const isShort = bytes.length === 32;
     const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
-    const y2 = weistrass(x); // y^2 = x^3 + ax + b
-    let y = sqrtMod(y2); // y = y2 ^ (p+1)/4
+    const y2 = weistrass(x); // y² = x³ + ax + b
+    let y = sqrtMod(y2); // y = y² ^ (p+1)/4
     const isYOdd = (y & 1n) === 1n;
     if (isShort) {
       // Schnorr
@@ -638,7 +636,7 @@ function pow2(x: bigint, power: bigint): bigint {
   return res;
 }
 
-// Used to calculate y - the square root of y^2.
+// Used to calculate y - the square root of y².
 // Exponentiates it to very big number (P+1)/4.
 // We are unwrapping the loop because it's 2x faster.
 // (P+1n/4n).toString(2) would produce bits [223x 1, 0, 22x 1, 4x 0, 11, 00]
