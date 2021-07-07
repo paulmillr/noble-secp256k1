@@ -1093,6 +1093,7 @@ export const utils = {
   },
 
   // NIST SP 800-56A rev 3, section 5.6.1.2.2
+  // https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
   randomPrivateKey: (): Uint8Array => {
     let i = 8;
     while (i--) {
