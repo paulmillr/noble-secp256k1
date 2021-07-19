@@ -763,7 +763,8 @@ function _abc6979(msgHash: Hex, privateKey: bigint): [U8A, bigint, U8A, U8A, U8A
 // Deterministic k generation as per RFC6979.
 // Generates k, and then calculates Q & Signature {r, s} based on it.
 // https://tools.ietf.org/html/rfc6979#section-3.1
-async function getQRSrfc6979(msgHash: Hex, privKey: bigint): Promise<QRS> {
+async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
+  const privKey = normalizePrivateKey(privateKey);
   let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
   const hmac = utils.hmacSha256;
   // Steps D, E, F, G
@@ -784,9 +785,10 @@ async function getQRSrfc6979(msgHash: Hex, privKey: bigint): Promise<QRS> {
 }
 
 // Same thing, but for synchronous utils.hmacSha256()
-function getQRSrfc6979Sync(msgHash: Hex, privKey: bigint): QRS {
+function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey): QRS {
+  const privKey = normalizePrivateKey(privateKey);
   let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
-  const hmac = (utils.hmacSha256 as any) as (key: U8A, ...m: U8A[]) => U8A;
+  const hmac = utils.hmacSha256 as any as (key: U8A, ...m: U8A[]) => U8A;
   // Steps D, E, F, G
   k = hmac(k, v, b0, x, h1);
   if (k instanceof Promise) throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
@@ -925,8 +927,7 @@ async function sign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): Promise
 async function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
 async function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
-  const qrs = await getQRSrfc6979(msgHash, normalizePrivateKey(privKey));
-  return QRSToSig(qrs, opts, typeof msgHash === 'string');
+  return QRSToSig(await getQRSrfc6979(msgHash, privKey), opts, typeof msgHash === 'string');
 }
 
 // Ugly hack; for cases when sync utils.hmacSha256() is the requirement.
@@ -936,10 +937,9 @@ function _syncSign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
 function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
 function _syncSign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
-  const qrs = getQRSrfc6979Sync(msgHash, normalizePrivateKey(privKey));
-  return QRSToSig(qrs, opts, typeof msgHash === 'string');
+  return QRSToSig(getQRSrfc6979Sync(msgHash, privKey), opts, typeof msgHash === 'string');
 }
-export {sign, _syncSign};
+export { sign, _syncSign };
 
 // https://www.secg.org/sec1-v2.pdf, section 4.1.4
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
