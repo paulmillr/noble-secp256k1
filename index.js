@@ -618,6 +618,8 @@ function getQRSrfc6979Sync(msgHash, privKey) {
     let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
     const hmac = exports.utils.hmacSha256;
     k = hmac(k, v, b0, x, h1);
+    if (k instanceof Promise)
+        throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
     v = hmac(k, v);
     k = hmac(k, v, b1, x, h1);
     v = hmac(k, v);

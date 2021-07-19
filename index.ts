@@ -789,6 +789,7 @@ function getQRSrfc6979Sync(msgHash: Hex, privKey: bigint): QRS {
   const hmac = (utils.hmacSha256 as any) as (key: U8A, ...m: U8A[]) => U8A;
   // Steps D, E, F, G
   k = hmac(k, v, b0, x, h1);
+  if (k instanceof Promise) throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
   v = hmac(k, v);
   k = hmac(k, v, b1, x, h1);
   v = hmac(k, v);
