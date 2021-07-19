@@ -597,7 +597,8 @@ function _abc6979(msgHash, privateKey) {
     const b1 = Uint8Array.from([0x01]);
     return [h1, h1n, x, v, k, b0, b1];
 }
-async function getQRSrfc6979(msgHash, privKey) {
+async function getQRSrfc6979(msgHash, privateKey) {
+    const privKey = normalizePrivateKey(privateKey);
     let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
     const hmac = exports.utils.hmacSha256;
     k = await hmac(k, v, b0, x, h1);
@@ -614,7 +615,8 @@ async function getQRSrfc6979(msgHash, privKey) {
     }
     throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
-function getQRSrfc6979Sync(msgHash, privKey) {
+function getQRSrfc6979Sync(msgHash, privateKey) {
+    const privKey = normalizePrivateKey(privateKey);
     let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
     const hmac = exports.utils.hmacSha256;
     k = hmac(k, v, b0, x, h1);
@@ -732,13 +734,11 @@ function QRSToSig(qrs, opts, str = false) {
     return recovered ? [hashed, recovery] : hashed;
 }
 async function sign(msgHash, privKey, opts = {}) {
-    const qrs = await getQRSrfc6979(msgHash, normalizePrivateKey(privKey));
-    return QRSToSig(qrs, opts, typeof msgHash === 'string');
+    return QRSToSig(await getQRSrfc6979(msgHash, privKey), opts, typeof msgHash === 'string');
 }
 exports.sign = sign;
 function _syncSign(msgHash, privKey, opts = {}) {
-    const qrs = getQRSrfc6979Sync(msgHash, normalizePrivateKey(privKey));
-    return QRSToSig(qrs, opts, typeof msgHash === 'string');
+    return QRSToSig(getQRSrfc6979Sync(msgHash, privKey), opts, typeof msgHash === 'string');
 }
 exports._syncSign = _syncSign;
 function verify(signature, msgHash, publicKey) {
