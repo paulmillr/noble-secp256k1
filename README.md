@@ -238,15 +238,15 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 Benchmarks measured with Apple M1.
 
-    getPublicKey(utils.randomPrivateKey()) x 5,764 ops/sec @ 173μs/op
-    sign x 4,037 ops/sec @ 247μs/op
-    verify x 867 ops/sec @ 1ms/op
-    recoverPublicKey x 459 ops/sec @ 2ms/op
-    getSharedSecret aka ecdh x 524 ops/sec @ 1ms/op
-    getSharedSecret (precomputed) x 6,468 ops/sec @ 154μs/op
-    Point.fromHex (decompression) x 11,218 ops/sec @ 89μs/op
-    schnorr.sign x 372 ops/sec @ 2ms/op
-    schnorr.verify x 471 ops/sec @ 2ms/op
+    getPublicKey(utils.randomPrivateKey()) x 6,121 ops/sec @ 163μs/op
+    sign x 4,468 ops/sec @ 223μs/op
+    verify x 923 ops/sec @ 1ms/op
+    recoverPublicKey x 491 ops/sec @ 2ms/op
+    getSharedSecret aka ecdh x 534 ops/sec @ 1ms/op
+    getSharedSecret (precomputed) x 7,105 ops/sec @ 140μs/op
+    Point.fromHex (decompression) x 12,171 ops/sec @ 82μs/op
+    schnorr.sign x 409 ops/sec @ 2ms/op
+    schnorr.verify x 504 ops/sec @ 1ms/op
 
 Compare to other libraries (`openssl` uses native bindings, not JS):
 

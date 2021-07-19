@@ -49,24 +49,31 @@ export declare class Signature {
     toHex(isCompressed?: boolean): string;
 }
 export declare const SignResult: typeof Signature;
+declare type U8A = Uint8Array;
 export declare function getPublicKey(privateKey: Uint8Array | number | bigint, isCompressed?: boolean): Uint8Array;
 export declare function getPublicKey(privateKey: string, isCompressed?: boolean): string;
 export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
 export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
 export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed?: boolean): Hex;
-declare type OptsRecovered = {
+declare type OptsRecov = {
     recovered: true;
     canonical?: true;
 };
-declare type OptsNoRecovered = {
+declare type OptsNoRecov = {
     recovered?: false;
     canonical?: true;
 };
-export declare function sign(msgHash: Uint8Array, privateKey: PrivKey, opts: OptsRecovered): Promise<[Uint8Array, number]>;
-export declare function sign(msgHash: string, privateKey: PrivKey, opts: OptsRecovered): Promise<[string, number]>;
-export declare function sign(msgHash: Uint8Array, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<Uint8Array>;
-export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
-export declare function sign(msgHash: string, privateKey: PrivKey, opts?: OptsNoRecovered): Promise<string>;
+declare function sign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
+declare function sign(msgHash: string, privKey: PrivKey, opts: OptsRecov): Promise<[string, number]>;
+declare function sign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
+declare function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
+declare function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
+declare function _syncSign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
+declare function _syncSign(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
+declare function _syncSign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
+declare function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+declare function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+export { sign, _syncSign };
 export declare function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean;
 declare class SchnorrSignature {
     readonly r: bigint;

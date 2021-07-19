@@ -1,7 +1,7 @@
 "use strict";
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.utils = exports.schnorr = exports.verify = exports.sign = exports.getSharedSecret = exports.recoverPublicKey = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.CURVE = void 0;
+exports.utils = exports.schnorr = exports.verify = exports._syncSign = exports.sign = exports.getSharedSecret = exports.recoverPublicKey = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.CURVE = void 0;
 const CURVE = {
     a: 0n,
     b: 7n,
@@ -584,35 +584,60 @@ function truncateHash(hash) {
     }
     return msg;
 }
-async function getQRSrfc6979(msgHash, privateKey) {
+function _abc6979(msgHash, privateKey) {
+    if (msgHash == null)
+        throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
     const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
     const h1 = pad32b(num);
-    const x = pad32b(privateKey);
     const h1n = bytesToNumber(h1);
+    const x = pad32b(privateKey);
     let v = new Uint8Array(32).fill(1);
     let k = new Uint8Array(32).fill(0);
     const b0 = Uint8Array.from([0x00]);
     const b1 = Uint8Array.from([0x01]);
-    k = await exports.utils.hmacSha256(k, v, b0, x, h1);
-    v = await exports.utils.hmacSha256(k, v);
-    k = await exports.utils.hmacSha256(k, v, b1, x, h1);
-    v = await exports.utils.hmacSha256(k, v);
+    return [h1, h1n, x, v, k, b0, b1];
+}
+async function getQRSrfc6979(msgHash, privKey) {
+    let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
+    const hmac = exports.utils.hmacSha256;
+    k = await hmac(k, v, b0, x, h1);
+    v = await hmac(k, v);
+    k = await hmac(k, v, b1, x, h1);
+    v = await hmac(k, v);
     for (let i = 0; i < 1000; i++) {
-        v = await exports.utils.hmacSha256(k, v);
-        const T = bytesToNumber(v);
-        let qrs;
-        if (isWithinCurveOrder(T) && (qrs = calcQRSFromK(T, h1n, privateKey))) {
+        v = await hmac(k, v);
+        let qrs = calcQRSFromK(v, h1n, privKey);
+        if (qrs)
             return qrs;
-        }
-        k = await exports.utils.hmacSha256(k, v, b0);
-        v = await exports.utils.hmacSha256(k, v);
+        k = await hmac(k, v, b0);
+        v = await hmac(k, v);
+    }
+    throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
+}
+function getQRSrfc6979Sync(msgHash, privKey) {
+    let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
+    const hmac = exports.utils.hmacSha256;
+    k = hmac(k, v, b0, x, h1);
+    v = hmac(k, v);
+    k = hmac(k, v, b1, x, h1);
+    v = hmac(k, v);
+    for (let i = 0; i < 1000; i++) {
+        v = hmac(k, v);
+        let qrs = calcQRSFromK(v, h1n, privKey);
+        if (qrs)
+            return qrs;
+        k = hmac(k, v, b0);
+        v = hmac(k, v);
     }
     throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 function isWithinCurveOrder(num) {
     return 0 < num && num < CURVE.n;
 }
-function calcQRSFromK(k, msg, priv) {
+function calcQRSFromK(v, msg, priv) {
+    const k = bytesToNumber(v);
+    if (!isWithinCurveOrder(k))
+        return;
     const max = CURVE.n;
     const q = Point.BASE.multiply(k);
     const r = mod(q.x, max);
@@ -690,11 +715,9 @@ function getSharedSecret(privateA, publicB, isCompressed = false) {
         : shared.toRawBytes(isCompressed);
 }
 exports.getSharedSecret = getSharedSecret;
-async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
-    if (msgHash == null)
-        throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
-    const priv = normalizePrivateKey(privateKey);
-    const [q, r, s] = await getQRSrfc6979(msgHash, priv);
+function QRSToSig(qrs, opts, str = false) {
+    const [q, r, s] = qrs;
+    let { canonical, recovered } = opts;
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
     const HIGH_NUMBER = CURVE.n >> 1n;
@@ -703,10 +726,19 @@ async function sign(msgHash, privateKey, { recovered, canonical } = {}) {
         recovery ^= 1;
     }
     const sig = new Signature(r, adjustedS);
-    const hashed = typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
+    const hashed = str ? sig.toHex() : sig.toRawBytes();
     return recovered ? [hashed, recovery] : hashed;
 }
+async function sign(msgHash, privKey, opts = {}) {
+    const qrs = await getQRSrfc6979(msgHash, normalizePrivateKey(privKey));
+    return QRSToSig(qrs, opts, typeof msgHash === 'string');
+}
 exports.sign = sign;
+function _syncSign(msgHash, privKey, opts = {}) {
+    const qrs = getQRSrfc6979Sync(msgHash, normalizePrivateKey(privKey));
+    return QRSToSig(qrs, opts, typeof msgHash === 'string');
+}
+exports._syncSign = _syncSign;
 function verify(signature, msgHash, publicKey) {
     const { n } = CURVE;
     const sig = normalizeSignature(signature);
