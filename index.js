@@ -898,24 +898,13 @@ exports.utils = {
             throw new Error("The environment doesn't have sha256 function");
         }
     },
-    hmacSha256: async (key, ...messages) => {
-        if (typeof self == 'object' && 'crypto' in self) {
-            const ckey = await self.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
-            const message = concatBytes(...messages);
-            const buffer = await self.crypto.subtle.sign('HMAC', ckey, message);
-            return new Uint8Array(buffer);
+    hmacSha256: (key, ...messages) => {
+        const { createHmac } = require('crypto');
+        const hash = createHmac('sha256', key);
+        for (let message of messages) {
+            hash.update(message);
         }
-        else if (typeof process === 'object' && 'node' in process.versions) {
-            const { createHmac } = require('crypto');
-            const hash = createHmac('sha256', key);
-            for (let message of messages) {
-                hash.update(message);
-            }
-            return Uint8Array.from(hash.digest());
-        }
-        else {
-            throw new Error("The environment doesn't have hmac-sha256 function");
-        }
+        return Uint8Array.from(hash.digest());
     },
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point === Point.BASE ? point : new Point(point.x, point.y);
