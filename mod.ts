@@ -8,6 +8,7 @@ import {
   CURVE,
   Point,
   Signature,
+  schnorr
 } from './index.ts';
 import { hmac } from 'https://denopkg.com/chiefbiiko/hmac/mod.ts';
 
