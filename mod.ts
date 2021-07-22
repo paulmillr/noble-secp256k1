@@ -7,6 +7,7 @@ import {
   utils,
   CURVE,
   Point,
+  Signature,
 } from './index.ts';
 import { hmac } from 'https://denopkg.com/chiefbiiko/hmac/mod.ts';
 
@@ -26,4 +27,4 @@ utils.hmacSha256 = async (key: Uint8Array, ...messages: Uint8Array[]): Promise<U
   return hmac('sha256', key, concatTypedArrays(...messages)) as Uint8Array;
 };
 
-export { getPublicKey, sign, verify, recoverPublicKey, getSharedSecret, utils, CURVE, Point };
+export { getPublicKey, sign, verify, recoverPublicKey, getSharedSecret, utils, CURVE, Point, Signature };
