@@ -17,8 +17,7 @@ ECDH key agreement protocol and signature schemes. Supports deterministic **ECDS
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519),
-  [bls12-381](https://github.com/paulmillr/noble-bls12-381),
-  [ripemd160](https://github.com/paulmillr/noble-ripemd160)
+  [bls12-381](https://github.com/paulmillr/noble-bls12-381)
 
 ## Usage
 
