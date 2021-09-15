@@ -986,7 +986,7 @@ function hasEvenY(point: Point) {
 
 class SchnorrSignature {
   constructor(readonly r: bigint, readonly s: bigint) {
-    if (r === 0n || s === 0n || r >= CURVE.P || s >= CURVE.n) throw new Error('Invalid signature');
+    if (r <= 0n || s <= 0n || r >= CURVE.P || s >= CURVE.n) throw new Error('Invalid signature');
   }
   static fromHex(hex: Hex) {
     const bytes = ensureBytes(hex);
@@ -1115,7 +1115,7 @@ export const utils = {
     while (i--) {
       const b32 = utils.randomBytes(32);
       const num = bytesToNumber(b32);
-      if (num > 1n && num < CURVE.n) return b32;
+      if (isWithinCurveOrder(num) && num !== 1n) return b32;
     }
     throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
   },
