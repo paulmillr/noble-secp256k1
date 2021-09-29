@@ -853,6 +853,16 @@ exports.schnorr = {
     verify: schnorrVerify,
 };
 Point.BASE._setWindowSize(8);
+const crypto = (() => {
+    const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
+    const nodeRequire = typeof module !== 'undefined' &&
+        typeof module.require === 'function' &&
+        module.require.bind(module);
+    return {
+        node: nodeRequire && !webCrypto ? nodeRequire('crypto') : undefined,
+        web: webCrypto,
+    };
+})();
 exports.utils = {
     isValidPrivateKey(privateKey) {
         try {
@@ -864,11 +874,11 @@ exports.utils = {
         }
     },
     randomBytes: (bytesLength = 32) => {
-        if (typeof self == 'object' && 'crypto' in self) {
-            return self.crypto.getRandomValues(new Uint8Array(bytesLength));
+        if (crypto.web) {
+            return crypto.web.getRandomValues(new Uint8Array(bytesLength));
         }
-        else if (typeof process === 'object' && 'node' in process.versions) {
-            const { randomBytes } = require('crypto');
+        else if (crypto.node) {
+            const { randomBytes } = crypto.node;
             return new Uint8Array(randomBytes(bytesLength).buffer);
         }
         else {
@@ -886,12 +896,12 @@ exports.utils = {
         throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
     },
     sha256: async (message) => {
-        if (typeof self == 'object' && 'crypto' in self) {
-            const buffer = await self.crypto.subtle.digest('SHA-256', message.buffer);
+        if (crypto.web) {
+            const buffer = await crypto.web.subtle.digest('SHA-256', message.buffer);
             return new Uint8Array(buffer);
         }
-        else if (typeof process === 'object' && 'node' in process.versions) {
-            const { createHash } = require('crypto');
+        else if (crypto.node) {
+            const { createHash } = crypto.node;
             return Uint8Array.from(createHash('sha256').update(message).digest());
         }
         else {
@@ -899,14 +909,14 @@ exports.utils = {
         }
     },
     hmacSha256: async (key, ...messages) => {
-        if (typeof self == 'object' && 'crypto' in self) {
-            const ckey = await self.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
+        if (crypto.web) {
+            const ckey = await crypto.web.subtle.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
             const message = concatBytes(...messages);
-            const buffer = await self.crypto.subtle.sign('HMAC', ckey, message);
+            const buffer = await crypto.web.subtle.sign('HMAC', ckey, message);
             return new Uint8Array(buffer);
         }
-        else if (typeof process === 'object' && 'node' in process.versions) {
-            const { createHmac } = require('crypto');
+        else if (crypto.node) {
+            const { createHmac } = crypto.node;
             const hash = createHmac('sha256', key);
             for (let message of messages) {
                 hash.update(message);

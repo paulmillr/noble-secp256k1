@@ -1083,6 +1083,19 @@ export const schnorr = {
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
+const crypto: { node?: any; web?: Crypto } = (() => {
+  const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
+  // Silence webpack warnings
+  const nodeRequire =
+    typeof module !== 'undefined' &&
+    typeof module.require === 'function' &&
+    module.require.bind(module);
+  return {
+    node: nodeRequire && !webCrypto ? nodeRequire('crypto') : undefined,
+    web: webCrypto,
+  };
+})();
+
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     try {
@@ -1094,14 +1107,10 @@ export const utils = {
   },
 
   randomBytes: (bytesLength: number = 32): Uint8Array => {
-    // @ts-ignore
-    if (typeof self == 'object' && 'crypto' in self) {
-      // @ts-ignore
-      return self.crypto.getRandomValues(new Uint8Array(bytesLength));
-      // @ts-ignore
-    } else if (typeof process === 'object' && 'node' in process.versions) {
-      // @ts-ignore
-      const { randomBytes } = require('crypto');
+    if (crypto.web) {
+      return crypto.web.getRandomValues(new Uint8Array(bytesLength));
+    } else if (crypto.node) {
+      const { randomBytes } = crypto.node;
       return new Uint8Array(randomBytes(bytesLength).buffer);
     } else {
       throw new Error("The environment doesn't have randomBytes function");
@@ -1121,16 +1130,11 @@ export const utils = {
   },
 
   sha256: async (message: Uint8Array): Promise<Uint8Array> => {
-    // @ts-ignore
-    if (typeof self == 'object' && 'crypto' in self) {
-      // @ts-ignore
-      const buffer = await self.crypto.subtle.digest('SHA-256', message.buffer);
-      // @ts-ignore
+    if (crypto.web) {
+      const buffer = await crypto.web.subtle.digest('SHA-256', message.buffer);
       return new Uint8Array(buffer);
-      // @ts-ignore
-    } else if (typeof process === 'object' && 'node' in process.versions) {
-      // @ts-ignore
-      const { createHash } = require('crypto');
+    } else if (crypto.node) {
+      const { createHash } = crypto.node;
       return Uint8Array.from(createHash('sha256').update(message).digest());
     } else {
       throw new Error("The environment doesn't have sha256 function");
@@ -1138,10 +1142,8 @@ export const utils = {
   },
 
   hmacSha256: async (key: Uint8Array, ...messages: Uint8Array[]): Promise<Uint8Array> => {
-    // @ts-ignore
-    if (typeof self == 'object' && 'crypto' in self) {
-      // @ts-ignore
-      const ckey = await self.crypto.subtle.importKey(
+    if (crypto.web) {
+      const ckey = await crypto.web.subtle.importKey(
         'raw',
         key,
         { name: 'HMAC', hash: { name: 'SHA-256' } },
@@ -1149,13 +1151,10 @@ export const utils = {
         ['sign']
       );
       const message = concatBytes(...messages);
-      // @ts-ignore
-      const buffer = await self.crypto.subtle.sign('HMAC', ckey, message);
+      const buffer = await crypto.web.subtle.sign('HMAC', ckey, message);
       return new Uint8Array(buffer);
-      // @ts-ignore
-    } else if (typeof process === 'object' && 'node' in process.versions) {
-      // @ts-ignore
-      const { createHmac } = require('crypto');
+    } else if (crypto.node) {
+      const { createHmac } = crypto.node;
       const hash = createHmac('sha256', key);
       for (let message of messages) {
         hash.update(message);
