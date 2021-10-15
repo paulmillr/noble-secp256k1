@@ -788,7 +788,8 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
 function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey): QRS {
   const privKey = normalizePrivateKey(privateKey);
   let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
-  const hmac = utils.hmacSha256 as any as (key: U8A, ...m: U8A[]) => U8A;
+  const hmac = utils.hmacSha256Sync;
+  if (!hmac) throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
   // Steps D, E, F, G
   k = hmac(k, v, b0, x, h1);
   if (k instanceof Promise) throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
@@ -931,15 +932,15 @@ async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<Si
 }
 
 // Ugly hack; for cases when sync utils.hmacSha256() is the requirement.
-function _syncSign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
-function _syncSign(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
-function _syncSign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
-function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
-function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
-function _syncSign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
+function signSync(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
+function signSync(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
+function signSync(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
+function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
   return QRSToSig(getQRSrfc6979Sync(msgHash, privKey), opts, typeof msgHash === 'string');
 }
-export { sign, _syncSign };
+export { sign, signSync };
 
 // https://www.secg.org/sec1-v2.pdf, section 4.1.4
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
@@ -1055,6 +1056,8 @@ async function schnorrSign(
   return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 
+// no schnorrSignSync() for now
+
 // Also used in sign() function.
 async function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Promise<boolean> {
   const sig =
@@ -1082,6 +1085,9 @@ export const schnorr = {
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
+
+type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
+type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
 
 const crypto: { node?: any; web?: Crypto } = (() => {
   const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
@@ -1164,6 +1170,9 @@ export const utils = {
       throw new Error("The environment doesn't have hmac-sha256 function");
     }
   },
+
+  sha256Sync: undefined as Sha256FnSync,
+  hmacSha256Sync: undefined as HmacFnSync,
 
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point === Point.BASE ? point : new Point(point.x, point.y);

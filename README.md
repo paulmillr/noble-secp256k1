@@ -100,7 +100,7 @@ function sign(msgHash: string, privateKey: string, opts?: Options): Promise<stri
 function sign(msgHash: Uint8Array, privateKey: Uint8Array, opts?: Options): Promise<[Uint8Array | string, number]>;
 ```
 
-Generates deterministic ECDSA signature as per RFC6979. Asynchronous, if you need sync version, use `_syncSign()`.
+Generates deterministic ECDSA signature as per RFC6979.
 
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
@@ -108,6 +108,22 @@ Generates deterministic ECDSA signature as per RFC6979. Asynchronous, if you nee
 - `options?.recovered: boolean = false` - determines whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
 - `options?.canonical: boolean = false` - determines whether a signature `s` should be no more than 1/2 prime order
 - Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`.
+
+The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
+
+To use `signSync` counterpart, you need to set `utils.hmacSha256Sync` to a function with signature `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`. Example with `noble-hashes` package:
+
+```ts
+const { hmac } = require('noble-hashes/lib/hmac');
+secp256k1.utils.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => {
+  const h = hmac.create(sha256, key);
+  for (const msg of msgs) h.update(msg);
+  return h.digest();
+};
+
+// Can be used now
+secp256k1.signSync(msgHash, privateKey)
+```
 
 ##### `verify(signature, hash, publicKey)`
 ```typescript

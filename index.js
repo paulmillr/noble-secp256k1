@@ -1,7 +1,7 @@
 "use strict";
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.utils = exports.schnorr = exports.verify = exports._syncSign = exports.sign = exports.getSharedSecret = exports.recoverPublicKey = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.CURVE = void 0;
+exports.utils = exports.schnorr = exports.verify = exports.signSync = exports.sign = exports.getSharedSecret = exports.recoverPublicKey = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.CURVE = void 0;
 const CURVE = {
     a: 0n,
     b: 7n,
@@ -618,7 +618,9 @@ async function getQRSrfc6979(msgHash, privateKey) {
 function getQRSrfc6979Sync(msgHash, privateKey) {
     const privKey = normalizePrivateKey(privateKey);
     let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
-    const hmac = exports.utils.hmacSha256;
+    const hmac = exports.utils.hmacSha256Sync;
+    if (!hmac)
+        throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
     k = hmac(k, v, b0, x, h1);
     if (k instanceof Promise)
         throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
@@ -737,10 +739,10 @@ async function sign(msgHash, privKey, opts = {}) {
     return QRSToSig(await getQRSrfc6979(msgHash, privKey), opts, typeof msgHash === 'string');
 }
 exports.sign = sign;
-function _syncSign(msgHash, privKey, opts = {}) {
+function signSync(msgHash, privKey, opts = {}) {
     return QRSToSig(getQRSrfc6979Sync(msgHash, privKey), opts, typeof msgHash === 'string');
 }
-exports._syncSign = _syncSign;
+exports.signSync = signSync;
 function verify(signature, msgHash, publicKey) {
     const { n } = CURVE;
     const sig = normalizeSignature(signature);
@@ -927,6 +929,8 @@ exports.utils = {
             throw new Error("The environment doesn't have hmac-sha256 function");
         }
     },
+    sha256Sync: undefined,
+    hmacSha256Sync: undefined,
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point === Point.BASE ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);

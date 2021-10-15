@@ -68,12 +68,12 @@ declare function sign(msgHash: string, privKey: PrivKey, opts: OptsRecov): Promi
 declare function sign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
 declare function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
 declare function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
-declare function _syncSign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
-declare function _syncSign(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
-declare function _syncSign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
-declare function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
-declare function _syncSign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
-export { sign, _syncSign };
+declare function signSync(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
+declare function signSync(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
+declare function signSync(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
+declare function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+declare function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+export { sign, signSync };
 export declare function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean;
 declare class SchnorrSignature {
     readonly r: bigint;
@@ -94,11 +94,15 @@ export declare const schnorr: {
     sign: typeof schnorrSign;
     verify: typeof schnorrVerify;
 };
+declare type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
+declare type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
 export declare const utils: {
     isValidPrivateKey(privateKey: PrivKey): boolean;
     randomBytes: (bytesLength?: number) => Uint8Array;
     randomPrivateKey: () => Uint8Array;
     sha256: (message: Uint8Array) => Promise<Uint8Array>;
     hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
+    sha256Sync: Sha256FnSync;
+    hmacSha256Sync: HmacFnSync;
     precompute(windowSize?: number, point?: Point): Point;
 };
