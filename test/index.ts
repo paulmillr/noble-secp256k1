@@ -165,7 +165,17 @@ describe('secp256k1', () => {
         fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
           const signature = new secp.Signature(r, s);
           const hex = signature.toDERHex();
-          expect(secp.Signature.fromHex(hex)).toEqual(signature);
+          expect(secp.Signature.fromDER(hex)).toEqual(signature);
+        })
+      );
+    });
+
+    it('.fromHex() roundtrip', () => {
+      fc.assert(
+        fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
+          const signature = new secp.Signature(r, s);
+          const hex = signature.toDERHex();
+          expect(secp.Signature.fromDER(hex)).toEqual(signature);
         })
       );
     });
@@ -177,7 +187,7 @@ describe('secp256k1', () => {
         const full = await secp.sign(vector.m, vector.d, { canonical: true });
         const vsig = vector.signature;
         const [vecR, vecS] = [vsig.slice(0, 64), vsig.slice(64, 128)];
-        const res = secp.Signature.fromHex(full).toCompactHex();
+        const res = secp.Signature.fromDER(full).toCompactHex();
         const [r, s] = [res.slice(0, 64), res.slice(64, 128)];
         expect(r).toBe(vecR);
         expect(s).toBe(vecS);
@@ -212,7 +222,7 @@ describe('secp256k1', () => {
       for (let [msg, exp] of CASES) {
         const res = await secp.sign(msg, privKey, { canonical: true });
         expect(res).toBe(exp);
-        const rs = secp.Signature.fromHex(res).toCompactHex();
+        const rs = secp.Signature.fromDER(res).toCompactHex();
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
       }
     });

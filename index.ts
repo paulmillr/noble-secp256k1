@@ -949,6 +949,7 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
     recovery ^= 1;
   }
   const sig = new Signature(r, adjustedS);
+  sig.assertValidity();
   const hashed = str ? sig.toDERHex() : sig.toDERRawBytes();
   return recovered ? [hashed, recovery] : hashed;
 }

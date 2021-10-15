@@ -759,6 +759,7 @@ function QRSToSig(qrs, opts, str = false) {
         recovery ^= 1;
     }
     const sig = new Signature(r, adjustedS);
+    sig.assertValidity();
     const hashed = str ? sig.toDERHex() : sig.toDERRawBytes();
     return recovered ? [hashed, recovery] : hashed;
 }
