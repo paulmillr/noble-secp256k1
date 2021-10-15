@@ -1,11 +1,20 @@
 const { run, mark, logMem } = require('micro-bmark');
 const secp = require('..');
 const { join } = require('path');
+const { hmac } = require('noble-hashes/lib/hmac');
+const { sha256 } = require('noble-hashes/lib/sha256');
 const points = require('fs')
   .readFileSync(join(__dirname, './vectors/points.txt'), 'utf-8')
   .split('\n')
   .filter((a) => a)
   .slice(0, 1000);
+
+secp.utils.hmacSha256Sync = (key, ...msgs) => {
+  const h = hmac.create(sha256, key);
+  msgs.forEach(msg => h.update(msg))
+  // for (const msg of msgs) h.update(msg);
+  return h.digest();
+};
 
 // run([4, 8, 16], async (windowSize) => {
 run(async (windowSize) => {
@@ -39,6 +48,8 @@ run(async (windowSize) => {
   await mark('sign', samples, async () => {
     await secp.sign(msg, priv);
   });
+
+  await mark('signSync', samples, () => secp.signSync(msg, priv));
 
   await mark('verify', samples, () => {
     secp.verify(signature, msg, pub);
