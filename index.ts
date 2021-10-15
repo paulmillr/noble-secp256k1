@@ -942,15 +942,15 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed
     : shared.toRawBytes(isCompressed);
 }
 
-type OptsRecov = { recovered: true; canonical?: true };
-type OptsNoRecov = { recovered?: false; canonical?: true };
-type Opts = { recovered?: boolean; canonical?: true };
+type OptsRecov = { recovered: true; canonical?: true, der?: true };
+type OptsNoRecov = { recovered?: false; canonical?: true, der?: true };
+type Opts = { recovered?: boolean; canonical?: true, der?: true };
 type SignOutput = Hex | [Hex, number];
 
 // We don't overload function because the overload won't be externally visible
 function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOutput {
   const [q, r, s] = qrs;
-  let { canonical, recovered } = opts;
+  let { canonical, der, recovered } = opts;
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
   let adjustedS = s;
   const HIGH_NUMBER = CURVE.n >> 1n;
@@ -960,7 +960,8 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
   }
   const sig = new Signature(r, adjustedS);
   sig.assertValidity();
-  const hashed = str ? sig.toDERHex() : sig.toDERRawBytes();
+  const hex = der ? sig.toDERHex() : sig.toCompactHex();
+  const hashed = str ? hex : hexToBytes(hex);
   return recovered ? [hashed, recovery] : hashed;
 }
 
