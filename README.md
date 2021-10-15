@@ -118,7 +118,7 @@ const { hmac } = require('noble-hashes/lib/hmac');
 const { sha256 } = require('noble-hashes/lib/sha256');
 secp256k1.utils.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => {
   const h = hmac.create(sha256, key);
-  for (const msg of msgs) h.update(msg);
+  msgs.forEach(msg => h.update(msg));
   return h.digest();
 };
 
