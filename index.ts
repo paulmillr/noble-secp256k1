@@ -875,11 +875,21 @@ function normalizePrivateKey(key: PrivKey): bigint {
 }
 
 function normalizePublicKey(publicKey: PubKey): Point {
-  return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
+  if (publicKey instanceof Point) {
+    publicKey.assertValidity();
+    return publicKey;
+  } else {
+    return Point.fromHex(publicKey)
+  }
 }
 
 function normalizeSignature(signature: Sig): Signature {
-  return signature instanceof Signature ? signature : Signature.fromDER(signature);
+  if (signature instanceof Signature) {
+    signature.assertValidity();
+    return signature;
+  } else {
+    return Signature.fromDER(signature);
+  }
 }
 
 export function getPublicKey(

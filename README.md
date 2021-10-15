@@ -244,13 +244,13 @@ secp256k1.Point {
 secp256k1.Signature {
   constructor(r: bigint, s: bigint);
   // DER encoded ECDSA signature
-  static fromHex(hex: Uint8Array | string);
+  static fromDER(hex: Uint8Array | string);
   // R, S 32-byte each
-  statci fromRSHex(hex: Uint8Array | string);
-  toRawBytes(): Uint8Array;
-  toHex(): string;
-  toRSRawBytes(): Uint8Array;
-  toRSHex(): string;
+  statci fromCompact(hex: Uint8Array | string);
+  toDERRawBytes(): Uint8Array;
+  toDERHex(): string;
+  toCompactRawBytes(): Uint8Array;
+  toCompactHex(): string;
 }
 ```
 

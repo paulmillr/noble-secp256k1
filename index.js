@@ -705,10 +705,22 @@ function normalizePrivateKey(key) {
     return num;
 }
 function normalizePublicKey(publicKey) {
-    return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
+    if (publicKey instanceof Point) {
+        publicKey.assertValidity();
+        return publicKey;
+    }
+    else {
+        return Point.fromHex(publicKey);
+    }
 }
 function normalizeSignature(signature) {
-    return signature instanceof Signature ? signature : Signature.fromDER(signature);
+    if (signature instanceof Signature) {
+        signature.assertValidity();
+        return signature;
+    }
+    else {
+        return Signature.fromDER(signature);
+    }
 }
 function getPublicKey(privateKey, isCompressed = false) {
     const point = Point.fromPrivateKey(privateKey);
