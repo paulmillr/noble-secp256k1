@@ -879,7 +879,7 @@ function normalizePublicKey(publicKey: PubKey): Point {
     publicKey.assertValidity();
     return publicKey;
   } else {
-    return Point.fromHex(publicKey)
+    return Point.fromHex(publicKey);
   }
 }
 
@@ -942,9 +942,9 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed
     : shared.toRawBytes(isCompressed);
 }
 
-type OptsRecov = { recovered: true; canonical?: true, der?: true };
-type OptsNoRecov = { recovered?: false; canonical?: true, der?: true };
-type Opts = { recovered?: boolean; canonical?: true, der?: true };
+type OptsRecov = { recovered: true; canonical?: true; der?: true };
+type OptsNoRecov = { recovered?: false; canonical?: true; der?: true };
+type Opts = { recovered?: boolean; canonical?: true; der?: true };
 type SignOutput = Hex | [Hex, number];
 
 // We don't overload function because the overload won't be externally visible
