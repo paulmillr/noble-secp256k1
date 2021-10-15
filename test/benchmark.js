@@ -12,7 +12,6 @@ const points = require('fs')
 secp.utils.hmacSha256Sync = (key, ...msgs) => {
   const h = hmac.create(sha256, key);
   msgs.forEach(msg => h.update(msg))
-  // for (const msg of msgs) h.update(msg);
   return h.digest();
 };
 
