@@ -280,7 +280,6 @@ class Point {
     static fromSignature(msgHash, signature, recovery) {
         let h = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
         const sig = normalizeSignature(signature);
-        sig.assertValidity();
         const { r, s } = sig;
         if (recovery !== 0 && recovery !== 1) {
             throw new Error('Cannot recover signature: invalid yParity bit');
@@ -354,7 +353,18 @@ class Signature {
         this.r = r;
         this.s = s;
     }
-    static fromHex(hex) {
+    static fromCompact(hex) {
+        if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
+            throw new TypeError(`Signature.fromCompact: Expected string or Uint8Array`);
+        }
+        const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
+        if (str.length !== 128)
+            throw new Error('Signature.fromCompact: Expected 64-byte hex');
+        const sig = new Signature(hexToNumber(str.slice(0, 64)), hexToNumber(str.slice(64, 128)));
+        sig.assertValidity();
+        return sig;
+    }
+    static fromDER(hex) {
         if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
             throw new TypeError(`Signature.fromHex: Expected string or Uint8Array`);
         }
@@ -388,7 +398,12 @@ class Signature {
             throw new Error(`Signature.fromHex: Invalid s with trailing length`);
         }
         const s = hexToNumber(ss);
-        return new Signature(r, s);
+        const sig = new Signature(r, s);
+        sig.assertValidity();
+        return sig;
+    }
+    static fromHex(hex) {
+        return this.fromDER(hex);
     }
     assertValidity() {
         const { r, s } = this;
@@ -397,10 +412,10 @@ class Signature {
         if (!isWithinCurveOrder(s))
             throw new Error('Invalid Signature: s must be 0 < s < n');
     }
-    toRawBytes(isCompressed = false) {
-        return hexToBytes(this.toHex(isCompressed));
+    toDERRawBytes(isCompressed = false) {
+        return hexToBytes(this.toDERHex(isCompressed));
     }
-    toHex(isCompressed = false) {
+    toDERHex(isCompressed = false) {
         const sHex = sliceDer(numberToHex(this.s));
         if (isCompressed)
             return sHex;
@@ -409,6 +424,18 @@ class Signature {
         const sLen = numberToHex(sHex.length / 2);
         const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
         return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
+    }
+    toRawBytes() {
+        return this.toDERRawBytes();
+    }
+    toHex() {
+        return this.toDERHex();
+    }
+    toCompactRawBytes() {
+        return hexToBytes(this.toCompactHex());
+    }
+    toCompactHex() {
+        return pad64(this.r) + pad64(this.s);
     }
 }
 exports.Signature = Signature;
@@ -681,7 +708,7 @@ function normalizePublicKey(publicKey) {
     return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
 function normalizeSignature(signature) {
-    return signature instanceof Signature ? signature : Signature.fromHex(signature);
+    return signature instanceof Signature ? signature : Signature.fromDER(signature);
 }
 function getPublicKey(privateKey, isCompressed = false) {
     const point = Point.fromPrivateKey(privateKey);
@@ -732,7 +759,7 @@ function QRSToSig(qrs, opts, str = false) {
         recovery ^= 1;
     }
     const sig = new Signature(r, adjustedS);
-    const hashed = str ? sig.toHex() : sig.toRawBytes();
+    const hashed = str ? sig.toDERHex() : sig.toDERRawBytes();
     return recovered ? [hashed, recovery] : hashed;
 }
 async function sign(msgHash, privKey, opts = {}) {
@@ -745,9 +772,9 @@ function signSync(msgHash, privKey, opts = {}) {
 exports.signSync = signSync;
 function verify(signature, msgHash, publicKey) {
     const { n } = CURVE;
-    const sig = normalizeSignature(signature);
+    let sig;
     try {
-        sig.assertValidity();
+        sig = normalizeSignature(signature);
     }
     catch (error) {
         return false;

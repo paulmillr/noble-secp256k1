@@ -107,7 +107,8 @@ Generates deterministic ECDSA signature as per RFC6979.
 - `options?: Options` - *optional* object related to signature value and format
 - `options?.recovered: boolean = false` - determines whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
 - `options?.canonical: boolean = false` - determines whether a signature `s` should be no more than 1/2 prime order
-- Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`.
+- Returns DER encoded ECDSA signature, as hex uint8a / string and recovered bit if `options.recovered == true`
+- If you prefer Compact output (32-byte r + 32-byte s), use `Signature.fromDER(output).toCompactHex()`
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
 
@@ -244,7 +245,12 @@ secp256k1.Signature {
   constructor(r: bigint, s: bigint);
   // DER encoded ECDSA signature
   static fromHex(hex: Uint8Array | string);
+  // R, S 32-byte each
+  statci fromRSHex(hex: Uint8Array | string);
+  toRawBytes(): Uint8Array;
   toHex(): string;
+  toRSRawBytes(): Uint8Array;
+  toRSHex(): string;
 }
 ```
 

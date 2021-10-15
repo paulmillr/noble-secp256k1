@@ -383,7 +383,6 @@ export class Point {
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
     let h: bigint = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
     const sig = normalizeSignature(signature);
-    sig.assertValidity();
     const { r, s } = sig;
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid yParity bit');
@@ -471,9 +470,21 @@ function sliceDer(s: string): string {
 export class Signature {
   constructor(public r: bigint, public s: bigint) {}
 
+  // pair (32 bytes of r, 32 bytes of s)
+  static fromCompact(hex: Hex) {
+    if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
+      throw new TypeError(`Signature.fromCompact: Expected string or Uint8Array`);
+    }
+    const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
+    if (str.length !== 128) throw new Error('Signature.fromCompact: Expected 64-byte hex');
+    const sig = new Signature(hexToNumber(str.slice(0, 64)), hexToNumber(str.slice(64, 128)));
+    sig.assertValidity();
+    return sig;
+  }
+
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
-  static fromHex(hex: Hex) {
+  static fromDER(hex: Hex) {
     if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
       throw new TypeError(`Signature.fromHex: Expected string or Uint8Array`);
     }
@@ -513,8 +524,14 @@ export class Signature {
       throw new Error(`Signature.fromHex: Invalid s with trailing length`);
     }
     const s = hexToNumber(ss);
+    const sig = new Signature(r, s);
+    sig.assertValidity();
+    return sig;
+  }
 
-    return new Signature(r, s);
+  // Don't use this method
+  static fromHex(hex: Hex) {
+    return this.fromDER(hex);
   }
 
   assertValidity(): void {
@@ -523,11 +540,11 @@ export class Signature {
     if (!isWithinCurveOrder(s)) throw new Error('Invalid Signature: s must be 0 < s < n');
   }
 
-  toRawBytes(isCompressed = false) {
-    return hexToBytes(this.toHex(isCompressed));
+  // DER-encoded
+  toDERRawBytes(isCompressed = false) {
+    return hexToBytes(this.toDERHex(isCompressed));
   }
-
-  toHex(isCompressed = false) {
+  toDERHex(isCompressed = false) {
     const sHex = sliceDer(numberToHex(this.s));
     if (isCompressed) return sHex;
     const rHex = sliceDer(numberToHex(this.r));
@@ -535,6 +552,22 @@ export class Signature {
     const sLen = numberToHex(sHex.length / 2);
     const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
+  }
+
+  // Don't use these methods
+  toRawBytes() {
+    return this.toDERRawBytes();
+  }
+  toHex() {
+    return this.toDERHex();
+  }
+
+  // 32 bytes of r, then 32 bytes of s
+  toCompactRawBytes() {
+    return hexToBytes(this.toCompactHex());
+  }
+  toCompactHex() {
+    return pad64(this.r) + pad64(this.s);
   }
 }
 export const SignResult = Signature; // backwards compatibility
@@ -846,7 +879,7 @@ function normalizePublicKey(publicKey: PubKey): Point {
 }
 
 function normalizeSignature(signature: Sig): Signature {
-  return signature instanceof Signature ? signature : Signature.fromHex(signature);
+  return signature instanceof Signature ? signature : Signature.fromDER(signature);
 }
 
 export function getPublicKey(
@@ -916,7 +949,7 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
     recovery ^= 1;
   }
   const sig = new Signature(r, adjustedS);
-  const hashed = str ? sig.toHex() : sig.toRawBytes();
+  const hashed = str ? sig.toDERHex() : sig.toDERRawBytes();
   return recovered ? [hashed, recovery] : hashed;
 }
 
@@ -944,9 +977,9 @@ export { sign, signSync };
 // https://www.secg.org/sec1-v2.pdf, section 4.1.4
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
   const { n } = CURVE;
-  const sig = normalizeSignature(signature);
+  let sig;
   try {
-    sig.assertValidity();
+    sig = normalizeSignature(signature);
   } catch (error) {
     return false;
   }

@@ -43,10 +43,16 @@ export declare class Signature {
     r: bigint;
     s: bigint;
     constructor(r: bigint, s: bigint);
+    static fromCompact(hex: Hex): Signature;
+    static fromDER(hex: Hex): Signature;
     static fromHex(hex: Hex): Signature;
     assertValidity(): void;
-    toRawBytes(isCompressed?: boolean): Uint8Array;
-    toHex(isCompressed?: boolean): string;
+    toDERRawBytes(isCompressed?: boolean): Uint8Array;
+    toDERHex(isCompressed?: boolean): string;
+    toRawBytes(): Uint8Array;
+    toHex(): string;
+    toCompactRawBytes(): Uint8Array;
+    toCompactHex(): string;
 }
 export declare const SignResult: typeof Signature;
 declare type U8A = Uint8Array;
