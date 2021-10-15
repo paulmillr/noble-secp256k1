@@ -111,7 +111,7 @@ Generates deterministic ECDSA signature as per RFC6979.
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
 
-To use `signSync` counterpart, you need to set `utils.hmacSha256Sync` to a function with signature `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`. Example with `noble-hashes` package:
+`signSync` counterpart could also be used, you need to set `utils.hmacSha256Sync` to a function with signature `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`. Example with `noble-hashes` package:
 
 ```ts
 const { hmac } = require('noble-hashes/lib/hmac');
@@ -188,7 +188,15 @@ function schnorrVerify(signature: Uint8Array | string, msgHash: Uint8Array | str
 
 ###### `utils.randomPrivateKey(): Uint8Array`
 
-Returns `Uint8Array` of 32 cryptographically secure random bytes that can be used as private key.
+Returns `Uint8Array` of 32 cryptographically secure random bytes that can be used as private key. The signature is:
+
+```ts
+(key: Uint8Array, ...msgs: Uint8Array[]): Uint8Array;
+```
+
+###### `utils.hmacSha256Sync`
+
+The function is not defined by default, but could be used to implement `signSync` method (see above).
 
 ###### `utils.precompute(W = 8, point = BASE_POINT): Point`
 
