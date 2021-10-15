@@ -64,10 +64,12 @@ export declare function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCo
 declare type OptsRecov = {
     recovered: true;
     canonical?: true;
+    der?: boolean;
 };
 declare type OptsNoRecov = {
     recovered?: false;
     canonical?: true;
+    der?: boolean;
 };
 declare function sign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
 declare function sign(msgHash: string, privKey: PrivKey, opts: OptsRecov): Promise<[string, number]>;

@@ -485,15 +485,16 @@ export class Signature {
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromDER(hex: Hex) {
+    const fn = 'Signature.fromDER';
     if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
-      throw new TypeError(`Signature.fromHex: Expected string or Uint8Array`);
+      throw new TypeError(`${fn}: Expected string or Uint8Array`);
     }
     const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
 
     // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
     const length = parseByte(str.slice(2, 4));
     if (str.slice(0, 2) !== '30' || length !== str.length - 4 || str.slice(4, 6) !== '02') {
-      throw new Error('Signature.fromHex: Invalid signature');
+      throw new Error(`${fn}: Invalid signature ${str}`);
     }
 
     // r
@@ -501,27 +502,27 @@ export class Signature {
     const rEnd = 8 + rLen;
     const rr = str.slice(8, rEnd);
     if (rr.startsWith('00') && parseByte(rr.slice(2, 4)) <= 0x7f) {
-      throw new Error('Signature.fromHex: Invalid r with trailing length');
+      throw new Error(`${fn}: Invalid r with trailing length`);
     }
     const r = hexToNumber(rr);
 
     // s
     const separator = str.slice(rEnd, rEnd + 2);
     if (separator !== '02') {
-      throw new Error('Signature.fromHex: Invalid r-s separator');
+      throw new Error(`${fn}: Invalid r-s separator`);
     }
     const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
     const diff = length - sLen - rLen - 10;
     if (diff > 0 || diff === -4) {
-      throw new Error(`Signature.fromHex: Invalid total length`);
+      throw new Error(`${fn}: Invalid total length`);
     }
     if (sLen > length - rLen - 4) {
-      throw new Error(`Signature.fromHex: Invalid s`);
+      throw new Error(`${fn}: Invalid s`);
     }
     const sStart = rEnd + 4;
     const ss = str.slice(sStart, sStart + sLen);
     if (ss.startsWith('00') && parseByte(ss.slice(2, 4)) <= 0x7f) {
-      throw new Error(`Signature.fromHex: Invalid s with trailing length`);
+      throw new Error(`${fn}: Invalid s with trailing length`);
     }
     const s = hexToNumber(ss);
     const sig = new Signature(r, s);
@@ -942,15 +943,15 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed
     : shared.toRawBytes(isCompressed);
 }
 
-type OptsRecov = { recovered: true; canonical?: true; der?: true };
-type OptsNoRecov = { recovered?: false; canonical?: true; der?: true };
-type Opts = { recovered?: boolean; canonical?: true; der?: true };
+type OptsRecov = { recovered: true; canonical?: true; der?: boolean };
+type OptsNoRecov = { recovered?: false; canonical?: true; der?: boolean };
+type Opts = { recovered?: boolean; canonical?: true; der?: boolean };
 type SignOutput = Hex | [Hex, number];
 
 // We don't overload function because the overload won't be externally visible
 function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOutput {
   const [q, r, s] = qrs;
-  let { canonical, der, recovered } = opts;
+  let { canonical, der, recovered } = opts; // default der is true
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
   let adjustedS = s;
   const HIGH_NUMBER = CURVE.n >> 1n;
@@ -960,7 +961,7 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
   }
   const sig = new Signature(r, adjustedS);
   sig.assertValidity();
-  const hex = der ? sig.toDERHex() : sig.toCompactHex();
+  const hex = der === false ? sig.toCompactHex() : sig.toDERHex();
   const hashed = str ? hex : hexToBytes(hex);
   return recovered ? [hashed, recovery] : hashed;
 }

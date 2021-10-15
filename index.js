@@ -365,37 +365,38 @@ class Signature {
         return sig;
     }
     static fromDER(hex) {
+        const fn = 'Signature.fromDER';
         if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
-            throw new TypeError(`Signature.fromHex: Expected string or Uint8Array`);
+            throw new TypeError(`${fn}: Expected string or Uint8Array`);
         }
         const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
         const length = parseByte(str.slice(2, 4));
         if (str.slice(0, 2) !== '30' || length !== str.length - 4 || str.slice(4, 6) !== '02') {
-            throw new Error('Signature.fromHex: Invalid signature');
+            throw new Error(`${fn}: Invalid signature ${str}`);
         }
         const rLen = parseByte(str.slice(6, 8));
         const rEnd = 8 + rLen;
         const rr = str.slice(8, rEnd);
         if (rr.startsWith('00') && parseByte(rr.slice(2, 4)) <= 0x7f) {
-            throw new Error('Signature.fromHex: Invalid r with trailing length');
+            throw new Error(`${fn}: Invalid r with trailing length`);
         }
         const r = hexToNumber(rr);
         const separator = str.slice(rEnd, rEnd + 2);
         if (separator !== '02') {
-            throw new Error('Signature.fromHex: Invalid r-s separator');
+            throw new Error(`${fn}: Invalid r-s separator`);
         }
         const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
         const diff = length - sLen - rLen - 10;
         if (diff > 0 || diff === -4) {
-            throw new Error(`Signature.fromHex: Invalid total length`);
+            throw new Error(`${fn}: Invalid total length`);
         }
         if (sLen > length - rLen - 4) {
-            throw new Error(`Signature.fromHex: Invalid s`);
+            throw new Error(`${fn}: Invalid s`);
         }
         const sStart = rEnd + 4;
         const ss = str.slice(sStart, sStart + sLen);
         if (ss.startsWith('00') && parseByte(ss.slice(2, 4)) <= 0x7f) {
-            throw new Error(`Signature.fromHex: Invalid s with trailing length`);
+            throw new Error(`${fn}: Invalid s with trailing length`);
         }
         const s = hexToNumber(ss);
         const sig = new Signature(r, s);
@@ -762,7 +763,7 @@ function getSharedSecret(privateA, publicB, isCompressed = false) {
 exports.getSharedSecret = getSharedSecret;
 function QRSToSig(qrs, opts, str = false) {
     const [q, r, s] = qrs;
-    let { canonical, recovered } = opts;
+    let { canonical, der, recovered } = opts;
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
     let adjustedS = s;
     const HIGH_NUMBER = CURVE.n >> 1n;
@@ -772,7 +773,8 @@ function QRSToSig(qrs, opts, str = false) {
     }
     const sig = new Signature(r, adjustedS);
     sig.assertValidity();
-    const hashed = str ? sig.toDERHex() : sig.toDERRawBytes();
+    const hex = der === false ? sig.toCompactHex() : sig.toDERHex();
+    const hashed = str ? hex : hexToBytes(hex);
     return recovered ? [hashed, recovery] : hashed;
 }
 async function sign(msgHash, privKey, opts = {}) {
