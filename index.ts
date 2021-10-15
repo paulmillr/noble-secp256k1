@@ -931,7 +931,6 @@ async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<Si
   return QRSToSig(await getQRSrfc6979(msgHash, privKey), opts, typeof msgHash === 'string');
 }
 
-// Ugly hack; for cases when sync utils.hmacSha256() is the requirement.
 function signSync(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
 function signSync(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
 function signSync(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
