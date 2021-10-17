@@ -13,11 +13,19 @@ const CURVE = {
     beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
 };
 exports.CURVE = CURVE;
-function weistrass(x) {
-    const { a, b } = CURVE;
-    return mod(x ** 3n + a * x + b);
-}
-const USE_ENDOMORPHISM = CURVE.a === 0n;
+const weistrass = (() => {
+    if (CURVE.a) {
+        return (x, b = CURVE.b, a = CURVE.a) => {
+            return mod(x ** 3n + a * x + b);
+        };
+    }
+    else {
+        return (x, b = CURVE.b) => {
+            return mod(x ** 3n + b);
+        };
+    }
+})();
+const USE_ENDOMORPHISM = CURVE.a === 0n && typeof CURVE.beta === "bigint";
 class JacobianPoint {
     constructor(x, y, z) {
         this.x = x;
@@ -421,9 +429,9 @@ class Signature {
         if (isCompressed)
             return sHex;
         const rHex = sliceDer(numberToHex(this.r));
-        const rLen = numberToHex(rHex.length / 2);
-        const sLen = numberToHex(sHex.length / 2);
-        const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
+        const rLen = numberToHex(rHex.length >> 1);
+        const sLen = numberToHex(sHex.length >> 1);
+        const length = numberToHex((rHex.length >> 1) + (sHex.length >> 1) + 4);
         return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
     }
     toRawBytes() {
@@ -482,7 +490,7 @@ function hexToBytes(hex) {
     }
     if (hex.length % 2)
         throw new Error('hexToBytes: received invalid unpadded hex');
-    const array = new Uint8Array(hex.length / 2);
+    const array = new Uint8Array(hex.length >> 1);
     for (let i = 0; i < array.length; i++) {
         const j = i * 2;
         array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
@@ -576,7 +584,7 @@ function invertBatch(nums, n = CURVE.P) {
     }
     return nums;
 }
-const divNearest = (a, b) => (a + b / 2n) / b;
+const divNearest = (a, b) => (a + (b >> 1n)) / b;
 const POW_2_128 = 2n ** 128n;
 function splitScalarEndo(k) {
     const { n } = CURVE;
@@ -602,8 +610,8 @@ function truncateHash(hash) {
     if (typeof hash !== 'string')
         hash = bytesToHex(hash);
     let msg = hexToNumber(hash || '0');
-    const byteLength = hash.length / 2;
-    const delta = byteLength * 8 - 256;
+    const byteLength = hash.length >> 1;
+    const delta = (byteLength << 3) - 256;
     if (delta > 0) {
         msg = msg >> BigInt(delta);
     }
@@ -820,8 +828,8 @@ async function createChallenge(x, P, message) {
     const t = await taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
     return mod(t, CURVE.n);
 }
-function hasEvenY(point) {
-    return mod(point.y, 2n) === 0n;
+function hasOddY(point) {
+    return (point.y & 1n);
 }
 class SchnorrSignature {
     constructor(r, s) {
@@ -862,7 +870,7 @@ async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomBy
     if (rand.length !== 32)
         throw new TypeError('sign: Expected 32 bytes of aux randomness');
     const P = Point.fromPrivateKey(d0);
-    const d = hasEvenY(P) ? d0 : n - d0;
+    const d = hasOddY(P) ? n - d0 : d0;
     const t0h = await taggedHash('BIP0340/aux', rand);
     const t = d ^ t0h;
     const k0h = await taggedHash('BIP0340/nonce', pad32b(t), P.toRawX(), m);
@@ -870,7 +878,7 @@ async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomBy
     if (k0 === 0n)
         throw new Error('sign: Creation of signature failed. k is zero');
     const R = Point.fromPrivateKey(k0);
-    const k = hasEvenY(R) ? k0 : n - k0;
+    const k = hasOddY(R) ? n - k0 : k0;
     const e = await createChallenge(R.x, P, m);
     const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
     const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
@@ -886,7 +894,7 @@ async function schnorrVerify(signature, msgHash, publicKey) {
     const sG = Point.fromPrivateKey(sig.s);
     const eP = P.multiply(e);
     const R = sG.subtract(eP);
-    if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== sig.r)
+    if (R.equals(Point.BASE) || hasOddY(R) || R.x !== sig.r)
         return false;
     return true;
 }

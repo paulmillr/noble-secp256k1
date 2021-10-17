@@ -24,10 +24,17 @@ const CURVE = {
 export { CURVE };
 
 // y² = x³ + ax + b: Short weistrass curve formula. Returns y²
-function weistrass(x: bigint) {
-  const { a, b } = CURVE;
-  return mod(x ** 3n + a * x + b);
-}
+const weistrass = (() => {
+  if (CURVE.a) {
+    return (x: bigint, b = CURVE.b, a = CURVE.a) => {
+      return mod(x ** 3n + a * x + b);
+    }
+  } else {
+    return (x: bigint, b = CURVE.b) => {
+      return mod(x ** 3n + b);
+    }
+  }
+})();
 
 type Hex = Uint8Array | string;
 type PrivKey = Hex | bigint | number;
@@ -43,7 +50,7 @@ type Sig = Hex | Signature;
 // Should always be used for Jacobian's double-and-add multiplication.
 // For affines cached multiplication, it trades off 1/2 init time & 1/3 ram for 20% perf hit.
 // https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
-const USE_ENDOMORPHISM = CURVE.a === 0n;
+const USE_ENDOMORPHISM = CURVE.a === 0n && typeof CURVE.beta === "bigint";
 
 // Default Point works in 2d / affine coordinates: (x, y)
 // Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z², y=y/z³)
@@ -549,9 +556,9 @@ export class Signature {
     const sHex = sliceDer(numberToHex(this.s));
     if (isCompressed) return sHex;
     const rHex = sliceDer(numberToHex(this.r));
-    const rLen = numberToHex(rHex.length / 2);
-    const sLen = numberToHex(sHex.length / 2);
-    const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
+    const rLen = numberToHex(rHex.length >> 1);
+    const sLen = numberToHex(sHex.length >> 1);
+    const length = numberToHex((rHex.length >> 1) + (sHex.length >> 1) + 4);
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
   }
 
@@ -624,7 +631,7 @@ function hexToBytes(hex: string): Uint8Array {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
   }
   if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
-  const array = new Uint8Array(hex.length / 2);
+  const array = new Uint8Array(hex.length >> 1);
   for (let i = 0; i < array.length; i++) {
     const j = i * 2;
     array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
@@ -736,7 +743,7 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   return nums;
 }
 
-const divNearest = (a: bigint, b: bigint) => (a + b / 2n) / b;
+const divNearest = (a: bigint, b: bigint) => (a + (b >> 1n)) / b;
 const POW_2_128 = 2n ** 128n;
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
@@ -761,8 +768,8 @@ function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
 function truncateHash(hash: string | Uint8Array): bigint {
   if (typeof hash !== 'string') hash = bytesToHex(hash);
   let msg = hexToNumber(hash || '0');
-  const byteLength = hash.length / 2;
-  const delta = byteLength * 8 - 256; // size of curve.n
+  const byteLength = hash.length >> 1;
+  const delta = (byteLength << 3) - 256; // size of curve.n
   if (delta > 0) {
     msg = msg >> BigInt(delta);
   }
@@ -1026,8 +1033,8 @@ async function createChallenge(x: bigint, P: Point, message: Uint8Array) {
   return mod(t, CURVE.n);
 }
 
-function hasEvenY(point: Point) {
-  return mod(point.y, 2n) === 0n;
+function hasOddY(point: Point) {
+  return (point.y & 0b1n);
 }
 
 class SchnorrSignature {
@@ -1081,7 +1088,7 @@ async function schnorrSign(
   if (rand.length !== 32) throw new TypeError('sign: Expected 32 bytes of aux randomness');
 
   const P = Point.fromPrivateKey(d0);
-  const d = hasEvenY(P) ? d0 : n - d0;
+  const d = hasOddY(P) ? n - d0 : d0;
 
   const t0h = await taggedHash('BIP0340/aux', rand);
   const t = d ^ t0h;
@@ -1092,7 +1099,7 @@ async function schnorrSign(
 
   // R = k'⋅G
   const R = Point.fromPrivateKey(k0);
-  const k = hasEvenY(R) ? k0 : n - k0;
+  const k = hasOddY(R) ? n - k0 : k0;
   const e = await createChallenge(R.x, P, m);
   const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
   const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
@@ -1117,7 +1124,7 @@ async function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Prom
   const eP = P.multiply(e);
   const R = sG.subtract(eP);
 
-  if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== sig.r) return false;
+  if (R.equals(Point.BASE) || hasOddY(R) || R.x !== sig.r) return false;
   return true;
 }
 
