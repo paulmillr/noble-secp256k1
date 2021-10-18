@@ -138,8 +138,8 @@ function verify(signature: string, msgHash: string, publicKey: string): boolean
 
 ##### `recoverPublicKey(hash, signature, recovery)`
 ```typescript
-export declare function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
-export declare function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
+function recoverPublicKey(msgHash: Uint8Array, signature: Uint8Array, recovery: number): Uint8Array | undefined;
+function recoverPublicKey(msgHash: string, signature: string, recovery: number): string | undefined;
 ```
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
