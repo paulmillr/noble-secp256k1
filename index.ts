@@ -56,7 +56,7 @@ const USE_ENDOMORPHISM = CURVE.a === 0n && typeof CURVE.beta === "bigint";
 // Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z², y=y/z³)
 // We're doing calculations in jacobi, because its operations don't require costly inversion.
 class JacobianPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+  constructor(public x: bigint, public y: bigint, public z: bigint) { }
 
   static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
   static ZERO = new JacobianPoint(0n, 1n, 0n);
@@ -106,7 +106,7 @@ class JacobianPoint {
     const A = mod(X1 ** 2n);
     const B = mod(Y1 ** 2n);
     const C = mod(B ** 2n);
-    const D = mod(2n * (mod(mod((X1 + B) ** 2n)) - A - C));
+    const D = mod(4n * X1 * B);
     const E = mod(3n * A);
     const F = mod(E ** 2n);
     const X3 = mod(F - 2n * D);
@@ -124,20 +124,20 @@ class JacobianPoint {
     if (!(other instanceof JacobianPoint)) {
       throw new TypeError('JacobianPoint#add: expected JacobianPoint');
     }
-    const X1 = this.x;
-    const Y1 = this.y;
-    const Z1 = this.z;
     const X2 = other.x;
     const Y2 = other.y;
     const Z2 = other.z;
     if (X2 === 0n || Y2 === 0n) return this;
+    const X1 = this.x;
+    const Y1 = this.y;
+    const Z1 = this.z;
     if (X1 === 0n || Y1 === 0n) return other;
     const Z1Z1 = mod(Z1 ** 2n);
     const Z2Z2 = mod(Z2 ** 2n);
     const U1 = mod(X1 * Z2Z2);
     const U2 = mod(X2 * Z1Z1);
     const S1 = mod(Y1 * Z2 * Z2Z2);
-    const S2 = mod(mod(Y2 * Z1) * Z1Z1);
+    const S2 = mod(Y2 * Z1 * Z1Z1);
     const H = mod(U2 - U1);
     const r = mod(S2 - S1);
     // H = 0 meaning it's the same point.
@@ -328,7 +328,7 @@ export class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) {}
+  constructor(public x: bigint, public y: bigint) { }
 
   // "Private method", don't use it directly
   _setWindowSize(windowSize: number) {
@@ -397,7 +397,7 @@ export class Point {
     const prefix = 2 + (recovery & 1);
     const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-    const hG = JacobianPoint.BASE.multiply(h);
+    const hG = JacobianPoint.BASE.multiplyUnsafe(h);
     const rinv = invert(r, CURVE.n);
     const Q = sP.subtract(hG).multiplyUnsafe(rinv);
     const point = Q.toAffine();
@@ -475,7 +475,7 @@ function sliceDer(s: string): string {
 
 // Represents ECDSA signature with its (r, s) properties
 export class Signature {
-  constructor(public r: bigint, public s: bigint) {}
+  constructor(public r: bigint, public s: bigint) { }
 
   // pair (32 bytes of r, 32 bytes of s)
   static fromCompact(hex: Hex) {
@@ -543,9 +543,8 @@ export class Signature {
   }
 
   assertValidity(): void {
-    const { r, s } = this;
-    if (!isWithinCurveOrder(r)) throw new Error('Invalid Signature: r must be 0 < r < n');
-    if (!isWithinCurveOrder(s)) throw new Error('Invalid Signature: s must be 0 < s < n');
+    if (!isWithinCurveOrder(this.r)) throw new Error('Invalid Signature: r must be 0 < r < n');
+    if (!isWithinCurveOrder(this.s)) throw new Error('Invalid Signature: s must be 0 < s < n');
   }
 
   // DER-encoded
@@ -633,7 +632,7 @@ function hexToBytes(hex: string): Uint8Array {
   if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
   const array = new Uint8Array(hex.length >> 1);
   for (let i = 0; i < array.length; i++) {
-    const j = i * 2;
+    const j = i << 1;
     array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
   }
   return array;
@@ -649,13 +648,14 @@ function bytesToNumber(bytes: Uint8Array): bigint {
 }
 
 function parseByte(str: string): number {
-  return Number.parseInt(str, 16) * 2;
+  return Number.parseInt(str, 16) << 1;
 }
 
 function isValidScalar(num: number | bigint): boolean {
-  if (typeof num === 'bigint' && num > 0n) return true;
-  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return true;
-  return false;
+  return (
+    (typeof num === 'bigint' && num > 0n) ||
+    (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
+  );
 }
 
 // -------------------------
@@ -670,7 +670,7 @@ function mod(a: bigint, b: bigint = CURVE.P): bigint {
 function pow2(x: bigint, power: bigint): bigint {
   const { P } = CURVE;
   let res = x;
-  while (power-- > 0n) {
+  for (let i = 0n; i < power; i++) {
     res *= res;
     res %= P;
   }
@@ -718,8 +718,7 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
     [x, y] = [u, v];
     [u, v] = [m, n];
   }
-  const gcd = b;
-  if (gcd !== 1n) throw new Error('invert: does not exist');
+  if (b !== 1n) throw new Error('invert: does not exist');
   return mod(x, modulo);
 }
 
@@ -1033,8 +1032,8 @@ async function createChallenge(x: bigint, P: Point, message: Uint8Array) {
   return mod(t, CURVE.n);
 }
 
-function hasOddY(point: Point) {
-  return (point.y & 0b1n);
+function hasOddY(point: Point): bigint {
+  return (point.y & 1n);
 }
 
 class SchnorrSignature {

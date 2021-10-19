@@ -64,7 +64,7 @@ class JacobianPoint {
         const A = mod(X1 ** 2n);
         const B = mod(Y1 ** 2n);
         const C = mod(B ** 2n);
-        const D = mod(2n * (mod(mod((X1 + B) ** 2n)) - A - C));
+        const D = mod(4n * X1 * B);
         const E = mod(3n * A);
         const F = mod(E ** 2n);
         const X3 = mod(F - 2n * D);
@@ -76,14 +76,14 @@ class JacobianPoint {
         if (!(other instanceof JacobianPoint)) {
             throw new TypeError('JacobianPoint#add: expected JacobianPoint');
         }
-        const X1 = this.x;
-        const Y1 = this.y;
-        const Z1 = this.z;
         const X2 = other.x;
         const Y2 = other.y;
         const Z2 = other.z;
         if (X2 === 0n || Y2 === 0n)
             return this;
+        const X1 = this.x;
+        const Y1 = this.y;
+        const Z1 = this.z;
         if (X1 === 0n || Y1 === 0n)
             return other;
         const Z1Z1 = mod(Z1 ** 2n);
@@ -91,7 +91,7 @@ class JacobianPoint {
         const U1 = mod(X1 * Z2Z2);
         const U2 = mod(X2 * Z1Z1);
         const S1 = mod(Y1 * Z2 * Z2Z2);
-        const S2 = mod(mod(Y2 * Z1) * Z1Z1);
+        const S2 = mod(Y2 * Z1 * Z1Z1);
         const H = mod(U2 - U1);
         const r = mod(S2 - S1);
         if (H === 0n) {
@@ -295,7 +295,7 @@ class Point {
         const prefix = 2 + (recovery & 1);
         const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
         const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-        const hG = JacobianPoint.BASE.multiply(h);
+        const hG = JacobianPoint.BASE.multiplyUnsafe(h);
         const rinv = invert(r, CURVE.n);
         const Q = sP.subtract(hG).multiplyUnsafe(rinv);
         const point = Q.toAffine();
@@ -415,10 +415,9 @@ class Signature {
         return this.fromDER(hex);
     }
     assertValidity() {
-        const { r, s } = this;
-        if (!isWithinCurveOrder(r))
+        if (!isWithinCurveOrder(this.r))
             throw new Error('Invalid Signature: r must be 0 < r < n');
-        if (!isWithinCurveOrder(s))
+        if (!isWithinCurveOrder(this.s))
             throw new Error('Invalid Signature: s must be 0 < s < n');
     }
     toDERRawBytes(isCompressed = false) {
@@ -492,7 +491,7 @@ function hexToBytes(hex) {
         throw new Error('hexToBytes: received invalid unpadded hex');
     const array = new Uint8Array(hex.length >> 1);
     for (let i = 0; i < array.length; i++) {
-        const j = i * 2;
+        const j = i << 1;
         array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
     }
     return array;
@@ -504,14 +503,11 @@ function bytesToNumber(bytes) {
     return hexToNumber(bytesToHex(bytes));
 }
 function parseByte(str) {
-    return Number.parseInt(str, 16) * 2;
+    return Number.parseInt(str, 16) << 1;
 }
 function isValidScalar(num) {
-    if (typeof num === 'bigint' && num > 0n)
-        return true;
-    if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
-        return true;
-    return false;
+    return ((typeof num === 'bigint' && num > 0n) ||
+        (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)));
 }
 function mod(a, b = CURVE.P) {
     const result = a % b;
@@ -520,7 +516,7 @@ function mod(a, b = CURVE.P) {
 function pow2(x, power) {
     const { P } = CURVE;
     let res = x;
-    while (power-- > 0n) {
+    for (let i = 0n; i < power; i++) {
         res *= res;
         res %= P;
     }
@@ -559,8 +555,7 @@ function invert(number, modulo = CURVE.P) {
         [x, y] = [u, v];
         [u, v] = [m, n];
     }
-    const gcd = b;
-    if (gcd !== 1n)
+    if (b !== 1n)
         throw new Error('invert: does not exist');
     return mod(x, modulo);
 }
