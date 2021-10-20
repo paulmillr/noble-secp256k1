@@ -11,6 +11,10 @@ const CURVE = {
     Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
     Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
     beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
+    a1: 0x3086d221a7d46bcde86c90e49284eb15n,
+    b1: -0xe4437ed6010e88286f547fa90abfe4c3n,
+    a2: 0x114ca50f7a8e2f3f657c1108d9d44cfd8n,
+    b2: 0x3086d221a7d46bcde86c90e49284eb15n,
 };
 exports.CURVE = CURVE;
 const weistrass = (() => {
@@ -39,8 +43,25 @@ class JacobianPoint {
         return new JacobianPoint(p.x, p.y, 1n);
     }
     static toAffineBatch(points) {
-        const toInv = invertBatch(points.map((p) => p.z));
-        return points.map((p, i) => p.toAffine(toInv[i]));
+        const len = points.length;
+        const scratch = new Array(len);
+        let acc = 1n;
+        for (let i = 0; i < len; i++) {
+            if (points[i].z === 0n)
+                continue;
+            scratch[i] = acc;
+            acc = mod(acc * points[i].z);
+        }
+        acc = invert(acc);
+        for (let i = len - 1; i >= 0; i--) {
+            if (points[i].z === 0n) {
+                scratch[i] = points[i];
+                continue;
+            }
+            scratch[i] = points[i].toAffine(mod(acc * scratch[i]));
+            acc = mod(acc * points[i].z);
+        }
+        return scratch;
     }
     static normalizeZ(points) {
         return JacobianPoint.toAffineBatch(points).map(JacobianPoint.fromAffine);
@@ -116,7 +137,7 @@ class JacobianPoint {
     multiplyUnsafe(scalar) {
         if (!isValidScalar(scalar))
             throw new TypeError('Point#multiply: expected valid scalar');
-        let n = mod(BigInt(scalar), CURVE.n);
+        let n = mod(scalar, CURVE.n);
         if (!USE_ENDOMORPHISM) {
             let p = JacobianPoint.ZERO;
             let d = this;
@@ -150,17 +171,12 @@ class JacobianPoint {
     }
     precomputeWindow(W) {
         const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
-        let points = [];
-        let p = this;
-        let base = p;
-        for (let window = 0; window < windows; window++) {
-            base = p;
-            points.push(base);
-            for (let i = 1; i < 2 ** (W - 1); i++) {
-                base = base.add(p);
-                points.push(base);
-            }
-            p = base.double();
+        const windowSize = 2 ** (W - 1);
+        const W1 = windowSize - 1;
+        const points = new Array(windowSize * windows);
+        points[0] = this;
+        for (let i = 1, il = windowSize * windows; i < il; i++) {
+            points[i] = points[i - 1].add(points[i - ((i & W1) > 0) * (i & W1) - ((i & W1) == 0)]);
         }
         return points;
     }
@@ -195,7 +211,7 @@ class JacobianPoint {
                 n += 1n;
             }
             if (wbits === 0) {
-                f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+                f = f.add(window & 1 ? precomputes[offset].negate() : precomputes[offset]);
             }
             else {
                 const cached = precomputes[offset + Math.abs(wbits) - 1];
@@ -286,7 +302,7 @@ class Point {
         return Point.BASE.multiply(normalizePrivateKey(privateKey));
     }
     static fromSignature(msgHash, signature, recovery) {
-        let h = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
+        const h = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
         const sig = normalizeSignature(signature);
         const { r, s } = sig;
         if (recovery !== 0 && recovery !== 1) {
@@ -487,7 +503,7 @@ function hexToBytes(hex) {
     if (typeof hex !== 'string') {
         throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
     }
-    if (hex.length % 2)
+    if (hex.length & 1)
         throw new Error('hexToBytes: received invalid unpadded hex');
     const array = new Uint8Array(hex.length >> 1);
     for (let i = 0; i < array.length; i++) {
@@ -559,34 +575,10 @@ function invert(number, modulo = CURVE.P) {
         throw new Error('invert: does not exist');
     return mod(x, modulo);
 }
-function invertBatch(nums, n = CURVE.P) {
-    const len = nums.length;
-    const scratch = new Array(len);
-    let acc = 1n;
-    for (let i = 0; i < len; i++) {
-        if (nums[i] === 0n)
-            continue;
-        scratch[i] = acc;
-        acc = mod(acc * nums[i], n);
-    }
-    acc = invert(acc, n);
-    for (let i = len - 1; i >= 0; i--) {
-        if (nums[i] === 0n)
-            continue;
-        const tmp = mod(acc * nums[i], n);
-        nums[i] = mod(acc * scratch[i], n);
-        acc = tmp;
-    }
-    return nums;
-}
 const divNearest = (a, b) => (a + (b >> 1n)) / b;
 const POW_2_128 = 2n ** 128n;
 function splitScalarEndo(k) {
-    const { n } = CURVE;
-    const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
-    const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
-    const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
-    const b2 = a1;
+    const { n, a1, b1, a2, b2 } = CURVE;
     const c1 = divNearest(b2 * k, n);
     const c2 = divNearest(-b1 * k, n);
     let k1 = mod(k - c1 * a1 - c2 * a2, n);
@@ -805,7 +797,7 @@ function verify(signature, msgHash, publicKey) {
     const s1 = invert(s, n);
     const u1 = mod(h * s1, n);
     const u2 = mod(r * s1, n);
-    const Ghs1 = JacobianPoint.BASE.multiply(u1);
+    const Ghs1 = JacobianPoint.BASE.multiplyUnsafe(u1);
     const Prs1 = pubKey.multiplyUnsafe(u2);
     const R = Ghs1.add(Prs1).toAffine();
     const v = mod(R.x, n);

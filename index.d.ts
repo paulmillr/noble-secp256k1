@@ -8,6 +8,10 @@ declare const CURVE: {
     Gx: bigint;
     Gy: bigint;
     beta: bigint;
+    a1: bigint;
+    b1: bigint;
+    a2: bigint;
+    b2: bigint;
 };
 export { CURVE };
 declare type Hex = Uint8Array | string;

@@ -1,7 +1,7 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 
 // https://www.secg.org/sec2-v2.pdf
-// Curve fomula is y² = x³ + ax + b
+// Curve formula is y² = x³ + ax + b
 const CURVE = {
   // Params: a, b
   a: 0n,
@@ -18,6 +18,10 @@ const CURVE = {
   Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
   // For endomorphism, see below
   beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
+  a1: 0x3086d221a7d46bcde86c90e49284eb15n,
+  b1: -0xe4437ed6010e88286f547fa90abfe4c3n,
+  a2: 0x114ca50f7a8e2f3f657c1108d9d44cfd8n,
+  b2: 0x3086d221a7d46bcde86c90e49284eb15n,
 };
 
 // Cleaner js output if that's on a separate line.
@@ -71,8 +75,24 @@ class JacobianPoint {
   // invert on all of them. invert is very slow operation,
   // so this improves performance massively.
   static toAffineBatch(points: JacobianPoint[]): Point[] {
-    const toInv = invertBatch(points.map((p) => p.z));
-    return points.map((p, i) => p.toAffine(toInv[i]));
+    const len = points.length;
+    const scratch = new Array(len);
+    let acc = 1n;
+    for (let i = 0; i < len; i++) {
+      if (points[i].z === 0n) continue;
+      scratch[i] = acc;
+      acc = mod(acc * points[i].z);
+    }
+    acc = invert(acc);
+    for (let i = len - 1; i >= 0; i--) {
+      if (points[i].z === 0n) {
+        scratch[i] = points[i];
+        continue;
+      }
+      scratch[i] = points[i].toAffine(mod(acc * scratch[i]));
+      acc = mod(acc * points[i].z);
+    }
+    return scratch;
   }
 
   static normalizeZ(points: JacobianPoint[]): JacobianPoint[] {
@@ -166,7 +186,7 @@ class JacobianPoint {
   // an exposed private key e.g. sig verification, which works over *public* keys.
   multiplyUnsafe(scalar: bigint): JacobianPoint {
     if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected valid scalar');
-    let n = mod(BigInt(scalar), CURVE.n);
+    let n = mod(scalar, CURVE.n);
     if (!USE_ENDOMORPHISM) {
       let p = JacobianPoint.ZERO;
       let d: JacobianPoint = this;
@@ -202,17 +222,13 @@ class JacobianPoint {
   private precomputeWindow(W: number): JacobianPoint[] {
     // splitScalarEndo could return 129-bit numbers, so we need at least 128 / W + 1
     const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
-    let points: JacobianPoint[] = [];
-    let p: JacobianPoint = this;
-    let base = p;
-    for (let window = 0; window < windows; window++) {
-      base = p;
-      points.push(base);
-      for (let i = 1; i < 2 ** (W - 1); i++) {
-        base = base.add(p);
-        points.push(base);
-      }
-      p = base.double();
+    const windowSize = 2 ** (W - 1);
+    const W1 = windowSize - 1;
+
+    const points: JacobianPoint[] = new Array(windowSize * windows);
+    points[0] = this;
+    for (let i = 1, il = windowSize * windows; i < il; i++) {
+      points[i] = points[i - 1].add(points[i - (((i & W1) > 0) as unknown as number) * (i & W1) - (((i & W1) == 0) as unknown as number)]);
     }
     return points;
   }
@@ -266,7 +282,7 @@ class JacobianPoint {
       // Add random point inside current window to f.
       if (wbits === 0) {
         // The most important part for const-time getPublicKey
-        f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+        f = f.add(window & 1 ? precomputes[offset].negate() : precomputes[offset]);
       } else {
         const cached = precomputes[offset + Math.abs(wbits) - 1];
         p = p.add(wbits < 0 ? cached.negate() : cached);
@@ -302,7 +318,7 @@ class JacobianPoint {
   }
 
   // Converts Jacobian point to affine (x, y) coordinates.
-  // Can accept precomputed Z^-1 - for example, from invertBatch.
+  // Can accept precomputed Z^-1 - for example, from toAffineBatch.
   // (x, y, z) ∋ (x=x/z², y=y/z³)
   toAffine(invZ: bigint = invert(this.z)): Point {
     const invZ2 = invZ ** 2n;
@@ -388,7 +404,7 @@ export class Point {
   // Uses following formula:
   // Q = (r ** -1)(sP - hG)
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
-    let h: bigint = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
+    const h: bigint = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
     const sig = normalizeSignature(signature);
     const { r, s } = sig;
     if (recovery !== 0 && recovery !== 1) {
@@ -629,7 +645,7 @@ function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== 'string') {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
   }
-  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
+  if (hex.length & 1) throw new Error('hexToBytes: received invalid unpadded hex');
   const array = new Uint8Array(hex.length >> 1);
   for (let i = 0; i < array.length; i++) {
     const j = i << 1;
@@ -722,36 +738,12 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   return mod(x, modulo);
 }
 
-// Takes a bunch of numbers, inverses all of them
-function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
-  const len = nums.length;
-  const scratch = new Array(len);
-  let acc = 1n;
-  for (let i = 0; i < len; i++) {
-    if (nums[i] === 0n) continue;
-    scratch[i] = acc;
-    acc = mod(acc * nums[i], n);
-  }
-  acc = invert(acc, n);
-  for (let i = len - 1; i >= 0; i--) {
-    if (nums[i] === 0n) continue;
-    const tmp = mod(acc * nums[i], n);
-    nums[i] = mod(acc * scratch[i], n);
-    acc = tmp;
-  }
-  return nums;
-}
-
 const divNearest = (a: bigint, b: bigint) => (a + (b >> 1n)) / b;
 const POW_2_128 = 2n ** 128n;
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
-  const { n } = CURVE;
-  const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
-  const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
-  const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
-  const b2 = a1;
+  const { n, a1, b1, a2, b2 } = CURVE;
   const c1 = divNearest(b2 * k, n);
   const c2 = divNearest(-b1 * k, n);
   let k1 = mod(k - c1 * a1 - c2 * a2, n);
@@ -1009,7 +1001,7 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean
   const s1 = invert(s, n); // s^-1
   const u1 = mod(h * s1, n);
   const u2 = mod(r * s1, n);
-  const Ghs1 = JacobianPoint.BASE.multiply(u1);
+  const Ghs1 = JacobianPoint.BASE.multiplyUnsafe(u1);
   const Prs1 = pubKey.multiplyUnsafe(u2);
   const R = Ghs1.add(Prs1).toAffine();
   const v = mod(R.x, n);
