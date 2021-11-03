@@ -25,10 +25,10 @@ ECDH key agreement protocol and signature schemes. Supports deterministic **ECDS
 Use NPM in node.js / browser, or include single file from
 [GitHub's releases page](https://github.com/paulmillr/noble-secp256k1/releases):
 
-> npm install noble-secp256k1
+> npm install @noble/secp256k1
 
 ```js
-import * as secp from "noble-secp256k1";
+import * as secp from "@noble/secp256k1";
 // if you're using single file, use global variable nobleSecp256k1 instead
 
 (async () => {
