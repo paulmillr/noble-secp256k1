@@ -269,7 +269,7 @@ We however consider infrastructure attacks like rogue NPM modules very important
 Benchmarks measured with Apple M1.
 
     getPublicKey(utils.randomPrivateKey()) x 6,121 ops/sec @ 163μs/op
-    sign x 4,468 ops/sec @ 223μs/op
+    sign x 4,679 ops/sec @ 213μs/op
     verify x 923 ops/sec @ 1ms/op
     recoverPublicKey x 491 ops/sec @ 2ms/op
     getSharedSecret aka ecdh x 534 ops/sec @ 1ms/op
