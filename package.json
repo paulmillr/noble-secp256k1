@@ -57,6 +57,7 @@
     "ecc",
     "rfc6979",
     "schnorr",
+    "sig",
     "bip0340",
     "bip340",
     "ecdsa",
