@@ -1134,7 +1134,7 @@ Point.BASE._setWindowSize(8);
 type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
 
-const crypto: { node?: any; web?: Crypto } = (() => {
+const crypto: { node?: any; web?: any } = (() => {
   const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
   const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
   return {
