@@ -158,8 +158,8 @@ class JacobianPoint {
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification, which works over *public* keys.
   multiplyUnsafe(scalar: bigint): JacobianPoint {
-    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected valid scalar');
-    let n = mod(BigInt(scalar), CURVE.n);
+    let n = normalizeScalar(scalar);
+    // The condition is not executed unless you change global var
     if (!USE_ENDOMORPHISM) {
       let p = JacobianPoint.ZERO;
       let d: JacobianPoint = this;
@@ -170,11 +170,10 @@ class JacobianPoint {
       }
       return p;
     }
-    let [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
+    let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
     let k1p = JacobianPoint.ZERO;
     let k2p = JacobianPoint.ZERO;
     let d: JacobianPoint = this;
-    // TODO: see if we need to check for both zeros instead of one
     while (k1 > 0n || k2 > 0n) {
       if (k1 & 1n) k1p = k1p.add(d);
       if (k2 & 1n) k2p = k2p.add(d);
@@ -212,7 +211,7 @@ class JacobianPoint {
 
   // Implements w-ary non-adjacent form for calculating ec multiplication
   // Optional `affinePoint` argument is used to save cached precompute windows on it.
-  private wNAF(n: bigint, affinePoint?: Point): [JacobianPoint, JacobianPoint] {
+  private wNAF(n: bigint, affinePoint?: Point): { p: JacobianPoint; f: JacobianPoint } {
     if (!affinePoint && this.equals(JacobianPoint.BASE)) affinePoint = Point.BASE;
     const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
     if (256 % W) {
@@ -259,36 +258,40 @@ class JacobianPoint {
       // Add random point inside current window to f.
       if (wbits === 0) {
         // The most important part for const-time getPublicKey
-        f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+        let pr = precomputes[offset];
+        if (window % 2) pr = pr.negate();
+        f = f.add(pr);
       } else {
-        const cached = precomputes[offset + Math.abs(wbits) - 1];
-        p = p.add(wbits < 0 ? cached.negate() : cached);
+        let cached = precomputes[offset + Math.abs(wbits) - 1];
+        if (wbits < 0) cached = cached.negate()
+        p = p.add(cached);
       }
     }
-    return [p, f];
+    return { p, f };
   }
 
   // Constant time multiplication.
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): JacobianPoint {
-    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected valid scalar');
-    let n = mod(BigInt(scalar), CURVE.n);
+    let n = normalizeScalar(scalar);
     // Real point.
     let point: JacobianPoint;
     // Fake point, we use it to achieve constant-time multiplication.
     let fake: JacobianPoint;
     if (USE_ENDOMORPHISM) {
-      const [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
-      let k1p, k2p, f1p, f2p;
-      [k1p, f1p] = this.wNAF(k1, affinePoint);
-      [k2p, f2p] = this.wNAF(k2, affinePoint);
+      let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
+      let { p: k1p, f: f1p } = this.wNAF(k1, affinePoint);
+      let { p: k2p, f: f2p } = this.wNAF(k2, affinePoint);
       if (k1neg) k1p = k1p.negate();
       if (k2neg) k2p = k2p.negate();
       k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
-      [point, fake] = [k1p.add(k2p), f1p.add(f2p)];
+      point = k1p.add(k2p);
+      fake = f1p.add(f2p);
     } else {
-      [point, fake] = this.wNAF(n, affinePoint);
+      let { p, f } = this.wNAF(n, affinePoint);
+      point = p;
+      fake = f;
     }
     // Normalize `z` for both points, but return only real one
     return JacobianPoint.normalizeZ([point, fake])[0];
@@ -645,10 +648,10 @@ function parseByte(str: string): number {
   return Number.parseInt(str, 16) * 2;
 }
 
-function isValidScalar(num: number | bigint): boolean {
-  if (typeof num === 'bigint' && num > 0n) return true;
-  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return true;
-  return false;
+function normalizeScalar(num: number | bigint): bigint {
+  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
+  if (typeof num === 'bigint' && isWithinCurveOrder(num)) return num;
+  throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 
 // -------------------------
@@ -701,15 +704,15 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   // Eucledian GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
   let a = mod(number, modulo);
   let b = modulo;
-  let [x, y, u, v] = [0n, 1n, 1n, 0n];
+  // prettier-ignore
+  let x = 0n, y = 1n, u = 1n, v = 0n;
   while (a !== 0n) {
     const q = b / a;
     const r = b % a;
     const m = x - u * q;
     const n = y - v * q;
-    [b, a] = [a, r];
-    [x, y] = [u, v];
-    [u, v] = [m, n];
+    // prettier-ignore
+    b = a, a = r, x = u, y = v, u = m, v = n;
   }
   const gcd = b;
   if (gcd !== 1n) throw new Error('invert: does not exist');
@@ -740,7 +743,7 @@ const divNearest = (a: bigint, b: bigint) => (a + b / 2n) / b;
 const POW_2_128 = 2n ** 128n;
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
-function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
+function splitScalarEndo(k: bigint) {
   const { n } = CURVE;
   const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
   const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
@@ -755,7 +758,7 @@ function splitScalarEndo(k: bigint): [boolean, bigint, boolean, bigint] {
   if (k1neg) k1 = n - k1;
   if (k2neg) k2 = n - k2;
   if (k1 > POW_2_128 || k2 > POW_2_128) throw new Error('splitScalarEndo: Endomorphism failed');
-  return [k1neg, k1, k2neg, k2];
+  return { k1neg, k1, k2neg, k2 };
 }
 
 function truncateHash(hash: string | Uint8Array): bigint {
@@ -777,7 +780,7 @@ type QRS = [Point, bigint, bigint];
 type U8A = Uint8Array;
 
 // Steps A, B and C of RFC6979.
-function _abc6979(msgHash: Hex, privateKey: bigint): [U8A, bigint, U8A, U8A, U8A, U8A, U8A] {
+function _abc6979(msgHash: Hex, privateKey: bigint) {
   if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
   const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
   // Step A is ignored, since we already provide hash instead of msg
@@ -791,7 +794,7 @@ function _abc6979(msgHash: Hex, privateKey: bigint): [U8A, bigint, U8A, U8A, U8A
   let k = new Uint8Array(32).fill(0);
   const b0 = Uint8Array.from([0x00]);
   const b1 = Uint8Array.from([0x01]);
-  return [h1, h1n, x, v, k, b0, b1];
+  return { h1, h1n, x, v, k, b0, b1 };
 }
 
 // Deterministic k generation as per RFC6979.
@@ -799,7 +802,7 @@ function _abc6979(msgHash: Hex, privateKey: bigint): [U8A, bigint, U8A, U8A, U8A
 // https://tools.ietf.org/html/rfc6979#section-3.1
 async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
   const privKey = normalizePrivateKey(privateKey);
-  let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
+  let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
   const hmac = utils.hmacSha256;
   // Steps D, E, F, G
   k = await hmac(k, v, b0, x, h1);
@@ -821,7 +824,7 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
 // Same thing, but for synchronous utils.hmacSha256()
 function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey): QRS {
   const privKey = normalizePrivateKey(privateKey);
-  let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
+  let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
   const hmac = utils.hmacSha256Sync;
   if (!hmac) throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
   // Steps D, E, F, G

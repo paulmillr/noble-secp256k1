@@ -106,9 +106,7 @@ class JacobianPoint {
         return this.add(other.negate());
     }
     multiplyUnsafe(scalar) {
-        if (!isValidScalar(scalar))
-            throw new TypeError('Point#multiply: expected valid scalar');
-        let n = mod(BigInt(scalar), CURVE.n);
+        let n = normalizeScalar(scalar);
         if (!USE_ENDOMORPHISM) {
             let p = JacobianPoint.ZERO;
             let d = this;
@@ -120,7 +118,7 @@ class JacobianPoint {
             }
             return p;
         }
-        let [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
+        let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
         let k1p = JacobianPoint.ZERO;
         let k2p = JacobianPoint.ZERO;
         let d = this;
@@ -187,35 +185,40 @@ class JacobianPoint {
                 n += 1n;
             }
             if (wbits === 0) {
-                f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+                let pr = precomputes[offset];
+                if (window % 2)
+                    pr = pr.negate();
+                f = f.add(pr);
             }
             else {
-                const cached = precomputes[offset + Math.abs(wbits) - 1];
-                p = p.add(wbits < 0 ? cached.negate() : cached);
+                let cached = precomputes[offset + Math.abs(wbits) - 1];
+                if (wbits < 0)
+                    cached = cached.negate();
+                p = p.add(cached);
             }
         }
-        return [p, f];
+        return { p, f };
     }
     multiply(scalar, affinePoint) {
-        if (!isValidScalar(scalar))
-            throw new TypeError('Point#multiply: expected valid scalar');
-        let n = mod(BigInt(scalar), CURVE.n);
+        let n = normalizeScalar(scalar);
         let point;
         let fake;
         if (USE_ENDOMORPHISM) {
-            const [k1neg, k1, k2neg, k2] = splitScalarEndo(n);
-            let k1p, k2p, f1p, f2p;
-            [k1p, f1p] = this.wNAF(k1, affinePoint);
-            [k2p, f2p] = this.wNAF(k2, affinePoint);
+            let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
+            let { p: k1p, f: f1p } = this.wNAF(k1, affinePoint);
+            let { p: k2p, f: f2p } = this.wNAF(k2, affinePoint);
             if (k1neg)
                 k1p = k1p.negate();
             if (k2neg)
                 k2p = k2p.negate();
             k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
-            [point, fake] = [k1p.add(k2p), f1p.add(f2p)];
+            point = k1p.add(k2p);
+            fake = f1p.add(f2p);
         }
         else {
-            [point, fake] = this.wNAF(n, affinePoint);
+            let { p, f } = this.wNAF(n, affinePoint);
+            point = p;
+            fake = f;
         }
         return JacobianPoint.normalizeZ([point, fake])[0];
     }
@@ -498,12 +501,12 @@ function bytesToNumber(bytes) {
 function parseByte(str) {
     return Number.parseInt(str, 16) * 2;
 }
-function isValidScalar(num) {
-    if (typeof num === 'bigint' && num > 0n)
-        return true;
+function normalizeScalar(num) {
     if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
-        return true;
-    return false;
+        return BigInt(num);
+    if (typeof num === 'bigint' && isWithinCurveOrder(num))
+        return num;
+    throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 function mod(a, b = CURVE.P) {
     const result = a % b;
@@ -541,15 +544,13 @@ function invert(number, modulo = CURVE.P) {
     }
     let a = mod(number, modulo);
     let b = modulo;
-    let [x, y, u, v] = [0n, 1n, 1n, 0n];
+    let x = 0n, y = 1n, u = 1n, v = 0n;
     while (a !== 0n) {
         const q = b / a;
         const r = b % a;
         const m = x - u * q;
         const n = y - v * q;
-        [b, a] = [a, r];
-        [x, y] = [u, v];
-        [u, v] = [m, n];
+        b = a, a = r, x = u, y = v, u = m, v = n;
     }
     const gcd = b;
     if (gcd !== 1n)
@@ -596,7 +597,7 @@ function splitScalarEndo(k) {
         k2 = n - k2;
     if (k1 > POW_2_128 || k2 > POW_2_128)
         throw new Error('splitScalarEndo: Endomorphism failed');
-    return [k1neg, k1, k2neg, k2];
+    return { k1neg, k1, k2neg, k2 };
 }
 function truncateHash(hash) {
     if (typeof hash !== 'string')
@@ -623,11 +624,11 @@ function _abc6979(msgHash, privateKey) {
     let k = new Uint8Array(32).fill(0);
     const b0 = Uint8Array.from([0x00]);
     const b1 = Uint8Array.from([0x01]);
-    return [h1, h1n, x, v, k, b0, b1];
+    return { h1, h1n, x, v, k, b0, b1 };
 }
 async function getQRSrfc6979(msgHash, privateKey) {
     const privKey = normalizePrivateKey(privateKey);
-    let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
+    let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
     const hmac = exports.utils.hmacSha256;
     k = await hmac(k, v, b0, x, h1);
     v = await hmac(k, v);
@@ -645,7 +646,7 @@ async function getQRSrfc6979(msgHash, privateKey) {
 }
 function getQRSrfc6979Sync(msgHash, privateKey) {
     const privKey = normalizePrivateKey(privateKey);
-    let [h1, h1n, x, v, k, b0, b1] = _abc6979(msgHash, privKey);
+    let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
     const hmac = exports.utils.hmacSha256Sync;
     if (!hmac)
         throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
