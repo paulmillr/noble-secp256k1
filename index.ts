@@ -263,7 +263,7 @@ class JacobianPoint {
         f = f.add(pr);
       } else {
         let cached = precomputes[offset + Math.abs(wbits) - 1];
-        if (wbits < 0) cached = cached.negate()
+        if (wbits < 0) cached = cached.negate();
         p = p.add(cached);
       }
     }
@@ -1136,7 +1136,8 @@ Point.BASE._setWindowSize(8);
 
 type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
-
+// Global symbol available in browsers only
+declare const self: Record<string, any> | undefined;
 const crypto: { node?: any; web?: any } = (() => {
   const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
   const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
