@@ -2,14 +2,12 @@
   "name": "@noble/secp256k1",
   "version": "1.3.0",
   "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA & Schnorr signatures",
-  "main": "index.js",
   "files": [
-    "index.js",
-    "index.d.ts"
+    "lib"
   ],
   "types": "index.d.ts",
   "scripts": {
-    "build": "tsc -d",
+    "build": "tsc -d && tsc -p tsconfig.esm.json",
     "build-release": "rollup -c rollup.config.js",
     "lint": "prettier --print-width 100 --single-quote --check index.ts",
     "test": "jest",
@@ -33,7 +31,6 @@
     "crypto": false
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^19.0.0",
     "@rollup/plugin-node-resolve": "^13.0.0",
     "@types/jest": "^27",
     "@types/node": "^16.3.3",
@@ -65,5 +62,20 @@
     "cryptography",
     "security",
     "noble"
-  ]
+  ],
+  "exports": {
+    ".": {
+      "import": "./lib/esm/index.js",
+      "default": "./lib/index.js"
+    },
+    "./index.d.ts": "./lib/index.d.ts",
+    "./crypto": {
+      "browser": {
+        "import": "./lib/esm/cryptoBrowser.js",
+        "default": "./lib/cryptoBrowser.js"
+      },
+      "import": "./lib/esm/crypto.js",
+      "default": "./lib/crypto.js"
+    }
+  }
 }
