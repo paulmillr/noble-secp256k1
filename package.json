@@ -68,14 +68,6 @@
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
     },
-    "./index.d.ts": "./lib/index.d.ts",
-    "./crypto": {
-      "browser": {
-        "import": "./lib/esm/cryptoBrowser.js",
-        "default": "./lib/cryptoBrowser.js"
-      },
-      "import": "./lib/esm/crypto.js",
-      "default": "./lib/crypto.js"
-    }
+    "./index.d.ts": "./lib/index.d.ts"
   }
 }

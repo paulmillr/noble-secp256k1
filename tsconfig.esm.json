@@ -11,10 +11,7 @@
     "preserveConstEnums": true,
     "esModuleInterop": true,
     "baseUrl": ".",
-    "paths": {
-        "@noble/secp256k1/crypto": [ "./crypto" ]
-    },
   },
-  "include": ["index.ts", "crypto.ts", "cryptoBrowser.ts"],
+  "include": ["index.ts"],
   "exclude": ["node_modules", "lib"]
 }

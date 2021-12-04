@@ -1,6 +1,6 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 
-import { crypto } from '@noble/secp256k1/crypto';
+import nodeCrypto from 'crypto';
 
 // https://www.secg.org/sec2-v2.pdf
 // Curve fomula is y² = x³ + ax + b
@@ -1138,6 +1138,14 @@ Point.BASE._setWindowSize(8);
 
 type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
+
+// Global symbol available in browsers only
+declare const self: Record<string, any> | undefined;
+
+const crypto: { node?: any; web?: any } = {
+  node: nodeCrypto,
+  web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
+};
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
