@@ -4,30 +4,19 @@ const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
 const _3n = BigInt(3);
-const _6n = BigInt(6);
-const _7n = BigInt(7);
 const _8n = BigInt(8);
-const _11n = BigInt(11);
-const _22n = BigInt(22);
-const _23n = BigInt(23);
-const _32n = BigInt(32);
-const _44n = BigInt(44);
-const _88n = BigInt(88);
-const _128n = BigInt(128);
-const _256n = BigInt(256);
-const _977n = BigInt(977);
-
 // https://www.secg.org/sec2-v2.pdf
 // Curve fomula is y² = x³ + ax + b
+const POW_2_256 = _2n ** BigInt(256);
 const CURVE = {
   // Params: a, b
   a: _0n,
-  b: _7n,
+  b: BigInt(7),
   // Field over which we'll do calculations
-  P: _2n ** _256n - _2n ** _32n - _977n,
+  P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
   // Curve order. Specifically, it belongs to prime-order subgroup;
   // but our curve is h=1, so other subgroups don't exist
-  n: _2n ** _256n - BigInt('432420386565659656852420866394968145599'),
+  n: POW_2_256 - BigInt('432420386565659656852420866394968145599'),
   // Cofactor
   h: _1n,
   // Base point (x, y) aka generator point
@@ -697,6 +686,12 @@ function pow2(x: bigint, power: bigint): bigint {
 // We are multiplying it bit-by-bit
 function sqrtMod(x: bigint): bigint {
   const { P } = CURVE;
+  const _6n = BigInt(6);
+  const _11n = BigInt(11);
+  const _22n = BigInt(22);
+  const _23n = BigInt(23);
+  const _44n = BigInt(44);
+  const _88n = BigInt(88);
   const b2 = (x * x * x) % P; // x^3, 11
   const b3 = (b2 * b2 * x) % P; // x^7
   const b6 = (pow2(b3, _3n) * b3) % P;
@@ -757,7 +752,7 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
 }
 
 const divNearest = (a: bigint, b: bigint) => (a + b / _2n) / b;
-const POW_2_128 = _2n ** _128n;
+const POW_2_128 = _2n ** BigInt(128);
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalarEndo(k: bigint) {

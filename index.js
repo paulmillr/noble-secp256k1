@@ -2,22 +2,28 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.utils = exports.schnorr = exports.verify = exports.signSync = exports.sign = exports.getSharedSecret = exports.recoverPublicKey = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.CURVE = void 0;
+const _0n = BigInt(0);
+const _1n = BigInt(1);
+const _2n = BigInt(2);
+const _3n = BigInt(3);
+const _8n = BigInt(8);
+const POW_2_256 = _2n ** BigInt(256);
 const CURVE = {
-    a: 0n,
-    b: 7n,
-    P: 2n ** 256n - 2n ** 32n - 977n,
-    n: 2n ** 256n - 432420386565659656852420866394968145599n,
-    h: 1n,
-    Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
-    Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
-    beta: 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een,
+    a: _0n,
+    b: BigInt(7),
+    P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
+    n: POW_2_256 - BigInt('432420386565659656852420866394968145599'),
+    h: _1n,
+    Gx: BigInt('55066263022277343669578718895168534326250603453777594175500187360389116729240'),
+    Gy: BigInt('32670510020758816978083085130507043184471273380659243275938904335757337482424'),
+    beta: BigInt('0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee'),
 };
 exports.CURVE = CURVE;
 function weistrass(x) {
     const { a, b } = CURVE;
-    return mod(x ** 3n + a * x + b);
+    return mod(x ** _3n + a * x + b);
 }
-const USE_ENDOMORPHISM = CURVE.a === 0n;
+const USE_ENDOMORPHISM = CURVE.a === _0n;
 class JacobianPoint {
     constructor(x, y, z) {
         this.x = x;
@@ -28,7 +34,7 @@ class JacobianPoint {
         if (!(p instanceof Point)) {
             throw new TypeError('JacobianPoint#fromAffine: expected Point');
         }
-        return new JacobianPoint(p.x, p.y, 1n);
+        return new JacobianPoint(p.x, p.y, _1n);
     }
     static toAffineBatch(points) {
         const toInv = invertBatch(points.map((p) => p.z));
@@ -53,15 +59,15 @@ class JacobianPoint {
         const X1 = this.x;
         const Y1 = this.y;
         const Z1 = this.z;
-        const A = mod(X1 ** 2n);
-        const B = mod(Y1 ** 2n);
-        const C = mod(B ** 2n);
-        const D = mod(2n * (mod(mod((X1 + B) ** 2n)) - A - C));
-        const E = mod(3n * A);
-        const F = mod(E ** 2n);
-        const X3 = mod(F - 2n * D);
-        const Y3 = mod(E * (D - X3) - 8n * C);
-        const Z3 = mod(2n * Y1 * Z1);
+        const A = mod(X1 ** _2n);
+        const B = mod(Y1 ** _2n);
+        const C = mod(B ** _2n);
+        const D = mod(_2n * (mod(mod((X1 + B) ** _2n)) - A - C));
+        const E = mod(_3n * A);
+        const F = mod(E ** _2n);
+        const X3 = mod(F - _2n * D);
+        const Y3 = mod(E * (D - X3) - _8n * C);
+        const Z3 = mod(_2n * Y1 * Z1);
         return new JacobianPoint(X3, Y3, Z3);
     }
     add(other) {
@@ -74,30 +80,30 @@ class JacobianPoint {
         const X2 = other.x;
         const Y2 = other.y;
         const Z2 = other.z;
-        if (X2 === 0n || Y2 === 0n)
+        if (X2 === _0n || Y2 === _0n)
             return this;
-        if (X1 === 0n || Y1 === 0n)
+        if (X1 === _0n || Y1 === _0n)
             return other;
-        const Z1Z1 = mod(Z1 ** 2n);
-        const Z2Z2 = mod(Z2 ** 2n);
+        const Z1Z1 = mod(Z1 ** _2n);
+        const Z2Z2 = mod(Z2 ** _2n);
         const U1 = mod(X1 * Z2Z2);
         const U2 = mod(X2 * Z1Z1);
         const S1 = mod(Y1 * Z2 * Z2Z2);
         const S2 = mod(mod(Y2 * Z1) * Z1Z1);
         const H = mod(U2 - U1);
         const r = mod(S2 - S1);
-        if (H === 0n) {
-            if (r === 0n) {
+        if (H === _0n) {
+            if (r === _0n) {
                 return this.double();
             }
             else {
                 return JacobianPoint.ZERO;
             }
         }
-        const HH = mod(H ** 2n);
+        const HH = mod(H ** _2n);
         const HHH = mod(H * HH);
         const V = mod(U1 * HH);
-        const X3 = mod(r ** 2n - HHH - 2n * V);
+        const X3 = mod(r ** _2n - HHH - _2n * V);
         const Y3 = mod(r * (V - X3) - S1 * HHH);
         const Z3 = mod(Z1 * Z2 * H);
         return new JacobianPoint(X3, Y3, Z3);
@@ -110,11 +116,11 @@ class JacobianPoint {
         if (!USE_ENDOMORPHISM) {
             let p = JacobianPoint.ZERO;
             let d = this;
-            while (n > 0n) {
-                if (n & 1n)
+            while (n > _0n) {
+                if (n & _1n)
                     p = p.add(d);
                 d = d.double();
-                n >>= 1n;
+                n >>= _1n;
             }
             return p;
         }
@@ -122,14 +128,14 @@ class JacobianPoint {
         let k1p = JacobianPoint.ZERO;
         let k2p = JacobianPoint.ZERO;
         let d = this;
-        while (k1 > 0n || k2 > 0n) {
-            if (k1 & 1n)
+        while (k1 > _0n || k2 > _0n) {
+            if (k1 & _1n)
                 k1p = k1p.add(d);
-            if (k2 & 1n)
+            if (k2 & _1n)
                 k2p = k2p.add(d);
             d = d.double();
-            k1 >>= 1n;
-            k2 >>= 1n;
+            k1 >>= _1n;
+            k2 >>= _1n;
         }
         if (k1neg)
             k1p = k1p.negate();
@@ -182,7 +188,7 @@ class JacobianPoint {
             n >>= shiftBy;
             if (wbits > windowSize) {
                 wbits -= maxNumber;
-                n += 1n;
+                n += _1n;
             }
             if (wbits === 0) {
                 let pr = precomputes[offset];
@@ -223,14 +229,14 @@ class JacobianPoint {
         return JacobianPoint.normalizeZ([point, fake])[0];
     }
     toAffine(invZ = invert(this.z)) {
-        const invZ2 = invZ ** 2n;
+        const invZ2 = invZ ** _2n;
         const x = mod(this.x * invZ2);
         const y = mod(this.y * invZ2 * invZ);
         return new Point(x, y);
     }
 }
-JacobianPoint.BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, 1n);
-JacobianPoint.ZERO = new JacobianPoint(0n, 1n, 0n);
+JacobianPoint.BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, _1n);
+JacobianPoint.ZERO = new JacobianPoint(_0n, _1n, _0n);
 const pointPrecomputes = new WeakMap();
 class Point {
     constructor(x, y) {
@@ -246,7 +252,7 @@ class Point {
         const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
         const y2 = weistrass(x);
         let y = sqrtMod(y2);
-        const isYOdd = (y & 1n) === 1n;
+        const isYOdd = (y & _1n) === _1n;
         if (isShort) {
             if (isYOdd)
                 y = mod(-y);
@@ -303,7 +309,7 @@ class Point {
     toHex(isCompressed = false) {
         const x = pad64(this.x);
         if (isCompressed) {
-            return `${this.y & 1n ? '03' : '02'}${x}`;
+            return `${this.y & _1n ? '03' : '02'}${x}`;
         }
         else {
             return `04${x}${pad64(this.y)}`;
@@ -319,11 +325,11 @@ class Point {
         const msg = 'Point is not on elliptic curve';
         const { P } = CURVE;
         const { x, y } = this;
-        if (x === 0n || y === 0n || x >= P || y >= P)
+        if (x === _0n || y === _0n || x >= P || y >= P)
             throw new Error(msg);
         const left = mod(y * y);
         const right = weistrass(x);
-        if ((left - right) % P !== 0n)
+        if ((left - right) % P !== _0n)
             throw new Error(msg);
     }
     equals(other) {
@@ -347,7 +353,7 @@ class Point {
 }
 exports.Point = Point;
 Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
-Point.ZERO = new Point(0n, 0n);
+Point.ZERO = new Point(_0n, _0n);
 function sliceDer(s) {
     return Number.parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
@@ -515,7 +521,7 @@ function mod(a, b = CURVE.P) {
 function pow2(x, power) {
     const { P } = CURVE;
     let res = x;
-    while (power-- > 0n) {
+    while (power-- > _0n) {
         res *= res;
         res %= P;
     }
@@ -523,29 +529,35 @@ function pow2(x, power) {
 }
 function sqrtMod(x) {
     const { P } = CURVE;
+    const _6n = BigInt(6);
+    const _11n = BigInt(11);
+    const _22n = BigInt(22);
+    const _23n = BigInt(23);
+    const _44n = BigInt(44);
+    const _88n = BigInt(88);
     const b2 = (x * x * x) % P;
     const b3 = (b2 * b2 * x) % P;
-    const b6 = (pow2(b3, 3n) * b3) % P;
-    const b9 = (pow2(b6, 3n) * b3) % P;
-    const b11 = (pow2(b9, 2n) * b2) % P;
-    const b22 = (pow2(b11, 11n) * b11) % P;
-    const b44 = (pow2(b22, 22n) * b22) % P;
-    const b88 = (pow2(b44, 44n) * b44) % P;
-    const b176 = (pow2(b88, 88n) * b88) % P;
-    const b220 = (pow2(b176, 44n) * b44) % P;
-    const b223 = (pow2(b220, 3n) * b3) % P;
-    const t1 = (pow2(b223, 23n) * b22) % P;
-    const t2 = (pow2(t1, 6n) * b2) % P;
-    return pow2(t2, 2n);
+    const b6 = (pow2(b3, _3n) * b3) % P;
+    const b9 = (pow2(b6, _3n) * b3) % P;
+    const b11 = (pow2(b9, _2n) * b2) % P;
+    const b22 = (pow2(b11, _11n) * b11) % P;
+    const b44 = (pow2(b22, _22n) * b22) % P;
+    const b88 = (pow2(b44, _44n) * b44) % P;
+    const b176 = (pow2(b88, _88n) * b88) % P;
+    const b220 = (pow2(b176, _44n) * b44) % P;
+    const b223 = (pow2(b220, _3n) * b3) % P;
+    const t1 = (pow2(b223, _23n) * b22) % P;
+    const t2 = (pow2(t1, _6n) * b2) % P;
+    return pow2(t2, _2n);
 }
 function invert(number, modulo = CURVE.P) {
-    if (number === 0n || modulo <= 0n) {
+    if (number === _0n || modulo <= _0n) {
         throw new Error(`invert: expected positive integers, got n=${number} mod=${modulo}`);
     }
     let a = mod(number, modulo);
     let b = modulo;
-    let x = 0n, y = 1n, u = 1n, v = 0n;
-    while (a !== 0n) {
+    let x = _0n, y = _1n, u = _1n, v = _0n;
+    while (a !== _0n) {
         const q = b / a;
         const r = b % a;
         const m = x - u * q;
@@ -553,23 +565,23 @@ function invert(number, modulo = CURVE.P) {
         b = a, a = r, x = u, y = v, u = m, v = n;
     }
     const gcd = b;
-    if (gcd !== 1n)
+    if (gcd !== _1n)
         throw new Error('invert: does not exist');
     return mod(x, modulo);
 }
 function invertBatch(nums, n = CURVE.P) {
     const len = nums.length;
     const scratch = new Array(len);
-    let acc = 1n;
+    let acc = _1n;
     for (let i = 0; i < len; i++) {
-        if (nums[i] === 0n)
+        if (nums[i] === _0n)
             continue;
         scratch[i] = acc;
         acc = mod(acc * nums[i], n);
     }
     acc = invert(acc, n);
     for (let i = len - 1; i >= 0; i--) {
-        if (nums[i] === 0n)
+        if (nums[i] === _0n)
             continue;
         const tmp = mod(acc * nums[i], n);
         nums[i] = mod(acc * scratch[i], n);
@@ -577,13 +589,13 @@ function invertBatch(nums, n = CURVE.P) {
     }
     return nums;
 }
-const divNearest = (a, b) => (a + b / 2n) / b;
-const POW_2_128 = 2n ** 128n;
+const divNearest = (a, b) => (a + b / _2n) / b;
+const POW_2_128 = _2n ** BigInt(128);
 function splitScalarEndo(k) {
     const { n } = CURVE;
-    const a1 = 0x3086d221a7d46bcde86c90e49284eb15n;
-    const b1 = -0xe4437ed6010e88286f547fa90abfe4c3n;
-    const a2 = 0x114ca50f7a8e2f3f657c1108d9d44cfd8n;
+    const a1 = BigInt('0x3086d221a7d46bcde86c90e49284eb15');
+    const b1 = -_1n * BigInt('0xe4437ed6010e88286f547fa90abfe4c3');
+    const a2 = BigInt('0x114ca50f7a8e2f3f657c1108d9d44cfd8');
     const b2 = a1;
     const c1 = divNearest(b2 * k, n);
     const c2 = divNearest(-b1 * k, n);
@@ -677,7 +689,7 @@ function calcQRSFromK(v, msg, priv) {
     const q = Point.BASE.multiply(k);
     const r = mod(q.x, max);
     const s = mod(invert(k, max) * (msg + r * priv), max);
-    if (r === 0n || s === 0n)
+    if (r === _0n || s === _0n)
         return;
     return [q, r, s];
 }
@@ -765,9 +777,9 @@ exports.getSharedSecret = getSharedSecret;
 function QRSToSig(qrs, opts, str = false) {
     const [q, r, s] = qrs;
     let { canonical, der, recovered } = opts;
-    let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n);
+    let recovery = (q.x === r ? 0 : 2) | Number(q.y & _1n);
     let adjustedS = s;
-    const HIGH_NUMBER = CURVE.n >> 1n;
+    const HIGH_NUMBER = CURVE.n >> _1n;
     if (s > HIGH_NUMBER && canonical) {
         adjustedS = CURVE.n - s;
         recovery ^= 1;
@@ -797,7 +809,7 @@ function verify(signature, msgHash, publicKey) {
     }
     const { r, s } = sig;
     const h = truncateHash(msgHash);
-    if (h === 0n)
+    if (h === _0n)
         return false;
     const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
     const s1 = invert(s, n);
@@ -822,13 +834,13 @@ async function createChallenge(x, P, message) {
     return mod(t, CURVE.n);
 }
 function hasEvenY(point) {
-    return mod(point.y, 2n) === 0n;
+    return mod(point.y, _2n) === _0n;
 }
 class SchnorrSignature {
     constructor(r, s) {
         this.r = r;
         this.s = s;
-        if (r <= 0n || s <= 0n || r >= CURVE.P || s >= CURVE.n)
+        if (r <= _0n || s <= _0n || r >= CURVE.P || s >= CURVE.n)
             throw new Error('Invalid signature');
     }
     static fromHex(hex) {
@@ -855,7 +867,7 @@ async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomBy
     if (msgHash == null)
         throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
     if (!privateKey)
-        privateKey = 0n;
+        privateKey = _0n;
     const { n } = CURVE;
     const m = ensureBytes(msgHash);
     const d0 = normalizePrivateKey(privateKey);
@@ -868,7 +880,7 @@ async function schnorrSign(msgHash, privateKey, auxRand = exports.utils.randomBy
     const t = d ^ t0h;
     const k0h = await taggedHash('BIP0340/nonce', pad32b(t), P.toRawX(), m);
     const k0 = mod(k0h, n);
-    if (k0 === 0n)
+    if (k0 === _0n)
         throw new Error('sign: Creation of signature failed. k is zero');
     const R = Point.fromPrivateKey(k0);
     const k = hasEvenY(R) ? k0 : n - k0;
@@ -933,7 +945,7 @@ exports.utils = {
         while (i--) {
             const b32 = exports.utils.randomBytes(32);
             const num = bytesToNumber(b32);
-            if (isWithinCurveOrder(num) && num !== 1n)
+            if (isWithinCurveOrder(num) && num !== _1n)
                 return b32;
         }
         throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
@@ -975,7 +987,7 @@ exports.utils = {
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point === Point.BASE ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
-        cached.multiply(3n);
+        cached.multiply(_3n);
         return cached;
     },
 };
