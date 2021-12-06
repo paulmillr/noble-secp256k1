@@ -1,5 +1,7 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 
+import nodeCrypto from 'crypto';
+
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
@@ -1148,16 +1150,14 @@ Point.BASE._setWindowSize(8);
 
 type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
+
 // Global symbol available in browsers only
 declare const self: Record<string, any> | undefined;
-const crypto: { node?: any; web?: any } = (() => {
-  const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
-  const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
-  return {
-    node: nodeRequire && !webCrypto ? require('crypto') : undefined,
-    web: webCrypto,
-  };
-})();
+
+const crypto: { node?: any; web?: any } = {
+  node: nodeCrypto,
+  web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
+};
 
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
