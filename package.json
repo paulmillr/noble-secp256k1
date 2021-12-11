@@ -5,7 +5,7 @@
   "files": [
     "lib"
   ],
-  "types": "index.d.ts",
+  "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc -d && tsc -p tsconfig.esm.json",
     "build-release": "rollup -c rollup.config.js",
