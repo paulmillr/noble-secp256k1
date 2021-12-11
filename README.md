@@ -28,8 +28,10 @@ Use NPM in node.js / browser, or include single file from
 > npm install @noble/secp256k1
 
 ```js
+// Common.js and ECMAScript Modules (ESM)
 import * as secp from "@noble/secp256k1";
-// if you're using single file, use global variable nobleSecp256k1 instead
+// If you're using single file, use global variable instead:
+// nobleSecp256k1
 
 (async () => {
   // You pass either a hex string, or Uint8Array
@@ -38,6 +40,9 @@ import * as secp from "@noble/secp256k1";
   const publicKey = secp.getPublicKey(privateKey);
   const signature = await secp.sign(messageHash, privateKey);
   const isSigned = secp.verify(signature, messageHash, publicKey);
+
+  // Canonical signatures
+  const signatureC = await secp.sign(messageHash, privateKey, { canonical: true });
 
   // Supports Schnorr signatures
   const rpub = secp.schnorr.getPublicKey(privateKey);
