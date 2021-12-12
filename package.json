@@ -5,6 +5,8 @@
   "files": [
     "lib"
   ],
+  "main": "lib/index.js",
+  "module": "lib/esm/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc -d && tsc -p tsconfig.esm.json",
