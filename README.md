@@ -113,6 +113,7 @@ Generates deterministic ECDSA signature as per RFC6979.
 - `options?.recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
 - `options?.canonical: boolean = false` - whether a signature `s` should be no more than 1/2 prime order
 - `options?.der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
+- `options?.extraData: Uint8Array | string` - Added Entropy to the deterministic k generation.
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
 
@@ -133,12 +134,13 @@ secp256k1.signSync(msgHash, privateKey)
 
 ##### `verify(signature, hash, publicKey)`
 ```typescript
-function verify(signature: Uint8Array, msgHash: Uint8Array, publicKey: Uint8Array): boolean
-function verify(signature: string, msgHash: string, publicKey: string): boolean
+function verify(signature: Uint8Array, msgHash: Uint8Array, publicKey: Uint8Array, strict = false): boolean
+function verify(signature: string, msgHash: string, publicKey: string, strict = false): boolean
 ```
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
 - `msgHash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
+- `strict` - valid signatures with `s` value greater than 1/2 prime order are rejected.
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
 ##### `recoverPublicKey(hash, signature, recovery)`
