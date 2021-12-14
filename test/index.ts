@@ -226,6 +226,37 @@ describe('secp256k1', () => {
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
       }
     });
+    it("sign ecdsa extraData", async () => {
+      const buf1 = "0000000000000000000000000000000000000000000000000000000000000000";
+      const buf2 = "0000000000000000000000000000000000000000000000000000000000000001";
+      const buf3 = "6e723d3fd94ed5d2b6bdd4f123364b0f3ca52af829988a63f8afe91d29db1c33";
+      const buf4 = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+      const buf5 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    
+      for (const e of ecdsa.extraEntropy) {
+        const {
+          signature: expectedSignature,
+          extraEntropy0: expectedExtraEntropy0,
+          extraEntropy1: expectedExtraEntropy1,
+          extraEntropyRand: expectedExtraEntropyRand,
+          extraEntropyN: expectedExtraEntropyN,
+          extraEntropyMax: expectedExtraEntropyMax,
+        } = e;
+        const signature = await secp.sign(e.m, e.d, { canonical: true, der: false });
+        const entropy0 = await secp.sign(e.m, e.d, { der: false, canonical: true, extraData: buf1 });
+        const entropy1 = await secp.sign(e.m, e.d, { der: false, canonical: true, extraData: buf2 });
+        const entropyRand = await secp.sign(e.m, e.d, { der: false, canonical: true, extraData: buf3 });
+        const entropyN = await secp.sign(e.m, e.d, { der: false, canonical: true, extraData: buf4 });
+        const entropyMax = await secp.sign(e.m, e.d, { der: false, canonical: true, extraData: buf5 });
+    
+        expect(signature).toBe(expectedSignature);
+        expect(entropy0).toBe(expectedExtraEntropy0);
+        expect(entropy1).toBe(expectedExtraEntropy1);
+        expect(entropyRand).toBe(expectedExtraEntropyRand);
+        expect(entropyN).toBe(expectedExtraEntropyN);
+        expect(entropyMax).toBe(expectedExtraEntropyMax);
+      }
+    });
   });
 
   describe('.verify()', () => {
@@ -297,6 +328,19 @@ describe('secp256k1', () => {
       const pub = new secp.Point(x, y);
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeTruthy();
+    })
+    it('verify ecdsa', async () => {
+      for (const e of ecdsa.invalid.verify) {
+        const { m, Q, signature } = e;
+        if (e.exception) {
+          expect(secp.verify(signature, m, Q)).toBeFalsy();
+        } else {
+          expect(secp.verify(signature, m, Q, e.strict)).toBeFalsy();
+          if (e.strict === true) {
+            expect(secp.verify(signature, m, Q, false)).toBeTruthy();
+          }
+        }
+      }
     })
   });
 

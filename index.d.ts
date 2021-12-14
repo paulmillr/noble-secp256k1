@@ -47,6 +47,7 @@ export declare class Signature {
     static fromDER(hex: Hex): Signature;
     static fromHex(hex: Hex): Signature;
     assertValidity(): void;
+    normalizeS(): Signature;
     toDERRawBytes(isCompressed?: boolean): Uint8Array;
     toDERHex(isCompressed?: boolean): string;
     toRawBytes(): Uint8Array;
@@ -65,11 +66,13 @@ declare type OptsRecov = {
     recovered: true;
     canonical?: true;
     der?: boolean;
+    extraData?: Hex;
 };
 declare type OptsNoRecov = {
     recovered?: false;
     canonical?: true;
     der?: boolean;
+    extraData?: Hex;
 };
 declare function sign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
 declare function sign(msgHash: string, privKey: PrivKey, opts: OptsRecov): Promise<[string, number]>;
@@ -82,7 +85,7 @@ declare function signSync(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U
 declare function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
 declare function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
 export { sign, signSync };
-export declare function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean;
+export declare function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, strict?: boolean): boolean;
 declare class SchnorrSignature {
     readonly r: bigint;
     readonly s: bigint;

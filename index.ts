@@ -502,9 +502,8 @@ export class Signature {
     }
     const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
 
-    // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
     const length = parseByte(str.slice(2, 4));
-    if (str.slice(0, 2) !== '30' || length !== str.length - 4 || str.slice(4, 6) !== '02') {
+    if (!isDEREncoding(str)) {
       throw new Error(`${fn}: Invalid signature ${str}`);
     }
 
@@ -550,6 +549,20 @@ export class Signature {
     const { r, s } = this;
     if (!isWithinCurveOrder(r)) throw new Error('Invalid Signature: r must be 0 < r < n');
     if (!isWithinCurveOrder(s)) throw new Error('Invalid Signature: s must be 0 < s < n');
+  }
+
+  isHigh(): boolean {
+    const HIGH_NUMBER = CURVE.n >> _1n;
+    return this.s > HIGH_NUMBER;
+  }
+
+  // Low S values in signatures
+  normalizeS() {
+    if (this.isHigh()) {
+      const negS = CURVE.n - this.s;
+      this.s = negS;
+    }
+    return this;
   }
 
   // DER-encoded
@@ -814,19 +827,25 @@ function _abc6979(msgHash: Hex, privateKey: bigint) {
 // Deterministic k generation as per RFC6979.
 // Generates k, and then calculates Q & Signature {r, s} based on it.
 // https://tools.ietf.org/html/rfc6979#section-3.1
-async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
+async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey, extraData?: Hex): Promise<QRS> {
   const privKey = normalizePrivateKey(privateKey);
   let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
   const hmac = utils.hmacSha256;
+  let key = concatBytes(x, h1);
+  if (extraData) {
+    // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
+    const e = pad32b(typeof extraData === 'string' ? hexToNumber(extraData) : bytesToNumber(extraData));
+    key = concatBytes(key, e);
+  }
   // Steps D, E, F, G
-  k = await hmac(k, v, b0, x, h1);
+  k = await hmac(k, v, b0, key);
   v = await hmac(k, v);
-  k = await hmac(k, v, b1, x, h1);
+  k = await hmac(k, v, b1, key);
   v = await hmac(k, v);
   // Step H3, repeat until 1 < T < n - 1
   for (let i = 0; i < 1000; i++) {
     v = await hmac(k, v);
-    let qrs = calcQRSFromK(v, h1n, privKey);
+    const qrs = calcQRSFromK(v, h1n, privKey);
     if (qrs) return qrs;
     k = await hmac(k, v, b0);
     v = await hmac(k, v);
@@ -836,26 +855,39 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
 }
 
 // Same thing, but for synchronous utils.hmacSha256()
-function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey): QRS {
+function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey, extraData?: Hex): QRS {
   const privKey = normalizePrivateKey(privateKey);
   let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
   const hmac = utils.hmacSha256Sync;
   if (!hmac) throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
+  let key = concatBytes(x, h1);
+  if (extraData) {
+    // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
+    const e = pad32b(typeof extraData === 'string' ? hexToNumber(extraData) : bytesToNumber(extraData));
+    key = concatBytes(key, e);
+  }
   // Steps D, E, F, G
-  k = hmac(k, v, b0, x, h1);
+  k = hmac(k, v, b0, key);
   if (k instanceof Promise) throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
   v = hmac(k, v);
-  k = hmac(k, v, b1, x, h1);
+  k = hmac(k, v, b1, key);
   v = hmac(k, v);
   // Step H3, repeat until 1 < T < n - 1
   for (let i = 0; i < 1000; i++) {
     v = hmac(k, v);
-    let qrs = calcQRSFromK(v, h1n, privKey);
+    const qrs = calcQRSFromK(v, h1n, privKey);
     if (qrs) return qrs;
     k = hmac(k, v, b0);
     v = hmac(k, v);
   }
   throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
+}
+
+// `30${length}02${rLen}${rHex}02${sLen}${sHex}`
+function isDEREncoding(hex: string | Uint8Array): boolean {
+  const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
+  const length = parseByte(str.slice(2, 4));
+  return str.slice(0, 2) === '30' && length === str.length - 4 && str.slice(4, 6) === '02';
 }
 
 function isWithinCurveOrder(num: bigint): boolean {
@@ -905,9 +937,11 @@ function normalizeSignature(signature: Sig): Signature {
   if (signature instanceof Signature) {
     signature.assertValidity();
     return signature;
-  } else {
+  }
+  if (isDEREncoding(signature)) {
     return Signature.fromDER(signature);
   }
+  return Signature.fromCompact(signature);
 }
 
 export function getPublicKey(
@@ -960,9 +994,9 @@ export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed
     : shared.toRawBytes(isCompressed);
 }
 
-type OptsRecov = { recovered: true; canonical?: true; der?: boolean };
-type OptsNoRecov = { recovered?: false; canonical?: true; der?: boolean };
-type Opts = { recovered?: boolean; canonical?: true; der?: boolean };
+type OptsRecov = { recovered: true; canonical?: true; der?: boolean, extraData?: Hex };
+type OptsNoRecov = { recovered?: false; canonical?: true; der?: boolean, extraData?: Hex };
+type Opts = { recovered?: boolean; canonical?: true; der?: boolean, extraData?: Hex };
 type SignOutput = Hex | [Hex, number];
 
 // We don't overload function because the overload won't be externally visible
@@ -991,7 +1025,7 @@ async function sign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): Promise
 async function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
 async function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
-  return QRSToSig(await getQRSrfc6979(msgHash, privKey), opts, typeof msgHash === 'string');
+  return QRSToSig(await getQRSrfc6979(msgHash, privKey, opts.extraData), opts, typeof msgHash === 'string');
 }
 
 function signSync(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
@@ -1000,12 +1034,12 @@ function signSync(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
 function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
-  return QRSToSig(getQRSrfc6979Sync(msgHash, privKey), opts, typeof msgHash === 'string');
+  return QRSToSig(getQRSrfc6979Sync(msgHash, privKey, opts.extraData), opts, typeof msgHash === 'string');
 }
 export { sign, signSync };
 
 // https://www.secg.org/sec1-v2.pdf, section 4.1.4
-export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
+export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, strict = false): boolean {
   const { n } = CURVE;
   let sig;
   try {
@@ -1013,10 +1047,22 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean
   } catch (error) {
     return false;
   }
+  if (!strict) {
+    sig.normalizeS();
+  }
+  // Ensure signature is "low S" normalized ala BIP 0062
+  if (sig.isHigh()) {
+    return false;
+  }
   const { r, s } = sig;
   const h = truncateHash(msgHash);
   if (h === _0n) return false; // Probably forged, protect against fault attacks
-  const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
+  let pubKey;
+  try {
+    pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
+  } catch (error) {
+    return false;
+  }
   const s1 = invert(s, n); // s^-1
   const u1 = mod(h * s1, n);
   const u2 = mod(r * s1, n);
