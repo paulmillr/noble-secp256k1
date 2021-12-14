@@ -835,6 +835,7 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey, extraData?: Hex)
   if (extraData) {
     // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
     const e = pad32b(typeof extraData === 'string' ? hexToNumber(extraData) : bytesToNumber(extraData));
+    if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data')
     key = concatBytes(key, e);
   }
   // Steps D, E, F, G
@@ -864,6 +865,7 @@ function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey, extraData?: Hex): 
   if (extraData) {
     // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
     const e = pad32b(typeof extraData === 'string' ? hexToNumber(extraData) : bytesToNumber(extraData));
+    if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data')
     key = concatBytes(key, e);
   }
   // Steps D, E, F, G
