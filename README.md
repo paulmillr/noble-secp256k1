@@ -140,7 +140,7 @@ function verify(signature: string, msgHash: string, publicKey: string, strict = 
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
 - `msgHash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
-- `strict` - valid signatures with `s` value greater than 1/2 prime order are rejected.
+- `strict` - valid signatures with `s` value greater than 1/2 prime order is rejected.
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
 ##### `recoverPublicKey(hash, signature, recovery)`
