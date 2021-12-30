@@ -54,7 +54,7 @@ import * as secp from "@noble/secp256k1";
 To use the module with [Deno](https://deno.land),
 you will need [import map](https://deno.land/manual/linking_to_external_code/import_maps):
 
-- `deno run --import-map=imports.json app.ts` where `imports.json` contains the mapping from below
+- `deno run --import-map=imports.json app.ts`
 
 - `app.ts`
 
