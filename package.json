@@ -16,12 +16,6 @@
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js"
   },
-  "jest": {
-    "testRegex": "/test/.*?\\.ts",
-    "transform": {
-      "^.+\\.ts$": "ts-jest"
-    }
-  },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/posts/noble-secp256k1-fast-ecc/",
   "repository": {
@@ -72,5 +66,11 @@
       "default": "./lib/index.js"
     },
     "./index.d.ts": "./lib/index.d.ts"
+  },
+  "jest": {
+    "testRegex": "/test/.*?\\.ts",
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    }
   }
 }
