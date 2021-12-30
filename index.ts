@@ -600,12 +600,11 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
-const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
-    hex += hexes[uint8a[i]];
+    hex += uint8a[i].toString(16).padStart(2, '0')
   }
   return hex;
 }
