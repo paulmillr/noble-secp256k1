@@ -1,6 +1,6 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 
-import nodeCrypto from 'crypto';
+import nodeCrypto from "crypto";
 
 const _0n = BigInt(0);
 const _1n = BigInt(1);
@@ -1159,9 +1159,8 @@ Point.BASE._setWindowSize(8);
 type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
 
-// Global symbol available in browsers only
+// Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
-
 const crypto: { node?: any; web?: any } = {
   node: nodeCrypto,
   web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
