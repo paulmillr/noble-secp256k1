@@ -1,13 +1,15 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+// https://www.secg.org/sec2-v2.pdf
 
-import nodeCrypto from "crypto";
+import nodeCrypto from 'crypto';
 
+// Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
 const _3n = BigInt(3);
 const _8n = BigInt(8);
-// https://www.secg.org/sec2-v2.pdf
+
 // Curve fomula is y² = x³ + ax + b
 const POW_2_256 = _2n ** BigInt(256);
 const CURVE = {
@@ -604,7 +606,7 @@ function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
-    hex += uint8a[i].toString(16).padStart(2, '0')
+    hex += uint8a[i].toString(16).padStart(2, '0');
   }
   return hex;
 }

@@ -178,7 +178,7 @@ function schnorrGetPublicKey(privateKey: string): string;
 
 Returns 32-byte public key. *Warning:* it is incompatible with non-schnorr pubkey.
 
-Specifically, its *y* coordinate may be flipped. See BIP0340 for clarification.
+Specifically, its *y* coordinate may be flipped. See BIP340 for clarification.
 
 ##### `schnorr.sign(hash, privateKey)`
 ```typescript
