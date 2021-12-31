@@ -1,6 +1,6 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 
-import nodeCrypto from 'crypto';
+import nodeCrypto from "crypto";
 
 const _0n = BigInt(0);
 const _1n = BigInt(1);
@@ -502,16 +502,17 @@ export class Signature {
     }
     const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
 
-    const length = parseByte(str.slice(2, 4));
+    // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
+    const length = parseDERByte(str.slice(2, 4));
     if (!isDEREncoding(str)) {
       throw new Error(`${fn}: Invalid signature ${str}`);
     }
 
     // r
-    const rLen = parseByte(str.slice(6, 8));
+    const rLen = parseDERByte(str.slice(6, 8));
     const rEnd = 8 + rLen;
     const rr = str.slice(8, rEnd);
-    if (rr.startsWith('00') && parseByte(rr.slice(2, 4)) <= 0x7f) {
+    if (rr.startsWith('00') && parseDERByte(rr.slice(2, 4)) <= 0x7f) {
       throw new Error(`${fn}: Invalid r with trailing length`);
     }
     const r = hexToNumber(rr);
@@ -521,7 +522,7 @@ export class Signature {
     if (separator !== '02') {
       throw new Error(`${fn}: Invalid r-s separator`);
     }
-    const sLen = parseByte(str.slice(rEnd + 2, rEnd + 4));
+    const sLen = parseDERByte(str.slice(rEnd + 2, rEnd + 4));
     const diff = length - sLen - rLen - 10;
     if (diff > 0 || diff === -4) {
       throw new Error(`${fn}: Invalid total length`);
@@ -531,7 +532,7 @@ export class Signature {
     }
     const sStart = rEnd + 4;
     const ss = str.slice(sStart, sStart + sLen);
-    if (ss.startsWith('00') && parseByte(ss.slice(2, 4)) <= 0x7f) {
+    if (ss.startsWith('00') && parseDERByte(ss.slice(2, 4)) <= 0x7f) {
       throw new Error(`${fn}: Invalid s with trailing length`);
     }
     const s = hexToNumber(ss);
@@ -617,7 +618,7 @@ function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
-    hex += uint8a[i].toString(16).padStart(2, '0');
+    hex += uint8a[i].toString(16).padStart(2, '0')
   }
   return hex;
 }
@@ -643,6 +644,13 @@ function hexToNumber(hex: string): bigint {
   return BigInt(`0x${hex}`);
 }
 
+function parseHexByte(hexByte: string): number {
+  if (hexByte.length !== 2) throw new Error('Invalid byte sequence');
+  const byte = Number.parseInt(hexByte, 16);
+  if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
+  return byte;
+}
+
 function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== 'string') {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
@@ -651,7 +659,7 @@ function hexToBytes(hex: string): Uint8Array {
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
     const j = i * 2;
-    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
+    array[i] = parseHexByte(hex.slice(j, j + 2));
   }
   return array;
 }
@@ -665,8 +673,9 @@ function bytesToNumber(bytes: Uint8Array): bigint {
   return hexToNumber(bytesToHex(bytes));
 }
 
-function parseByte(str: string): number {
-  return Number.parseInt(str, 16) * 2;
+// Why * 2?? Not sure...
+function parseDERByte(str: string): number {
+  return parseHexByte(str) * 2;
 }
 
 function normalizeScalar(num: number | bigint): bigint {
@@ -1199,9 +1208,8 @@ Point.BASE._setWindowSize(8);
 type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
 
-// Global symbol available in browsers only
+// Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
-
 const crypto: { node?: any; web?: any } = {
   node: nodeCrypto,
   web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,

@@ -1,8 +1,8 @@
 const { run, mark, logMem } = require('micro-bmark');
 const secp = require('..');
 const { join } = require('path');
-const { hmac } = require('noble-hashes/lib/hmac');
-const { sha256 } = require('noble-hashes/lib/sha256');
+const { hmac } = require('@noble/hashes/hmac');
+const { sha256 } = require('@noble/hashes/sha256');
 const points = require('fs')
   .readFileSync(join(__dirname, './vectors/points.txt'), 'utf-8')
   .split('\n')
