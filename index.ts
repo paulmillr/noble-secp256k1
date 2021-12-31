@@ -897,7 +897,7 @@ function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey, extraData?: Hex): 
 // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
 function isDEREncoding(hex: string | Uint8Array): boolean {
   const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-  const length = parseByte(str.slice(2, 4));
+  const length = parseDERByte(str.slice(2, 4));
   return str.slice(0, 2) === '30' && length === str.length - 4 && str.slice(4, 6) === '02';
 }
 
