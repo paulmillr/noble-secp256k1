@@ -44,6 +44,7 @@ describe('secp256k1', () => {
     }
   });
   it('.getPublicKey() rejects invalid keys', () => {
+    // prettier-ignore
     const invalid = [0, true, false, undefined, null, 1.1, -5, 'deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
     for (const item of invalid) {
       expect(() => secp.getPublicKey(item as any)).toThrowError();
@@ -100,7 +101,6 @@ describe('secp256k1', () => {
     it('#toHex() roundtrip', () => {
       fc.assert(
         fc.property(FC_BIGINT, (x) => {
-
           const point1 = secp.Point.fromPrivateKey(x);
           const hex = point1.toHex(true);
           expect(secp.Point.fromHex(hex).toHex(true)).toBe(hex);
@@ -205,16 +205,16 @@ describe('secp256k1', () => {
       const CASES = [
         [
           'd1a9dc8ed4e46a6a3e5e594615ca351d7d7ef44df1e4c94c1802f3592183794b',
-          '304402203de2559fccb00c148574997f660e4d6f40605acc71267ee38101abf15ff467af02200950abdf40628fd13f547792ba2fc544681a485f2fdafb5c3b909a4df7350e6b'
+          '304402203de2559fccb00c148574997f660e4d6f40605acc71267ee38101abf15ff467af02200950abdf40628fd13f547792ba2fc544681a485f2fdafb5c3b909a4df7350e6b',
         ],
         [
           '5f97983254982546d3976d905c6165033976ee449d300d0e382099fa74deaf82',
-          '3045022100c046d9ff0bd2845b9aa9dff9f997ecebb31e52349f80fe5a5a869747d31dcb88022011f72be2a6d48fe716b825e4117747b397783df26914a58139c3f4c5cbb0e66c'
+          '3045022100c046d9ff0bd2845b9aa9dff9f997ecebb31e52349f80fe5a5a869747d31dcb88022011f72be2a6d48fe716b825e4117747b397783df26914a58139c3f4c5cbb0e66c',
         ],
         [
           '0d7017a96b97cd9be21cf28aada639827b2814a654a478c81945857196187808',
-          '3045022100d18990bba7832bb283e3ecf8700b67beb39acc73f4200ed1c331247c46edccc602202e5c8bbfe47ae159512c583b30a3fa86575cddc62527a03de7756517ae4c6c73'
-        ]
+          '3045022100d18990bba7832bb283e3ecf8700b67beb39acc73f4200ed1c331247c46edccc602202e5c8bbfe47ae159512c583b30a3fa86575cddc62527a03de7756517ae4c6c73',
+        ],
       ];
       const privKey = hexToArray(
         '0101010101010101010101010101010101010101010101010101010101010101'
@@ -224,6 +224,25 @@ describe('secp256k1', () => {
         expect(res).toBe(exp);
         const rs = secp.Signature.fromDER(res).toCompactHex();
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
+      }
+    });
+    it('sign ecdsa extraData', async () => {
+      const ent1 = '0000000000000000000000000000000000000000000000000000000000000000';
+      const ent2 = '0000000000000000000000000000000000000000000000000000000000000001';
+      const ent3 = '6e723d3fd94ed5d2b6bdd4f123364b0f3ca52af829988a63f8afe91d29db1c33';
+      const ent4 = 'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141';
+      const ent5 = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+
+      for (const e of ecdsa.extraEntropy) {
+        const sign = (extraEntropy?: string) => {
+          return secp.sign(e.m, e.d, {der: false, canonical: true, extraEntropy});
+        }
+        expect(await sign()).toBe(e.signature);
+        expect(await sign(ent1)).toBe(e.extraEntropy0);
+        expect(await sign(ent2)).toBe(e.extraEntropy1);
+        expect(await sign(ent3)).toBe(e.extraEntropyRand);
+        expect(await sign(ent4)).toBe(e.extraEntropyN);
+        expect(await sign(ent5)).toBe(e.extraEntropyMax);
       }
     });
   });
@@ -265,7 +284,11 @@ describe('secp256k1', () => {
       );
     });
     it('should not verify signature with invalid r/s', () => {
-      const msg = new Uint8Array([0xbb, 0x5a, 0x52, 0xf4, 0x2f, 0x9c, 0x92, 0x61, 0xed, 0x43, 0x61, 0xf5, 0x94, 0x22, 0xa1, 0xe3, 0x00, 0x36, 0xe7, 0xc3, 0x2b, 0x27, 0x0c, 0x88, 0x07, 0xa4, 0x19, 0xfe, 0xca, 0x60, 0x50, 0x23]);
+      const msg = new Uint8Array([
+        0xbb, 0x5a, 0x52, 0xf4, 0x2f, 0x9c, 0x92, 0x61, 0xed, 0x43, 0x61, 0xf5, 0x94, 0x22, 0xa1,
+        0xe3, 0x00, 0x36, 0xe7, 0xc3, 0x2b, 0x27, 0x0c, 0x88, 0x07, 0xa4, 0x19, 0xfe, 0xca, 0x60,
+        0x50, 0x23,
+      ]);
       const x = 100260381870027870612475458630405506840396644859280795015145920502443964769584n;
       const y = 41096923727651821103518389640356553930186852801619204169823347832429067794568n;
       const r = 1n;
@@ -278,8 +301,8 @@ describe('secp256k1', () => {
       // Verifies, but it shouldn't, because signature S > curve order
       expect(verified).toBeFalsy();
     });
-    it('should not verify msg = curve order', async() => {
-      const msg = 'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141'
+    it('should not verify msg = curve order', async () => {
+      const msg = 'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141';
       const x = 55066263022277343669578718895168534326250603453777594175500187360389116729240n;
       const y = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
       const r = 104546003225722045112039007203142344920046999340768276760147352389092131869133n;
@@ -288,21 +311,24 @@ describe('secp256k1', () => {
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeFalsy();
     });
-    it('should verify msg bb5a...', async() => {
+    it('should verify msg bb5a...', async () => {
       const msg = 'bb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023';
-      const x = 3252872872578928810725465493269682203671229454553002637820453004368632726370n
+      const x = 3252872872578928810725465493269682203671229454553002637820453004368632726370n;
       const y = 17482644437196207387910659778872952193236850502325156318830589868678978890912n;
       const r = 432420386565659656852420866390673177323n;
       const s = 115792089237316195423570985008687907852837564279074904382605163141518161494334n;
       const pub = new secp.Point(x, y);
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeTruthy();
-    })
+    });
   });
 
   describe('schnorr', () => {
     // index,secret key,public key,aux_rand,message,signature,verification result,comment
-    const vectors = schCsv.split('\n').map((line: string) => line.split(',')).slice(1, -1);
+    const vectors = schCsv
+      .split('\n')
+      .map((line: string) => line.split(','))
+      .slice(1, -1);
     for (let vec of vectors) {
       const [index, sec, pub, rnd, msg, expSig, passes, comment] = vec;
       if (index == '4' && !sec) continue; // pass test for now — it has invalid private key?
@@ -331,7 +357,7 @@ describe('secp256k1', () => {
       const privateKey = 123456789n;
       const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
       const [signature, recovery] = await secp.sign(message, privateKey, {
-        recovered: true
+        recovered: true,
       });
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);
@@ -389,7 +415,7 @@ describe('secp256k1', () => {
         for (let test of group.tests) {
           if (test.result === 'valid') {
             const hash = await secp.utils.sha256(hexToArray(test.msg));
-            expect(secp.verify(test.sig, hash, pubKey)).toBeTruthy()
+            expect(secp.verify(test.sig, hash, pubKey)).toBeTruthy();
           } else if (test.result === 'invalid') {
             let fail = false;
             const hash = await secp.utils.sha256(hexToArray(test.msg));
@@ -404,6 +430,6 @@ describe('secp256k1', () => {
           }
         }
       }
-    })
-  })
+    });
+  });
 });
