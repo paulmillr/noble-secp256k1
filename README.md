@@ -266,6 +266,8 @@ secp256k1.Signature {
   static fromDER(hex: Uint8Array | string);
   // R, S 32-byte each
   static fromCompact(hex: Uint8Array | string);
+  assertValidity(): void;
+  hasHighS(): boolean; // high-S sigs cannot be produced using { canonical: true }
   toDERRawBytes(): Uint8Array;
   toDERHex(): string;
   toCompactRawBytes(): Uint8Array;
@@ -286,13 +288,13 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 ## Speed
 
-Benchmarks measured with Apple M1.
+Benchmarks measured with Apple M1 on MacOS 12.
 
     getPublicKey(utils.randomPrivateKey()) x 6,121 ops/sec @ 163μs/op
-    sign x 4,679 ops/sec @ 213μs/op
+    sign x 4,789 ops/sec @ 208μs/op
     verify x 923 ops/sec @ 1ms/op
     recoverPublicKey x 491 ops/sec @ 2ms/op
-    getSharedSecret aka ecdh x 534 ops/sec @ 1ms/op
+    getSharedSecret aka ecdh x 558 ops/sec @ 1790μs/op
     getSharedSecret (precomputed) x 7,105 ops/sec @ 140μs/op
     Point.fromHex (decompression) x 12,171 ops/sec @ 82μs/op
     schnorr.sign x 409 ops/sec @ 2ms/op

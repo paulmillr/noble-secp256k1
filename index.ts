@@ -554,6 +554,14 @@ export class Signature {
     if (!isWithinCurveOrder(s)) throw new Error('Invalid Signature: s must be 0 < s < n');
   }
 
+  // Always false for canonical signatures.
+  // We don't provide `hasHighR` for now even though some folks use it
+  // https://github.com/bitcoin/bitcoin/pull/13666
+  hasHighS(): boolean {
+    const HALF = CURVE.n >> _1n;
+    return this.s > HALF;
+  }
+
   // DER-encoded
   toDERRawBytes(isCompressed = false) {
     return hexToBytes(this.toDERHex(isCompressed));
@@ -568,7 +576,7 @@ export class Signature {
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
   }
 
-  // Don't use these methods
+  // Don't use these methods. Use toDER* or toCompact* for explicitness.
   toRawBytes() {
     return this.toDERRawBytes();
   }
@@ -828,10 +836,11 @@ async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey): Promise<QRS> {
   const privKey = normalizePrivateKey(privateKey);
   let { h1, h1n, x, v, k, b0, b1 } = _abc6979(msgHash, privKey);
   const hmac = utils.hmacSha256;
+  let key = concatBytes(x, h1);
   // Steps D, E, F, G
-  k = await hmac(k, v, b0, x, h1);
+  k = await hmac(k, v, b0, key);
   v = await hmac(k, v);
-  k = await hmac(k, v, b1, x, h1);
+  k = await hmac(k, v, b1, key);
   v = await hmac(k, v);
   // Step H3, repeat until 1 < T < n - 1
   for (let i = 0; i < 1000; i++) {
@@ -980,13 +989,11 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
   const [q, r, s] = qrs;
   let { canonical, der, recovered } = opts; // default der is true
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & _1n);
-  let adjustedS = s;
-  const HIGH_NUMBER = CURVE.n >> _1n;
-  if (s > HIGH_NUMBER && canonical) {
-    adjustedS = CURVE.n - s;
+  let sig = new Signature(r, s);
+  if (canonical && sig.hasHighS()) {
+    sig = new Signature(sig.r, CURVE.n - sig.s);
     recovery ^= 1;
   }
-  const sig = new Signature(r, adjustedS);
   sig.assertValidity();
   const hex = der === false ? sig.toCompactHex() : sig.toDERHex();
   const hashed = str ? hex : hexToBytes(hex);
