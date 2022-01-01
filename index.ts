@@ -479,6 +479,13 @@ function sliceDer(s: string): string {
   return Number.parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 
+// `30${length}02${rLen}${rHex}02${sLen}${sHex}`
+function isDEREncoding(hex: string | Uint8Array): boolean {
+  const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
+  const length = parseDERByte(str.slice(2, 4));
+  return str.slice(0, 2) === '30' && length === str.length - 4 && str.slice(4, 6) === '02';
+}
+
 // Represents ECDSA signature with its (r, s) properties
 export class Signature {
   constructor(public r: bigint, public s: bigint) {}
@@ -503,8 +510,7 @@ export class Signature {
       throw new TypeError(`${fn}: Expected string or Uint8Array`);
     }
     const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-
-    // `30${length}02${rLen}${rHex}02${sLen}${sHex}`
+    if (!isDEREncoding(str)) throw new Error(`${fn}: Invalid signature ${str}`);
     const length = parseDERByte(str.slice(2, 4));
     if (str.slice(0, 2) !== '30' || length !== str.length - 4 || str.slice(4, 6) !== '02') {
       throw new Error(`${fn}: Invalid signature ${str}`);
@@ -924,8 +930,10 @@ function normalizeSignature(signature: Sig): Signature {
   if (signature instanceof Signature) {
     signature.assertValidity();
     return signature;
-  } else {
+  } else if (isDEREncoding(signature)) {
     return Signature.fromDER(signature);
+  } else {
+    return Signature.fromCompact(signature);
   }
 }
 
