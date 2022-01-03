@@ -1055,7 +1055,12 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts: VO
   const { r, s } = sig;
   const h = truncateHash(msgHash);
   if (h === _0n) return false; // Probably forged, protect against fault attacks
-  const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
+  let pubKey;
+  try {
+    pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
+  } catch (error) {
+    return false;
+  }
   const { n } = CURVE;
   const s1 = invert(s, n); // s^-1
   const u1 = mod(h * s1, n);

@@ -184,13 +184,18 @@ describe('secp256k1', () => {
   describe('.sign()', () => {
     it('should create deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.valid) {
-        const full = await secp.sign(vector.m, vector.d, { canonical: true });
+        const sig = await secp.sign(vector.m, vector.d, { canonical: true, der: false });
         const vsig = vector.signature;
-        const [vecR, vecS] = [vsig.slice(0, 64), vsig.slice(64, 128)];
-        const res = secp.Signature.fromDER(full).toCompactHex();
-        const [r, s] = [res.slice(0, 64), res.slice(64, 128)];
-        expect(r).toBe(vecR);
-        expect(s).toBe(vecS);
+        expect(sig.slice(0, 64)).toBe(vsig.slice(0, 64));
+        expect(sig.slice(64, 128)).toBe(vsig.slice(64, 128));
+      }
+    });
+
+    it('should not create invalid deterministic signatures with RFC 6979', async () => {
+      for (const vector of ecdsa.invalid.sign) {
+        expect(() => {
+          return secp.sign(vector.m, vector.d, { canonical: true, der: false });
+        }).rejects.toThrowError();
       }
     });
 
@@ -325,6 +330,22 @@ describe('secp256k1', () => {
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeTruthy();
     });
+    it('should not verify invalid deterministic signatures with RFC 6979', () => {
+      // const additional =
+      //   {
+      //     "description": "Fails verification if strict set to truthy value with high s value",
+      //     "strict": true,
+      //     "Q": "034cd032cdc72820498aeb0fdd25712aa4f6d263997cf7df140b8c42d44626b08c",
+      //     "m": "df8e1382d17bdac18f3c854815071226385803e85f06114129ebbcfcef991278",
+      //     "signature": "ec8cd8d7dcda4ff770c2858bdd93dd64806e218b11bb1971a4a09b065760b040c1095cf554dab161b2b2c46386fab2c81e57035be714b760ef507981f8f70073"
+      //   };
+      for (const vector of ecdsa.invalid.verify) {
+        // const opt = vector === additional ? {canonical: true} : {};
+        const res = secp.verify(vector.signature, vector.m, vector.Q);
+        expect(res).toBeFalsy();
+      }
+    });
+
   });
 
   describe('schnorr', () => {
