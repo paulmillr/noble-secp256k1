@@ -34,7 +34,7 @@ const CURVE = {
 export { CURVE };
 
 // y² = x³ + ax + b: Short weistrass curve formula. Returns y²
-function weistrass(x: bigint) {
+function weistrass(x: bigint): bigint {
   const { a, b } = CURVE;
   return mod(x ** _3n + a * x + b);
 }
@@ -59,10 +59,10 @@ const USE_ENDOMORPHISM = CURVE.a === _0n;
 // Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z², y=y/z³)
 // We're doing calculations in jacobi, because its operations don't require costly inversion.
 class JacobianPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+  constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint) {}
 
-  static BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, _1n);
-  static ZERO = new JacobianPoint(_0n, _1n, _0n);
+  static readonly BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, _1n);
+  static readonly ZERO = new JacobianPoint(_0n, _1n, _0n);
   static fromAffine(p: Point): JacobianPoint {
     if (!(p instanceof Point)) {
       throw new TypeError('JacobianPoint#fromAffine: expected Point');
@@ -597,7 +597,6 @@ export class Signature {
     return pad64(this.r) + pad64(this.s);
   }
 }
-export const SignResult = Signature; // backwards compatibility
 
 // Concatenates two Uint8Arrays into one.
 // TODO: check if we're copying data instead of moving it and if that's ok
