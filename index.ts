@@ -565,6 +565,10 @@ export class Signature {
     return this.s > HALF;
   }
 
+  normalizeS(): Signature {
+    return this.hasHighS() ? new Signature(this.r, CURVE.n - this.s) : this;
+  }
+
   // DER-encoded
   toDERRawBytes(isCompressed = false) {
     return hexToBytes(this.toDERHex(isCompressed));
@@ -1007,7 +1011,7 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & _1n);
   let sig = new Signature(r, s);
   if (canonical && sig.hasHighS()) {
-    sig = new Signature(sig.r, CURVE.n - sig.s);
+    sig = sig.normalizeS();
     recovery ^= 1;
   }
   sig.assertValidity();
@@ -1039,12 +1043,15 @@ function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
 }
 export { sign, signSync };
 
+type VOpts = {
+  canonical?: boolean;
+};
 // https://www.secg.org/sec1-v2.pdf, section 4.1.4
-export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean {
-  const { n } = CURVE;
+export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts: VOpts = {}): boolean {
   let sig;
   try {
     sig = normalizeSignature(signature);
+    if (opts.canonical) sig = sig.normalizeS();
   } catch (error) {
     return false;
   }
@@ -1052,6 +1059,7 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey): boolean
   const h = truncateHash(msgHash);
   if (h === _0n) return false; // Probably forged, protect against fault attacks
   const pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
+  const { n } = CURVE;
   const s1 = invert(s, n); // s^-1
   const u1 = mod(h * s1, n);
   const u2 = mod(r * s1, n);
