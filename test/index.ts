@@ -295,7 +295,11 @@ describe('secp256k1', () => {
       const s = 115792089237316195423570985008687907852837564279074904382605163141518162728904n;
 
       const pub = new secp.Point(x, y);
-      const signature = new secp.Signature(r, s);
+      const signature = new secp.Signature(2n, 2n);
+      // @ts-ignore
+      signature.r = r;
+      // @ts-ignore
+      signature.s = s;
 
       const verified = secp.verify(signature, msg, pub);
       // Verifies, but it shouldn't, because signature S > curve order

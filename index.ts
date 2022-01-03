@@ -334,7 +334,7 @@ export class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) {}
+  constructor(readonly x: bigint, readonly y: bigint) {}
 
   // "Private method", don't use it directly
   _setWindowSize(windowSize: number) {
@@ -488,7 +488,9 @@ function isDEREncoding(hex: string | Uint8Array): boolean {
 
 // Represents ECDSA signature with its (r, s) properties
 export class Signature {
-  constructor(public r: bigint, public s: bigint) {}
+  constructor(readonly r: bigint, readonly s: bigint) {
+    this.assertValidity();
+  }
 
   // pair (32 bytes of r, 32 bytes of s)
   static fromCompact(hex: Hex) {
@@ -497,9 +499,7 @@ export class Signature {
     }
     const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
     if (str.length !== 128) throw new Error('Signature.fromCompact: Expected 64-byte hex');
-    const sig = new Signature(hexToNumber(str.slice(0, 64)), hexToNumber(str.slice(64, 128)));
-    sig.assertValidity();
-    return sig;
+    return new Signature(hexToNumber(str.slice(0, 64)), hexToNumber(str.slice(64, 128)));
   }
 
   // DER encoded ECDSA signature
@@ -541,9 +541,7 @@ export class Signature {
       throw new Error(`${fn}: Invalid s with trailing length`);
     }
     const s = hexToNumber(ss);
-    const sig = new Signature(r, s);
-    sig.assertValidity();
-    return sig;
+    return new Signature(r, s);
   }
 
   // Don't use this method
@@ -816,7 +814,7 @@ function truncateHash(hash: string | Uint8Array): bigint {
 }
 
 // RFC6979 related code
-type QRS = [Point, bigint, bigint];
+type QRS = { q: Point; r: bigint; s: bigint };
 type U8A = Uint8Array;
 
 // Steps A, B and C of RFC6979.
@@ -907,7 +905,7 @@ function calcQRSFromK(v: Uint8Array, msg: bigint, priv: bigint): QRS | undefined
   const r = mod(q.x, max);
   const s = mod(invert(k, max) * (msg + r * priv), max);
   if (r === _0n || s === _0n) return;
-  return [q, r, s];
+  return { q, r, s };
 }
 
 function normalizePrivateKey(key: PrivKey): bigint {
@@ -1006,7 +1004,7 @@ type SignOutput = Hex | [Hex, number];
 
 // We don't overload function because the overload won't be externally visible
 function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOutput {
-  const [q, r, s] = qrs;
+  const { q, r, s } = qrs;
   let { canonical, der, recovered } = opts; // default der is true
   let recovery = (q.x === r ? 0 : 2) | Number(q.y & _1n);
   let sig = new Signature(r, s);
@@ -1014,7 +1012,7 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
     sig = sig.normalizeS();
     recovery ^= 1;
   }
-  sig.assertValidity();
+  // sig.assertValidity();
   const hex = der === false ? sig.toCompactHex() : sig.toDERHex();
   const hashed = str ? hex : hexToBytes(hex);
   return recovered ? [hashed, recovery] : hashed;
@@ -1248,12 +1246,9 @@ export const utils = {
 
   hmacSha256: async (key: Uint8Array, ...messages: Uint8Array[]): Promise<Uint8Array> => {
     if (crypto.web) {
+      // prettier-ignore
       const ckey = await crypto.web.subtle.importKey(
-        'raw',
-        key,
-        { name: 'HMAC', hash: { name: 'SHA-256' } },
-        false,
-        ['sign']
+        'raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']
       );
       const message = concatBytes(...messages);
       const buffer = await crypto.web.subtle.sign('HMAC', ckey, message);
@@ -1261,7 +1256,7 @@ export const utils = {
     } else if (crypto.node) {
       const { createHmac } = crypto.node;
       const hash = createHmac('sha256', key);
-      for (let message of messages) {
+      for (const message of messages) {
         hash.update(message);
       }
       return Uint8Array.from(hash.digest());
