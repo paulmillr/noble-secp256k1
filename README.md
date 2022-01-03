@@ -221,9 +221,13 @@ Returns `Uint8Array` of 32 cryptographically secure random bytes that can be use
 (key: Uint8Array, ...msgs: Uint8Array[]): Uint8Array;
 ```
 
-###### `utils.hmacSha256Sync`
+###### `utils.sha256` and `utils.hmacSha256`
 
-The function is not defined by default, but could be used to implement `signSync` method (see above).
+Asynchronous methods that calculate `SHA256` and `HMAC-SHA256`. Use browser built-ins by default.
+
+###### `utils.sha256Sync` and `utils.hmacSha256Sync`
+
+The functions are not defined by default, but could be used to implement `signSync` method (see above).
 
 ###### `utils.precompute(W = 8, point = BASE_POINT): Point`
 
