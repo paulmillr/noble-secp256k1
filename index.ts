@@ -479,11 +479,35 @@ function sliceDER(s: string): string {
   return Number.parseInt(s[0], 16) >= 8 ? '00' + s : s;
 }
 
-// `30${length}02${rLen}${rHex}02${sLen}${sHex}`
-function isDEREncoding(hex: string | Uint8Array): boolean {
-  const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-  const length = parseDERByte(str.slice(2, 4));
-  return str.slice(0, 2) === '30' && length === str.length - 4 && str.slice(4, 6) === '02';
+function parseDERInt(data: Uint8Array) {
+  if (data.length < 2 || data[0] !== 0x02) {
+    throw new Error(`Invalid signature integer tag: ${bytesToHex(data)}`);
+  }
+  const len = data[1];
+  const res = data.subarray(2, len + 2);
+  if (!len || res.length !== len) {
+    throw new Error(`Invalid signature integer: wrong length`);
+  }
+  // Strange condition, its not about length, but about first bytes of number.
+  if (res[0] === 0x00 && res[1] <= 0x7f) {
+    throw new Error('Invalid signature integer: trailing length');
+  }
+  return { data: bytesToNumber(res), left: data.subarray(len + 2) };
+}
+
+function parseDERSignature(data: Uint8Array) {
+  if (data.length < 2 || data[0] != 0x30) {
+    throw new Error(`Invalid signature tag: ${bytesToHex(data)}`);
+  }
+  if (data[1] !== data.length - 2) {
+    throw new Error('Invalid signature: incorrect length');
+  }
+  const { data: r, left: sBytes } = parseDERInt(data.subarray(2));
+  const { data: s, left: rBytesLeft } = parseDERInt(sBytes);
+  if (rBytesLeft.length) {
+    throw new Error(`Invalid signature: left bytes after parsing: ${bytesToHex(rBytesLeft)}`);
+  }
+  return { r, s };
 }
 
 // Represents ECDSA signature with its (r, s) properties
@@ -494,53 +518,22 @@ export class Signature {
 
   // pair (32 bytes of r, 32 bytes of s)
   static fromCompact(hex: Hex) {
-    if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
-      throw new TypeError(`Signature.fromCompact: Expected string or Uint8Array`);
-    }
-    const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-    if (str.length !== 128) throw new Error('Signature.fromCompact: Expected 64-byte hex');
+    const arr = hex instanceof Uint8Array;
+    const name = 'Signature.fromCompact';
+    if (typeof hex !== 'string' && !arr)
+      throw new TypeError(`${name}: Expected string or Uint8Array`);
+    const str = arr ? bytesToHex(hex) : hex;
+    if (str.length !== 128) throw new Error(`${name}: Expected 64-byte hex`);
     return new Signature(hexToNumber(str.slice(0, 64)), hexToNumber(str.slice(64, 128)));
   }
 
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromDER(hex: Hex) {
-    const fn = 'Signature.fromDER';
-    if (typeof hex !== 'string' && !(hex instanceof Uint8Array)) {
-      throw new TypeError(`${fn}: Expected string or Uint8Array`);
-    }
-    const str = hex instanceof Uint8Array ? bytesToHex(hex) : hex;
-    if (!isDEREncoding(str)) throw new Error(`${fn}: Invalid signature ${str}`);
-    const length = parseDERByte(str.slice(2, 4));
-
-    // r
-    const rLen = parseDERByte(str.slice(6, 8));
-    const rEnd = 8 + rLen;
-    const rr = str.slice(8, rEnd);
-    if (rr.startsWith('00') && parseDERByte(rr.slice(2, 4)) <= 0x7f) {
-      throw new Error(`${fn}: Invalid r with trailing length`);
-    }
-    const r = hexToNumber(rr);
-
-    // s
-    const separator = str.slice(rEnd, rEnd + 2);
-    if (separator !== '02') {
-      throw new Error(`${fn}: Invalid r-s separator`);
-    }
-    const sLen = parseDERByte(str.slice(rEnd + 2, rEnd + 4));
-    const diff = length - sLen - rLen - 10;
-    if (diff > 0 || diff === -4) {
-      throw new Error(`${fn}: Invalid total length`);
-    }
-    if (sLen > length - rLen - 4) {
-      throw new Error(`${fn}: Invalid s`);
-    }
-    const sStart = rEnd + 4;
-    const ss = str.slice(sStart, sStart + sLen);
-    if (ss.startsWith('00') && parseDERByte(ss.slice(2, 4)) <= 0x7f) {
-      throw new Error(`${fn}: Invalid s with trailing length`);
-    }
-    const s = hexToNumber(ss);
+    const arr = hex instanceof Uint8Array;
+    if (typeof hex !== 'string' && !arr)
+      throw new TypeError(`Signature.fromDER: Expected string or Uint8Array`);
+    const { r, s } = parseDERSignature(arr ? hex : hexToBytes(hex));
     return new Signature(r, s);
   }
 
@@ -674,11 +667,6 @@ function ensureBytes(hex: Hex): Uint8Array {
 // Big Endian
 function bytesToNumber(bytes: Uint8Array): bigint {
   return hexToNumber(bytesToHex(bytes));
-}
-
-// Why * 2?? Not sure...
-function parseDERByte(str: string): number {
-  return parseHexByte(str) * 2;
 }
 
 function normalizeScalar(num: number | bigint): bigint {
@@ -942,10 +930,9 @@ function normalizeSignature(signature: Sig): Signature {
     signature.assertValidity();
     return signature;
   }
-  if (typeof signature !== 'string') signature = bytesToHex(signature);
-  if (isDEREncoding(signature)) {
+  try {
     return Signature.fromDER(signature);
-  } else {
+  } catch (error) {
     return Signature.fromCompact(signature);
   }
 }

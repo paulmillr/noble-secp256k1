@@ -10,7 +10,7 @@ import * as wp from './vectors/wychenproof.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
 
-const FC_BIGINT = fc.bigInt(1n, secp.CURVE.n - 1n);
+const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
@@ -164,9 +164,8 @@ describe('secp256k1', () => {
     it('.fromCompactHex() roundtrip', () => {
       fc.assert(
         fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
-          const signature = new secp.Signature(r, s);
-          const hex = signature.toCompactHex();
-          expect(secp.Signature.fromCompact(hex)).toEqual(signature);
+          const sig = new secp.Signature(r, s);
+          expect(secp.Signature.fromCompact(sig.toCompactHex())).toEqual(sig);
         })
       );
     });
@@ -174,9 +173,8 @@ describe('secp256k1', () => {
     it('.fromDERHex() roundtrip', () => {
       fc.assert(
         fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
-          const signature = new secp.Signature(r, s);
-          const hex = signature.toDERHex();
-          expect(secp.Signature.fromDER(hex)).toEqual(signature);
+          const sig = new secp.Signature(r, s);
+          expect(secp.Signature.fromDER(sig.toDERHex())).toEqual(sig);
         })
       );
     });
@@ -282,15 +280,14 @@ describe('secp256k1', () => {
       expect(publicKey.length).toBe(65);
       expect(secp.verify(signature, WRONG_MSG, publicKey)).toBe(false);
     });
-    it('should verify random signatures', async () => {
+    it('should verify random signatures', async () =>
       fc.assert(
         fc.asyncProperty(FC_BIGINT, fc.hexaString(64, 64), async (privKey, msg) => {
           const pub = secp.getPublicKey(privKey);
           const sig = await secp.sign(msg, privKey);
           expect(secp.verify(sig, msg, pub)).toBeTruthy();
         })
-      );
-    });
+      ));
     it('should not verify signature with invalid r/s', () => {
       const msg = new Uint8Array([
         0xbb, 0x5a, 0x52, 0xf4, 0x2f, 0x9c, 0x92, 0x61, 0xed, 0x43, 0x61, 0xf5, 0x94, 0x22, 0xa1,
@@ -385,6 +382,7 @@ describe('secp256k1', () => {
       const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
       const [signature, recovery] = await secp.sign(message, privateKey, {
         recovered: true,
+        canonical: true,
       });
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);
@@ -429,7 +427,6 @@ describe('secp256k1', () => {
     it('isValidPrivateKey()', () => {
       for (const vector of privates.valid.isPrivate) {
         const { d, expected } = vector;
-        // const privateKey = hexToNumber(d);
         expect(secp.utils.isValidPrivateKey(d)).toBe(expected);
       }
     });
