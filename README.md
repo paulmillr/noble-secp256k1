@@ -41,8 +41,8 @@ import * as secp from "@noble/secp256k1";
   const signature = await secp.sign(messageHash, privateKey);
   const isSigned = secp.verify(signature, messageHash, publicKey);
 
-  // Canonical signatures
-  const signatureC = await secp.sign(messageHash, privateKey, { canonical: true });
+  // Signatures compatible with openssl
+  const signatureS = await secp.sign(messageHash, privateKey, { canonical: false });
 
   // Supports Schnorr signatures
   const rpub = secp.schnorr.getPublicKey(privateKey);

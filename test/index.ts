@@ -13,6 +13,7 @@ const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), '
 const FC_BIGINT = fc.bigInt(1n, secp.CURVE.n - 1n);
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
+const hex = secp.utils.bytesToHex;
 function hexToArray(hex: string): Uint8Array {
   hex = hex.length & 1 ? `0${hex}` : hex;
   const array = new Uint8Array(hex.length / 2);
@@ -160,17 +161,17 @@ describe('secp256k1', () => {
   });
 
   describe('Signature', () => {
-    it('.fromHex() roundtrip', () => {
+    it('.fromCompactHex() roundtrip', () => {
       fc.assert(
         fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
           const signature = new secp.Signature(r, s);
-          const hex = signature.toDERHex();
-          expect(secp.Signature.fromDER(hex)).toEqual(signature);
+          const hex = signature.toCompactHex();
+          expect(secp.Signature.fromCompact(hex)).toEqual(signature);
         })
       );
     });
 
-    it('.fromHex() roundtrip', () => {
+    it('.fromDERHex() roundtrip', () => {
       fc.assert(
         fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
           const signature = new secp.Signature(r, s);
@@ -184,7 +185,8 @@ describe('secp256k1', () => {
   describe('.sign()', () => {
     it('should create deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.valid) {
-        const sig = await secp.sign(vector.m, vector.d, { canonical: true, der: false });
+        let usig = await secp.sign(vector.m, vector.d, { canonical: true, der: false });
+        let sig = hex(usig);
         const vsig = vector.signature;
         expect(sig.slice(0, 64)).toBe(vsig.slice(0, 64));
         expect(sig.slice(64, 128)).toBe(vsig.slice(64, 128));
@@ -226,7 +228,7 @@ describe('secp256k1', () => {
       );
       for (let [msg, exp] of CASES) {
         const res = await secp.sign(msg, privKey, { canonical: true });
-        expect(res).toBe(exp);
+        expect(hex(res)).toBe(exp);
         const rs = secp.Signature.fromDER(res).toCompactHex();
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
       }
@@ -239,9 +241,10 @@ describe('secp256k1', () => {
       const ent5 = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
       for (const e of ecdsa.extraEntropy) {
-        const sign = (extraEntropy?: string) => {
-          return secp.sign(e.m, e.d, {der: false, canonical: true, extraEntropy});
-        }
+        const sign = async (extraEntropy?: string) => {
+          const s = await secp.sign(e.m, e.d, { der: false, canonical: true, extraEntropy });
+          return hex(s);
+        };
         expect(await sign()).toBe(e.signature);
         expect(await sign(ent1)).toBe(e.extraEntropy0);
         expect(await sign(ent2)).toBe(e.extraEntropy1);
@@ -345,7 +348,6 @@ describe('secp256k1', () => {
         expect(res).toBeFalsy();
       }
     });
-
   });
 
   describe('schnorr', () => {
@@ -361,8 +363,8 @@ describe('secp256k1', () => {
       it(`should sign with Schnorr scheme vector ${index}`, async () => {
         if (passes === 'TRUE') {
           const sig = await secp.schnorr.sign(msg, sec, rnd);
-          expect(secp.schnorr.getPublicKey(sec)).toBe(pub.toLowerCase());
-          expect(sig).toBe(expSig.toLowerCase());
+          expect(hex(secp.schnorr.getPublicKey(sec))).toBe(pub.toLowerCase());
+          expect(hex(sig)).toBe(expSig.toLowerCase());
           expect(await secp.schnorr.verify(sig, msg, pub)).toBe(true);
         } else {
           try {
@@ -386,7 +388,7 @@ describe('secp256k1', () => {
       });
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);
-      expect(recoveredPubkey).toBe(publicKey);
+      expect(hex(recoveredPubkey!)).toBe(publicKey);
       expect(secp.verify(signature, message, publicKey)).toBe(true);
     });
   });
@@ -405,7 +407,7 @@ describe('secp256k1', () => {
           }).toThrowError();
         } else if (vector.result === 'valid') {
           const res = secp.getSharedSecret(vector.private, derToPub(vector.public), true);
-          expect(res.slice(2)).toBe(`${vector.shared}`);
+          expect(hex(res.slice(1))).toBe(`${vector.shared}`);
         }
       }
     });
@@ -438,20 +440,20 @@ describe('secp256k1', () => {
       for (let group of wp.testGroups) {
         const pubKey = secp.Point.fromHex(group.key.uncompressed);
         for (let test of group.tests) {
-          if (test.result === 'valid') {
-            const hash = await secp.utils.sha256(hexToArray(test.msg));
-            expect(secp.verify(test.sig, hash, pubKey)).toBeTruthy();
+          const m = await secp.utils.sha256(hexToArray(test.msg));
+          if (test.result === 'valid' || test.result === 'acceptable') {
+            expect(secp.verify(test.sig, m, pubKey)).toBeTruthy();
           } else if (test.result === 'invalid') {
-            let fail = false;
-            const hash = await secp.utils.sha256(hexToArray(test.msg));
+            let failed = false;
             try {
-              if (!secp.verify(test.sig, hash, pubKey)) fail = true;
+              const verified = secp.verify(test.sig, m, pubKey);
+              if (!verified) failed = true;
             } catch (error) {
-              fail = true;
+              failed = true;
             }
-            expect(fail).toBeTruthy();
+            expect(failed).toBeTruthy();
           } else {
-            expect(true).toBeTruthy();
+            expect(false).toBeTruthy();
           }
         }
       }

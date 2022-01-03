@@ -941,7 +941,9 @@ function normalizeSignature(signature: Sig): Signature {
   if (signature instanceof Signature) {
     signature.assertValidity();
     return signature;
-  } else if (isDEREncoding(signature)) {
+  }
+  if (typeof signature !== 'string') signature = bytesToHex(signature);
+  if (isDEREncoding(signature)) {
     return Signature.fromDER(signature);
   } else {
     return Signature.fromCompact(signature);
