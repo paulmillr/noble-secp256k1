@@ -614,11 +614,12 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
+const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
-    hex += uint8a[i].toString(16).padStart(2, '0');
+    hex += hexes[uint8a[i]];
   }
   return hex;
 }
@@ -652,6 +653,7 @@ function parseHexByte(hexByte: string): number {
   return byte;
 }
 
+// Caching slows it down 2-3x
 function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== 'string') {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
@@ -946,32 +948,16 @@ function normalizeSignature(signature: Sig): Signature {
   }
 }
 
-export function getPublicKey(
-  privateKey: Uint8Array | number | bigint,
-  isCompressed?: boolean
-): Uint8Array;
-export function getPublicKey(privateKey: string, isCompressed?: boolean): string;
-export function getPublicKey(privateKey: PrivKey, isCompressed = false): PubKey {
-  const point = Point.fromPrivateKey(privateKey);
-  if (typeof privateKey === 'string') {
-    return point.toHex(isCompressed);
-  }
-  return point.toRawBytes(isCompressed);
+export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Array {
+  return Point.fromPrivateKey(privateKey).toRawBytes(isCompressed);
 }
 
 export function recoverPublicKey(
-  msgHash: string,
-  signature: string,
+  msgHash: Hex,
+  signature: Sig,
   recovery: number
-): string | undefined;
-export function recoverPublicKey(
-  msgHash: Uint8Array,
-  signature: Uint8Array,
-  recovery: number
-): Uint8Array | undefined;
-export function recoverPublicKey(msgHash: Hex, signature: Sig, recovery: number): Hex | undefined {
-  const point = Point.fromSignature(msgHash, signature, recovery);
-  return typeof msgHash === 'string' ? point.toHex() : point.toRawBytes();
+): Uint8Array | undefined {
+  return Point.fromSignature(msgHash, signature, recovery).toRawBytes();
 }
 
 function isPub(item: PrivKey | PubKey): boolean {
@@ -985,21 +971,22 @@ function isPub(item: PrivKey | PubKey): boolean {
 }
 
 // ECDH (Elliptic Curve Diffie Hellman) implementation.
-export function getSharedSecret(privateA: PrivKey, publicB: PubKey, isCompressed = false): Hex {
+export function getSharedSecret(
+  privateA: PrivKey,
+  publicB: PubKey,
+  isCompressed = false
+): Uint8Array {
   if (isPub(privateA)) throw new TypeError('getSharedSecret: first arg must be private key');
   if (!isPub(publicB)) throw new TypeError('getSharedSecret: second arg must be public key');
   const b = normalizePublicKey(publicB);
   b.assertValidity();
-  const shared = b.multiply(normalizePrivateKey(privateA));
-  return typeof privateA === 'string'
-    ? shared.toHex(isCompressed)
-    : shared.toRawBytes(isCompressed);
+  return b.multiply(normalizePrivateKey(privateA)).toRawBytes(isCompressed);
 }
 
 type OptsRecov = { recovered: true; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
 type OptsNoRecov = { recovered?: false; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
 type Opts = { recovered?: boolean; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
-type SignOutput = Hex | [Hex, number];
+type SignOutput = Uint8Array | [Uint8Array, number];
 
 // We don't overload function because the overload won't be externally visible
 function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOutput {
@@ -1012,28 +999,21 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov, str = false): SignOut
     recovery ^= 1;
   }
   // sig.assertValidity();
-  const hex = der === false ? sig.toCompactHex() : sig.toDERHex();
-  const hashed = str ? hex : hexToBytes(hex);
+  const hashed = der === false ? sig.toCompactRawBytes() : sig.toDERRawBytes();
   return recovered ? [hashed, recovery] : hashed;
 }
 
 // https://www.secg.org/sec1-v2.pdf, section 4.1.3
 // We are using deterministic signature scheme instead of letting user specify random `k`.
-async function sign(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
-async function sign(msgHash: string, privKey: PrivKey, opts: OptsRecov): Promise<[string, number]>;
-async function sign(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
-async function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
-async function sign(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): Promise<string>;
+async function sign(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
+async function sign(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
   const ent = opts.extraEntropy;
   return QRSToSig(await getQRSrfc6979(msgHash, privKey, ent), opts, typeof msgHash === 'string');
 }
 
-function signSync(msgHash: U8A, privKey: PrivKey, opts: OptsRecov): [U8A, number];
-function signSync(msgHash: string, privKey: PrivKey, opts: OptsRecov): [string, number];
-function signSync(msgHash: U8A, privKey: PrivKey, opts?: OptsNoRecov): U8A;
-function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
-function signSync(msgHash: string, privKey: PrivKey, opts?: OptsNoRecov): string;
+function signSync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): [U8A, number];
+function signSync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
   const ent = opts.extraEntropy;
   return QRSToSig(getQRSrfc6979Sync(msgHash, privKey, ent), opts, typeof msgHash === 'string');
@@ -1114,25 +1094,16 @@ class SchnorrSignature {
 }
 
 // Schnorr's pubkey is just `x` of Point
-function schnorrGetPublicKey(privateKey: Uint8Array): Uint8Array;
-function schnorrGetPublicKey(privateKey: string): string;
-function schnorrGetPublicKey(privateKey: PrivKey): Hex {
-  const P = Point.fromPrivateKey(privateKey);
-  return typeof privateKey === 'string' ? P.toHexX() : P.toRawX();
+function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
+  return Point.fromPrivateKey(privateKey).toRawX();
 }
 
 // Schnorr signature verifies itself before producing an output, which makes it safer
-async function schnorrSign(msgHash: string, privateKey: string, auxRand?: Hex): Promise<string>;
-async function schnorrSign(
-  msgHash: Uint8Array,
-  privateKey: Uint8Array,
-  auxRand?: Hex
-): Promise<Uint8Array>;
 async function schnorrSign(
   msgHash: Hex,
   privateKey: PrivKey,
   auxRand: Hex = utils.randomBytes()
-): Promise<Hex> {
+): Promise<Uint8Array> {
   if (msgHash == null) throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
   // if (privateKey == null) throw new TypeError('Expected valid private key');
   if (!privateKey) privateKey = _0n;
@@ -1160,7 +1131,7 @@ async function schnorrSign(
   const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
 
   if (!isValid) throw new Error('sign: Invalid signature produced');
-  return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
+  return sig.toRawBytes();
 }
 
 // no schnorrSignSync() for now
@@ -1235,6 +1206,8 @@ export const utils = {
     }
     throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
   },
+
+  bytesToHex,
 
   sha256: async (message: Uint8Array): Promise<Uint8Array> => {
     if (crypto.web) {
