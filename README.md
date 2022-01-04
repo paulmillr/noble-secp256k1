@@ -115,13 +115,13 @@ function sign(msgHash: Uint8Array | string, privateKey: Uint8Array | string, opt
 function sign(msgHash: Uint8Array | string, privateKey: Uint8Array | string, opts?: Options): Promise<[Uint8Array, number]>;
 ```
 
-Generates deterministic ECDSA signature as per RFC6979.
+Generates low-s deterministic ECDSA signature as per RFC6979.
 
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format
 - `options?.recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
-- `options?.canonical: boolean = false` - whether a signature `s` should be no more than 1/2 prime order.
+- `options?.canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
   `true` makes signatures compatible with libsecp256k1,
   `false` makes signatures compatible with openssl
 - `options?.extraEntropy: Uint8Array | string` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. [Could be reused](https://crypto.stackexchange.com/questions/97911/reusing-additional-data-k-nonce-from-rfc6979-ecdsa).
@@ -153,7 +153,7 @@ function verify(signature: Signature, msgHash: Uint8Array | string, publicKey: P
 - `msgHash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - `options?: Options` - *optional* object related to signature value and format
-- `options?.canonical: boolean = false` - whether a signature `s` should be no more than 1/2 prime order.
+- `options?.strict: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
   `true` makes signatures compatible with libsecp256k1,
   `false` makes signatures compatible with openssl
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`

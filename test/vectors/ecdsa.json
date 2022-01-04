@@ -10301,6 +10301,13 @@
         "Q": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
         "m": "0000000000000000000000000000000000000000000000000000000000000003",
         "signature": "0000000000000000000000000000000000000000000000000000000000000001fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141"
+      },
+      {
+        "description": "Fails verification if strict set to truthy value with high s value",
+        "strict": true,
+        "Q": "034cd032cdc72820498aeb0fdd25712aa4f6d263997cf7df140b8c42d44626b08c",
+        "m": "df8e1382d17bdac18f3c854815071226385803e85f06114129ebbcfcef991278",
+        "signature": "ec8cd8d7dcda4ff770c2858bdd93dd64806e218b11bb1971a4a09b065760b040c1095cf554dab161b2b2c46386fab2c81e57035be714b760ef507981f8f70073"
       }
     ]
   },

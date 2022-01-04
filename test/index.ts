@@ -183,7 +183,7 @@ describe('secp256k1', () => {
   describe('.sign()', () => {
     it('should create deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.valid) {
-        let usig = await secp.sign(vector.m, vector.d, { canonical: true, der: false });
+        let usig = await secp.sign(vector.m, vector.d, { der: false });
         let sig = hex(usig);
         const vsig = vector.signature;
         expect(sig.slice(0, 64)).toBe(vsig.slice(0, 64));
@@ -194,7 +194,7 @@ describe('secp256k1', () => {
     it('should not create invalid deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.invalid.sign) {
         expect(() => {
-          return secp.sign(vector.m, vector.d, { canonical: true, der: false });
+          return secp.sign(vector.m, vector.d, { der: false });
         }).rejects.toThrowError();
       }
     });
@@ -225,7 +225,7 @@ describe('secp256k1', () => {
         '0101010101010101010101010101010101010101010101010101010101010101'
       );
       for (let [msg, exp] of CASES) {
-        const res = await secp.sign(msg, privKey, { canonical: true });
+        const res = await secp.sign(msg, privKey);
         expect(hex(res)).toBe(exp);
         const rs = secp.Signature.fromDER(res).toCompactHex();
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
@@ -240,7 +240,7 @@ describe('secp256k1', () => {
 
       for (const e of ecdsa.extraEntropy) {
         const sign = async (extraEntropy?: string) => {
-          const s = await secp.sign(e.m, e.d, { der: false, canonical: true, extraEntropy });
+          const s = await secp.sign(e.m, e.d, { der: false, extraEntropy });
           return hex(s);
         };
         expect(await sign()).toBe(e.signature);
@@ -320,7 +320,7 @@ describe('secp256k1', () => {
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeFalsy();
     });
-    it('should verify msg bb5a...', async () => {
+    it('should verify non-strict msg bb5a...', async () => {
       const msg = 'bb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023';
       const x = 3252872872578928810725465493269682203671229454553002637820453004368632726370n;
       const y = 17482644437196207387910659778872952193236850502325156318830589868678978890912n;
@@ -328,19 +328,10 @@ describe('secp256k1', () => {
       const s = 115792089237316195423570985008687907852837564279074904382605163141518161494334n;
       const pub = new secp.Point(x, y);
       const sig = new secp.Signature(r, s);
-      expect(secp.verify(sig, msg, pub)).toBeTruthy();
+      expect(secp.verify(sig, msg, pub, {strict: false})).toBeTruthy();
     });
     it('should not verify invalid deterministic signatures with RFC 6979', () => {
-      // const additional =
-      //   {
-      //     "description": "Fails verification if strict set to truthy value with high s value",
-      //     "strict": true,
-      //     "Q": "034cd032cdc72820498aeb0fdd25712aa4f6d263997cf7df140b8c42d44626b08c",
-      //     "m": "df8e1382d17bdac18f3c854815071226385803e85f06114129ebbcfcef991278",
-      //     "signature": "ec8cd8d7dcda4ff770c2858bdd93dd64806e218b11bb1971a4a09b065760b040c1095cf554dab161b2b2c46386fab2c81e57035be714b760ef507981f8f70073"
-      //   };
       for (const vector of ecdsa.invalid.verify) {
-        // const opt = vector === additional ? {canonical: true} : {};
         const res = secp.verify(vector.signature, vector.m, vector.Q);
         expect(res).toBeFalsy();
       }
@@ -439,7 +430,12 @@ describe('secp256k1', () => {
         for (let test of group.tests) {
           const m = await secp.utils.sha256(hexToArray(test.msg));
           if (test.result === 'valid' || test.result === 'acceptable') {
-            expect(secp.verify(test.sig, m, pubKey)).toBeTruthy();
+            const verified = secp.verify(test.sig, m, pubKey);
+            if (secp.Signature.fromDER(test.sig).hasHighS()) {
+              expect(verified).toBeFalsy();
+            } else {
+              expect(verified).toBeTruthy();
+            }
           } else if (test.result === 'invalid') {
             let failed = false;
             try {
