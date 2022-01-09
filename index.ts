@@ -594,6 +594,7 @@ export class Signature {
 // Concatenates two Uint8Arrays into one.
 // TODO: check if we're copying data instead of moving it and if that's ok
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Uint8Array list expected');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
