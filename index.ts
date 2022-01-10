@@ -810,7 +810,7 @@ type U8A = Uint8Array;
 function _abc6979(msgHash: Hex, privateKey: bigint, extraEntropy?: Hex) {
   if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
   let num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
-  num %= CURVE.n;
+  num = mod(num, CURVE.n);
   // Step A is ignored, since we already provide hash instead of msg
   const h1 = pad32b(num);
   const h1n = bytesToNumber(h1);
