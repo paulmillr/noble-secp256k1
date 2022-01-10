@@ -1220,9 +1220,7 @@ export const utils = {
     } else if (crypto.node) {
       const { createHmac } = crypto.node;
       const hash = createHmac('sha256', key);
-      for (const message of messages) {
-        hash.update(message);
-      }
+      messages.forEach(m => hash.update(m));
       return new Uint8Array(hash.digest().buffer);
     } else {
       throw new Error("The environment doesn't have hmac-sha256 function");
