@@ -1202,7 +1202,7 @@ export const utils = {
       return new Uint8Array(buffer);
     } else if (crypto.node) {
       const { createHash } = crypto.node;
-      return Uint8Array.from(createHash('sha256').update(message).digest());
+      return new Uint8Array(createHash('sha256').update(message).digest().buffer);
     } else {
       throw new Error("The environment doesn't have sha256 function");
     }
@@ -1223,7 +1223,7 @@ export const utils = {
       for (const message of messages) {
         hash.update(message);
       }
-      return Uint8Array.from(hash.digest());
+      return new Uint8Array(hash.digest().buffer);
     } else {
       throw new Error("The environment doesn't have hmac-sha256 function");
     }
