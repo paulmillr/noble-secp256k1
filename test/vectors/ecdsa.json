@@ -94,7 +94,7 @@
       "description": "Strange hash",
       "d": "0000000000000000000000000000000000000000000000000000000000000001",
       "m": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-      "signature": "3f8fe493cf305a7f02b2d2c060ba66a8f7bd13a7a64d5200c0655ad069bd85b51cf94236c3857e33a1023a5216cbc81b1dc3adcc1c71f4212df1997ffdfb140a"
+      "signature": "7cb38cc5712e9e11a767615f6080dbc111c9cdd613eb98999fd92a86bafd45407923ca1f4d03471d2866f776ef8a6d3cac099b427331aeb245aa9dafeddcf115"
     },
     {
       "description": "Stange hash",
@@ -106,7 +106,13 @@
       "description": "Strange hash",
       "d": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
       "m": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-      "signature": "2d0b04a7560652f419e2542ea7d27f2c4afb0e111bb409cfe9f34b7ff7d3315850118e90fcfe28abd0635a2e90f00db72bdbfcedbf56dad4049de85798031b38"
+      "signature": "a7f83b5963eaf5332c633327cc967be8f4166d3f1e0b77f9761d8f4e42211e9a58aae31be1eb1e496923bbe8ca5e843cfb89f4d986d61d4edfd7d6fc3c9cf62c"
+    },
+    {
+      "description": "Strange hash",
+      "d": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+      "m": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+      "signature": "919026f3e239ea52cf530eb6d345dc2b56ef0928f1e9ad20d8f360284dc6504814395e7137e2204f15b69239010f3c34fbb3c858a29b0d106b1fa65bc0047263"
     },
     {
       "d": "2bdbaeb8139ae47b603c684269f765a088397adbe65c017dfc6d19819b44041d",
