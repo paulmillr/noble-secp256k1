@@ -1176,7 +1176,7 @@ export const utils = {
       return crypto.web.getRandomValues(new Uint8Array(bytesLength));
     } else if (crypto.node) {
       const { randomBytes } = crypto.node;
-      return new Uint8Array(randomBytes(bytesLength).buffer);
+      return Uint8Array.from(randomBytes(bytesLength));
     } else {
       throw new Error("The environment doesn't have randomBytes function");
     }
@@ -1202,7 +1202,7 @@ export const utils = {
       return new Uint8Array(buffer);
     } else if (crypto.node) {
       const { createHash } = crypto.node;
-      return new Uint8Array(createHash('sha256').update(message).digest().buffer);
+      return Uint8Array.from(createHash('sha256').update(message).digest());
     } else {
       throw new Error("The environment doesn't have sha256 function");
     }
@@ -1221,7 +1221,7 @@ export const utils = {
       const { createHmac } = crypto.node;
       const hash = createHmac('sha256', key);
       messages.forEach((m) => hash.update(m));
-      return new Uint8Array(hash.digest().buffer);
+      return Uint8Array.from(hash.digest());
     } else {
       throw new Error("The environment doesn't have hmac-sha256 function");
     }
