@@ -33,7 +33,6 @@ run(async (windowSize) => {
   // await mark('getPublicKey 256 bit', samples * 10, () => {
   //   secp.getPublicKey('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb');
   // });
-
   await mark('getPublicKey(utils.randomPrivateKey())', samples * 10, () => {
     secp.getPublicKey(secp.utils.randomPrivateKey());
   });

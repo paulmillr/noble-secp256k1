@@ -1,6 +1,8 @@
 /*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
 // https://www.secg.org/sec2-v2.pdf
 
+// Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
+// In browser the line is automatically removed during build time: uses crypto.subtle instead.
 import nodeCrypto from 'crypto';
 
 // Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
@@ -36,7 +38,9 @@ export { CURVE };
 // y² = x³ + ax + b: Short weistrass curve formula. Returns y²
 function weistrass(x: bigint): bigint {
   const { a, b } = CURVE;
-  return mod(x ** _3n + a * x + b);
+  const x2 = mod(x * x);
+  const x3 = mod(x2 * x);
+  return mod(x3 + a * x + b);
 }
 
 type Hex = Uint8Array | string;
