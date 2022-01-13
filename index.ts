@@ -1176,7 +1176,7 @@ async function schnorrSign(
 async function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Promise<boolean> {
   const sig =
     signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
-  const m = typeof msgHash === 'string' ? hexToBytes(msgHash) : msgHash;
+  const m = ensureBytes(msgHash);
 
   const P = normalizePublicKey(publicKey);
   const e = await createChallenge(sig.r, P, m);
