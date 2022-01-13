@@ -803,80 +803,65 @@ function truncateHash(hash: string | Uint8Array): bigint {
 type RecoveredSig = { sig: Signature; recovery: number };
 type U8A = Uint8Array;
 
-// Steps A, B and C of RFC6979.
-function initHmacDRBG(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Hex) {
-  if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
-  const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
-  // Step A is ignored, since we already provide hash instead of msg
-  const h1 = pad32b(num);
-  const msg = bytesToNumber(h1);
-  const privKey = normalizePrivateKey(privateKey);
-  const x = pad32b(privKey);
-
-  // Step B
-  let v = new Uint8Array(32).fill(1);
-  // Step C
-  let k = new Uint8Array(32).fill(0);
-  const _0x00 = Uint8Array.from([0x00]);
-  const _0x01 = Uint8Array.from([0x01]);
-
-  let xh1 = concatBytes(x, h1);
-  // RFC6979 3.6: additional k' could be provided
-  // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
-  if (extraEntropy != null) {
-    const e = pad32b(
-      typeof extraEntropy === 'string' ? hexToNumber(extraEntropy) : bytesToNumber(extraEntropy)
-    );
-    if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data');
-    xh1 = concatBytes(xh1, e);
+// Minimal HMAC-DRBG (NIST 800-90) for signatures
+class HmacDrbg {
+  k: Uint8Array;
+  v: Uint8Array;
+  counter: number;
+  constructor() {
+    // Step B, Step C
+    this.v = new Uint8Array(32).fill(1);
+    this.k = new Uint8Array(32).fill(0);
+    this.counter = 0;
   }
-  return { xh1, msg, k, v, privKey, _0x00, _0x01 };
-}
-
-// Deterministic k (nonce) generation as per RFC6979
-// https://tools.ietf.org/html/rfc6979#section-3.1
-// Uses HMAC-DRBG to generate k, then calculates Q & Signature { r, s } based on it.
-// Could receive extra k' as per RFC6979 3.6 Additional data.
-async function getSigRFC6979(opts: ReturnType<typeof initHmacDRBG>): Promise<RecoveredSig> {
-  let { xh1, k, v, _0x00, _0x01, msg, privKey } = opts;
-  const hmac = utils.hmacSha256;
-  // Steps D, E, F, G
-  k = await hmac(k, v, _0x00, xh1);
-  v = await hmac(k, v);
-  k = await hmac(k, v, _0x01, xh1);
-  v = await hmac(k, v);
-  // Step H3, repeat until k is in range [1, n-1]
-  for (let i = 0; i < 1000; i++) {
-    v = await hmac(k, v);
-    const sig = kmdToSig(bytesToNumber(v), msg, privKey);
-    if (sig) return sig;
-    k = await hmac(k, v, _0x00);
-    v = await hmac(k, v);
+  private hmac(...values: Uint8Array[]) {
+    return utils.hmacSha256(this.k, ...values);
+  }
+  private hmacSync(...values: Uint8Array[]) {
+    return utils.hmacSha256Sync!(this.k, ...values);
+  }
+  incr() {
+    if (this.counter >= 1000) {
+      throw new Error('Tried 1,000 k values for sign(), all were invalid');
+    }
+    this.counter += 1;
   }
 
-  throw new Error('secp256k1: Tried 1,000 k values for sign(), all were invalid');
-}
-
-// Same thing, but for synchronous utils.hmacSha256()
-function getSigRFC6979Sync(opts: ReturnType<typeof initHmacDRBG>): RecoveredSig {
-  let { xh1, k, v, _0x00, _0x01, msg, privKey } = opts;
-  const hmac = utils.hmacSha256Sync;
-  if (!hmac) throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
-  // Steps D, E, F, G
-  k = hmac(k, v, _0x00, xh1);
-  if (k instanceof Promise) throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
-  v = hmac(k, v);
-  k = hmac(k, v, _0x01, xh1);
-  v = hmac(k, v);
-  // Step H3, repeat until k is in range [1, n-1]
-  for (let i = 0; i < 1000; i++) {
-    v = hmac(k, v);
-    const sig = kmdToSig(bytesToNumber(v), msg, privKey);
-    if (sig) return sig;
-    k = hmac(k, v, _0x00);
-    v = hmac(k, v);
+  async reseed(seed = new Uint8Array(), extraData = new Uint8Array()) {
+    const empty = new Uint8Array();
+    this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed, extraData);
+    this.v = await this.hmac(this.v);
+    if (seed.length === 0) return;
+    this.k = await this.hmac(this.v, Uint8Array.from([0x01]), seed, extraData);
+    this.v = await this.hmac(this.v);
   }
-  throw new Error('secp256k1: Tried 1,000 k values for sign(), all were invalid');
+  reseedSync(seed = new Uint8Array(), extraData = new Uint8Array()) {
+    if (typeof utils.hmacSha256Sync !== 'function') {
+      throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
+    }
+    this.k = this.hmacSync(this.v, Uint8Array.from([0x00]), seed, extraData);
+    if (this.k instanceof Promise) {
+      throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
+    }
+    this.v = this.hmacSync(this.v);
+    if (seed.length === 0) return;
+    this.k = this.hmacSync(this.v, Uint8Array.from([0x01]), seed);
+    this.v = this.hmacSync(this.v);
+  }
+
+  async generate() {
+    this.incr();
+    this.v = await this.hmac(this.v);
+    return this.v;
+  }
+  generateSync() {
+    this.incr();
+    this.v = this.hmacSync(this.v);
+    return this.v;
+  }
+  // There is no need in clean() method
+  // It's useless, there are no guarantees with JS GC
+  // whether bigints are removed even if you clean Uint8Arrays.
 }
 
 function isWithinCurveOrder(num: bigint): boolean {
@@ -890,7 +875,8 @@ function isWithinCurveOrder(num: bigint): boolean {
  * @param d private key
  * @returns Signature with its point on curve Q OR undefined if params were invalid
  */
-function kmdToSig(k: bigint, m: bigint, d: bigint): RecoveredSig | undefined {
+function kmdToSig(kBytes: Uint8Array, m: bigint, d: bigint): RecoveredSig | undefined {
+  const k = bytesToNumber(kBytes);
   if (!isWithinCurveOrder(k)) return;
   const { n } = CURVE;
   const q = Point.BASE.multiply(k);
@@ -985,6 +971,28 @@ type OptsNoRecov = { recovered?: false; canonical?: boolean; der?: boolean; extr
 type Opts = { recovered?: boolean; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
 type SignOutput = Uint8Array | [Uint8Array, number];
 
+// Steps A, B and C of RFC6979
+function initSigArgs(msgHash: Hex, privateKey: PrivKey, extraData?: Hex) {
+  if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
+  const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
+  // Step A is ignored, since we already provide hash instead of msg
+  const h1 = pad32b(num);
+  const m = bytesToNumber(h1);
+  const d = normalizePrivateKey(privateKey);
+  const x = pad32b(d);
+  const seed = concatBytes(x, h1);
+  // RFC6979 3.6: additional k' could be provided
+  // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
+  if (extraData != null) {
+    const e = pad32b(
+      typeof extraData === 'string' ? hexToNumber(extraData) : bytesToNumber(extraData)
+    );
+    if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data');
+    extraData = e;
+  }
+  return { seed, extraData, m, d };
+}
+
 // We don't overload function because the overload won't be externally visible
 function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignOutput {
   let { sig, recovery } = recSig;
@@ -1000,23 +1008,41 @@ function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignO
 // Two methods because some people cannot use async sign
 
 // Signs message hash (not message: you need to sign it by yourself).
-// sign(m, d, k) where
-//   (x1, y1) = G × k
-//   r = x1 mod n
-//   s = (1/k * (m + dr) mod n
 // https://www.secg.org/sec1-v2.pdf, section 4.1.3
-// We are using deterministic signature scheme instead of letting user specify random `k`.
+// We are using deterministic signatures (RFC6979) instead of letting user specify random `k`.
+// https://tools.ietf.org/html/rfc6979#section-3.1
+// HMAC-DRBG generates k, then calculates Q & Signature { r, s } based on it.
+// Could receive extra k' as per RFC6979 3.6 Additional data.
 // low-s signatures are generated by default. If you don't want it, use canonical: false.
+// sign(m, d, k) where
+//   (x, y) = G × k
+//   r = x mod n
+//   s = (1/k * (m + dr) mod n
 async function sign(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
-  return finalizeSig(await getSigRFC6979(initHmacDRBG(msgHash, privKey, opts.extraEntropy)), opts);
+  // Steps A, B and C of RFC6979.
+  const { seed, extraData, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
+  let sig: RecoveredSig | undefined;
+  // Steps D, E, F, G
+  const drbg = new HmacDrbg();
+  await drbg.reseed(seed, extraData);
+  // Step H3, repeat until k is in range [1, n-1]
+  while (!(sig = kmdToSig(await drbg.generate(), m, d))) await drbg.reseed();
+  return finalizeSig(sig, opts);
 }
 
 function signSync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): [U8A, number];
 function signSync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
-  return finalizeSig(getSigRFC6979Sync(initHmacDRBG(msgHash, privKey, opts.extraEntropy)), opts);
+  const { seed, extraData, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
+  let sig: RecoveredSig | undefined;
+  // Steps D, E, F, G
+  const drbg = new HmacDrbg();
+  drbg.reseedSync(seed, extraData);
+  // Step H3, repeat until k is in range [1, n-1]
+  while (!(sig = kmdToSig(drbg.generateSync(), m, d))) drbg.reseedSync();
+  return finalizeSig(sig, opts);
 }
 export { sign, signSync };
 
