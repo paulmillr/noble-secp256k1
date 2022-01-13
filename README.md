@@ -124,7 +124,7 @@ Generates low-s deterministic ECDSA signature as per RFC6979.
 - `options?.canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
   `true` makes signatures compatible with libsecp256k1,
   `false` makes signatures compatible with openssl
-- `options?.extraEntropy: Uint8Array | string` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. [Could be reused](https://crypto.stackexchange.com/questions/97911/reusing-additional-data-k-nonce-from-rfc6979-ecdsa).
+- `options?.extraEntropy: Uint8Array | string` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979
 - `options?.der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
