@@ -1011,7 +1011,7 @@ function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignO
 
 // Two methods because some people cannot use async sign
 
-// Signs message hash (not message: you need to sign it by yourself).
+// Signs message hash (not message: you need to hash it by yourself).
 // https://www.secg.org/sec1-v2.pdf, section 4.1.3
 // We are using deterministic signatures (RFC6979) instead of letting user specify random `k`.
 // https://tools.ietf.org/html/rfc6979#section-3.1
