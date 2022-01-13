@@ -800,24 +800,25 @@ function truncateHash(hash: string | Uint8Array): bigint {
 }
 
 // RFC6979 related code
-type QRS = { q: Point; r: bigint; s: bigint };
+type RecoveredSig = { sig: Signature; recovery: number };
 type U8A = Uint8Array;
 
 // Steps A, B and C of RFC6979.
-function _abc6979(msgHash: Hex, privateKey: bigint, extraEntropy?: Hex) {
+function initHmacDRBG(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Hex) {
   if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
   const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
   // Step A is ignored, since we already provide hash instead of msg
   const h1 = pad32b(num);
-  const h1n = bytesToNumber(h1);
-  const x = pad32b(privateKey);
+  const msg = bytesToNumber(h1);
+  const privKey = normalizePrivateKey(privateKey);
+  const x = pad32b(privKey);
 
   // Step B
   let v = new Uint8Array(32).fill(1);
   // Step C
   let k = new Uint8Array(32).fill(0);
-  const b0 = Uint8Array.from([0x00]);
-  const b1 = Uint8Array.from([0x01]);
+  const _0x00 = Uint8Array.from([0x00]);
+  const _0x01 = Uint8Array.from([0x01]);
 
   let xh1 = concatBytes(x, h1);
   // RFC6979 3.6: additional k' could be provided
@@ -829,70 +830,79 @@ function _abc6979(msgHash: Hex, privateKey: bigint, extraEntropy?: Hex) {
     if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data');
     xh1 = concatBytes(xh1, e);
   }
-  return { xh1, h1n, v, k, b0, b1 };
+  return { xh1, msg, k, v, privKey, _0x00, _0x01 };
 }
 
-// Deterministic k generation as per RFC6979.
-// Generates k, and then calculates Q & Signature { r, s } based on it.
+// Deterministic k (nonce) generation as per RFC6979
 // https://tools.ietf.org/html/rfc6979#section-3.1
-async function getQRSrfc6979(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Hex): Promise<QRS> {
-  const privKey = normalizePrivateKey(privateKey);
-  let { xh1, h1n, v, k, b0, b1 } = _abc6979(msgHash, privKey, extraEntropy);
+// Uses HMAC-DRBG to generate k, then calculates Q & Signature { r, s } based on it.
+// Could receive extra k' as per RFC6979 3.6 Additional data.
+async function getSigRFC6979(opts: ReturnType<typeof initHmacDRBG>): Promise<RecoveredSig> {
+  let { xh1, k, v, _0x00, _0x01, msg, privKey } = opts;
   const hmac = utils.hmacSha256;
   // Steps D, E, F, G
-  k = await hmac(k, v, b0, xh1);
+  k = await hmac(k, v, _0x00, xh1);
   v = await hmac(k, v);
-  k = await hmac(k, v, b1, xh1);
+  k = await hmac(k, v, _0x01, xh1);
   v = await hmac(k, v);
-  // Step H3, repeat until 1 < T < n - 1
+  // Step H3, repeat until k is in range [1, n-1]
   for (let i = 0; i < 1000; i++) {
     v = await hmac(k, v);
-    const qrs = calcQRSFromK(v, h1n, privKey);
-    if (qrs) return qrs;
-    k = await hmac(k, v, b0);
+    const sig = kmdToSig(bytesToNumber(v), msg, privKey);
+    if (sig) return sig;
+    k = await hmac(k, v, _0x00);
     v = await hmac(k, v);
   }
 
-  throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
+  throw new Error('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 
 // Same thing, but for synchronous utils.hmacSha256()
-function getQRSrfc6979Sync(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Hex): QRS {
-  const privKey = normalizePrivateKey(privateKey);
-  let { xh1, h1n, v, k, b0, b1 } = _abc6979(msgHash, privKey, extraEntropy);
+function getSigRFC6979Sync(opts: ReturnType<typeof initHmacDRBG>): RecoveredSig {
+  let { xh1, k, v, _0x00, _0x01, msg, privKey } = opts;
   const hmac = utils.hmacSha256Sync;
   if (!hmac) throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
   // Steps D, E, F, G
-  k = hmac(k, v, b0, xh1);
+  k = hmac(k, v, _0x00, xh1);
   if (k instanceof Promise) throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
   v = hmac(k, v);
-  k = hmac(k, v, b1, xh1);
+  k = hmac(k, v, _0x01, xh1);
   v = hmac(k, v);
-  // Step H3, repeat until 1 < T < n - 1
+  // Step H3, repeat until k is in range [1, n-1]
   for (let i = 0; i < 1000; i++) {
     v = hmac(k, v);
-    const qrs = calcQRSFromK(v, h1n, privKey);
-    if (qrs) return qrs;
-    k = hmac(k, v, b0);
+    const sig = kmdToSig(bytesToNumber(v), msg, privKey);
+    if (sig) return sig;
+    k = hmac(k, v, _0x00);
     v = hmac(k, v);
   }
-  throw new TypeError('secp256k1: Tried 1,000 k values for sign(), all were invalid');
+  throw new Error('secp256k1: Tried 1,000 k values for sign(), all were invalid');
 }
 
 function isWithinCurveOrder(num: bigint): boolean {
   return _0n < num && num < CURVE.n;
 }
 
-function calcQRSFromK(v: Uint8Array, msg: bigint, priv: bigint): QRS | undefined {
-  const k = bytesToNumber(v);
+/**
+ * Converts signature params into point & r/s, checks them for validity.
+ * @param k signature's k param: deterministic in our case, random in non-rfc6979 sigs
+ * @param m message that would be signed
+ * @param d private key
+ * @returns Signature with its point on curve Q OR undefined if params were invalid
+ */
+function kmdToSig(k: bigint, m: bigint, d: bigint): RecoveredSig | undefined {
   if (!isWithinCurveOrder(k)) return;
-  const max = CURVE.n;
+  const { n } = CURVE;
   const q = Point.BASE.multiply(k);
-  const r = mod(q.x, max);
+  // r = x mod n
+  const r = mod(q.x, n);
   if (r === _0n) return;
-  const s = mod(invert(k, max) * (msg + r * priv), max);
+  // s = (1/k * (m + dr) mod n
+  const s = mod(invert(k, n) * mod(m + d * r, n), n);
   if (s === _0n) return;
-  return { q, r, s };
+  const sig = new Signature(r, s);
+  const recovery = (q.x === sig.r ? 0 : 2) | Number(q.y & _1n);
+  return { sig, recovery };
 }
 
 function normalizePrivateKey(key: PrivKey): bigint {
@@ -976,12 +986,9 @@ type Opts = { recovered?: boolean; canonical?: boolean; der?: boolean; extraEntr
 type SignOutput = Uint8Array | [Uint8Array, number];
 
 // We don't overload function because the overload won't be externally visible
-function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov): SignOutput {
-  const { q, r, s } = qrs;
-  const defaultOpts = { canonical: true, der: true };
-  let { canonical, der, recovered } = Object.assign(defaultOpts, opts);
-  let recovery = (q.x === r ? 0 : 2) | Number(q.y & _1n);
-  let sig = new Signature(r, s);
+function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignOutput {
+  let { sig, recovery } = recSig;
+  const { canonical, der, recovered } = Object.assign({ canonical: true, der: true }, opts);
   if (canonical && sig.hasHighS()) {
     sig = sig.normalizeS();
     recovery ^= 1;
@@ -990,6 +997,9 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov): SignOutput {
   return recovered ? [hashed, recovery] : hashed;
 }
 
+// Two methods because some people cannot use async sign
+
+// Signs message hash (not message: you need to sign it by yourself).
 // sign(m, d, k) where
 //   (x1, y1) = G × k
 //   r = x1 mod n
@@ -1000,13 +1010,13 @@ function QRSToSig(qrs: QRS, opts: OptsNoRecov | OptsRecov): SignOutput {
 async function sign(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
-  return QRSToSig(await getQRSrfc6979(msgHash, privKey, opts.extraEntropy), opts);
+  return finalizeSig(await getSigRFC6979(initHmacDRBG(msgHash, privKey, opts.extraEntropy)), opts);
 }
 
 function signSync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): [U8A, number];
 function signSync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
-  return QRSToSig(getQRSrfc6979Sync(msgHash, privKey, opts.extraEntropy), opts);
+  return finalizeSig(getSigRFC6979Sync(initHmacDRBG(msgHash, privKey, opts.extraEntropy)), opts);
 }
 export { sign, signSync };
 
@@ -1079,7 +1089,7 @@ class SchnorrSignature {
       throw new TypeError(`SchnorrSignature.fromHex: expected 64 bytes, not ${bytes.length}`);
     }
     const r = bytesToNumber(bytes.slice(0, 32));
-    const s = bytesToNumber(bytes.slice(32));
+    const s = bytesToNumber(bytes.slice(32, 64));
     return new SchnorrSignature(r, s);
   }
   toHex(): string {
@@ -1091,6 +1101,7 @@ class SchnorrSignature {
 }
 
 // Schnorr's pubkey is just `x` of Point
+// BIP340
 function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
   return Point.fromPrivateKey(privateKey).toRawX();
 }
@@ -1102,8 +1113,6 @@ async function schnorrSign(
   auxRand: Hex = utils.randomBytes()
 ): Promise<Uint8Array> {
   if (msgHash == null) throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
-  // if (privateKey == null) throw new TypeError('Expected valid private key');
-  if (!privateKey) privateKey = _0n;
   const { n } = CURVE;
   const m = ensureBytes(msgHash);
   const d0 = normalizePrivateKey(privateKey); // <== does isWithinCurveOrder check
