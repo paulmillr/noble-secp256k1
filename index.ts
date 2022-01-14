@@ -20,10 +20,9 @@ const CURVE = {
   b: BigInt(7),
   // Field over which we'll do calculations
   P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
-  // Curve order. Specifically, it belongs to prime-order subgroup;
-  // but our curve is h=1, so other subgroups don't exist
+  // Curve order, a number of valid points in the field
   n: POW_2_256 - BigInt('432420386565659656852420866394968145599'),
-  // Cofactor
+  // Cofactor. It's 1, so other subgroups don't exist, and default subgroup is prime-order
   h: _1n,
   // Base point (x, y) aka generator point
   Gx: BigInt('55066263022277343669578718895168534326250603453777594175500187360389116729240'),
@@ -35,7 +34,10 @@ const CURVE = {
 // Cleaner js output if that's on a separate line.
 export { CURVE };
 
-// y² = x³ + ax + b: Short weistrass curve formula. Returns y²
+/**
+ * y² = x³ + ax + b: Short weistrass curve formula
+ * @returns y²
+ */
 function weistrass(x: bigint): bigint {
   const { a, b } = CURVE;
   const x2 = mod(x * x);
@@ -43,25 +45,33 @@ function weistrass(x: bigint): bigint {
   return mod(x3 + a * x + b);
 }
 
+// We accept hex strings besides Uint8Array for simplicity
 type Hex = Uint8Array | string;
+// Very few implementations accept numbers, we do it to ease learning curve
 type PrivKey = Hex | bigint | number;
+// 33/65-byte ECDSA key, or 32-byte Schnorr key - not interchangeable
 type PubKey = Hex | Point;
+// ECDSA signature
 type Sig = Hex | Signature;
 
-// Always true for secp256k1.
-// We're including it here if you'll want to reuse code to support
-// different curve (e.g. secp256r1) - just set it to false then.
-// Endomorphism only works for Koblitz curves with a == 0.
-// It improves efficiency:
-// Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
-// Should always be used for Jacobian's double-and-add multiplication.
-// For affines cached multiplication, it trades off 1/2 init time & 1/3 ram for 20% perf hit.
-// https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
+/**
+ * Always true for secp256k1.
+ * We're including it here if you'll want to reuse code to support
+ * different curve (e.g. secp256r1) - just set it to false then.
+ * Endomorphism only works for Koblitz curves with a == 0.
+ * It improves efficiency:
+ * Uses 2x less RAM, speeds up precomputation by 2x and ECDH / sign key recovery by 20%.
+ * Should always be used for Jacobian's double-and-add multiplication.
+ * For affines cached multiplication, it trades off 1/2 init time & 1/3 ram for 20% perf hit.
+ * https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
+ */
 const USE_ENDOMORPHISM = CURVE.a === _0n;
 
-// Default Point works in 2d / affine coordinates: (x, y)
-// Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z², y=y/z³)
-// We're doing calculations in jacobi, because its operations don't require costly inversion.
+/**
+ * Jacobian Point works in 3d / jacobi coordinates: (x, y, z) ∋ (x=x/z², y=y/z³)
+ * Default Point works in 2d / affine coordinates: (x, y)
+ * We're doing calculations in jacobi, because its operations don't require costly inversion.
+ */
 class JacobianPoint {
   constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint) {}
 
@@ -74,9 +84,11 @@ class JacobianPoint {
     return new JacobianPoint(p.x, p.y, _1n);
   }
 
-  // Takes a bunch of Jacobian Points but executes only one
-  // invert on all of them. invert is very slow operation,
-  // so this improves performance massively.
+  /**
+   * Takes a bunch of Jacobian Points but executes only one
+   * invert on all of them. invert is very slow operation,
+   * so this improves performance massively.
+   */
   static toAffineBatch(points: JacobianPoint[]): Point[] {
     const toInv = invertBatch(points.map((p) => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
@@ -86,7 +98,9 @@ class JacobianPoint {
     return JacobianPoint.toAffineBatch(points).map(JacobianPoint.fromAffine);
   }
 
-  // Compare one point to another.
+  /**
+   * Compare one point to another.
+   */
   equals(other: JacobianPoint): boolean {
     const a = this;
     const b = other;
@@ -97,7 +111,9 @@ class JacobianPoint {
     return mod(a.x * bz2) === mod(az2 * b.x) && mod(a.y * bz3) === mod(az3 * b.y);
   }
 
-  // Flips point to one corresponding to (x, -y) in Affine coordinates.
+  /**
+   * Flips point to one corresponding to (x, -y) in Affine coordinates.
+   */
   negate(): JacobianPoint {
     return new JacobianPoint(this.x, mod(-this.y), this.z);
   }
@@ -168,9 +184,11 @@ class JacobianPoint {
     return this.add(other.negate());
   }
 
-  // Non-constant-time multiplication. Uses double-and-add algorithm.
-  // It's faster, but should only be used when you don't care about
-  // an exposed private key e.g. sig verification, which works over *public* keys.
+  /**
+   * Non-constant-time multiplication. Uses double-and-add algorithm.
+   * It's faster, but should only be used when you don't care about
+   * an exposed private key e.g. sig verification, which works over *public* keys.
+   */
   multiplyUnsafe(scalar: bigint): JacobianPoint {
     let n = normalizeScalar(scalar);
     // The condition is not executed unless you change global var
@@ -201,14 +219,16 @@ class JacobianPoint {
     return k1p.add(k2p);
   }
 
-  // Creates a wNAF precomputation window.
-  // Used for caching.
-  // Default window size is set by `utils.precompute()` and is equal to 8.
-  // Which means we are caching 65536 points: 256 points for every bit from 0 to 256.
+  /**
+   * Creates a wNAF precomputation window. Used for caching.
+   * Default window size is set by `utils.precompute()` and is equal to 8.
+   * Which means we are caching 65536 points: 256 points for every bit from 0 to 256.
+   * @returns 65K precomputed points, depending on W
+   */
   private precomputeWindow(W: number): JacobianPoint[] {
     // splitScalarEndo could return 129-bit numbers, so we need at least 128 / W + 1
     const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
-    let points: JacobianPoint[] = [];
+    const points: JacobianPoint[] = [];
     let p: JacobianPoint = this;
     let base = p;
     for (let window = 0; window < windows; window++) {
@@ -223,8 +243,12 @@ class JacobianPoint {
     return points;
   }
 
-  // Implements w-ary non-adjacent form for calculating ec multiplication
-  // Optional `affinePoint` argument is used to save cached precompute windows on it.
+  /**
+   * Implements w-ary non-adjacent form for calculating ec multiplication.
+   * @param n
+   * @param affinePoint optional 2d point to save cached precompute windows on it.
+   * @returns real and fake (for const-time) points
+   */
   private wNAF(n: bigint, affinePoint?: Point): { p: JacobianPoint; f: JacobianPoint } {
     if (!affinePoint && this.equals(JacobianPoint.BASE)) affinePoint = Point.BASE;
     const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
@@ -284,9 +308,14 @@ class JacobianPoint {
     return { p, f };
   }
 
-  // Constant time multiplication.
-  // Uses wNAF method. Windowed method may be 10% faster,
-  // but takes 2x longer to generate and consumes 2x memory.
+  /**
+   * Constant time multiplication.
+   * Uses wNAF method. Windowed method may be 10% faster,
+   * but takes 2x longer to generate and consumes 2x memory.
+   * @param scalar by which the point would be multiplied
+   * @param affinePoint optional point ot save cached precompute windows on it
+   * @returns New point
+   */
   multiply(scalar: number | bigint, affinePoint?: Point): JacobianPoint {
     let n = normalizeScalar(scalar);
     // Real point.
@@ -325,13 +354,18 @@ class JacobianPoint {
 // Stores precomputed values for points.
 const pointPrecomputes = new WeakMap<Point, JacobianPoint[]>();
 
-// Default Point works in default aka affine coordinates: (x, y)
+
+/**
+ * Default Point works in default aka affine coordinates: (x, y)
+ */
 export class Point {
-  // Base point aka generator
-  // public_key = Point.BASE * private_key
+  /**
+   * Base point aka generator. public_key = Point.BASE * private_key
+   */
   static BASE: Point = new Point(CURVE.Gx, CURVE.Gy);
-  // Identity point aka point at infinity
-  // point = point + zero_point
+  /**
+   * Identity point aka point at infinity. point = point + zero_point
+   */
   static ZERO: Point = new Point(_0n, _0n);
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
@@ -346,7 +380,11 @@ export class Point {
     pointPrecomputes.delete(this);
   }
 
-  // Supports compressed Schnorr (32-byte) and ECDSA (33-byte) points
+  /**
+   * Supports compressed Schnorr (32-byte) and ECDSA (33-byte) points
+   * @param bytes 32/33 bytes
+   * @returns Point instance
+   */
   private static fromCompressedHex(bytes: Uint8Array) {
     const isShort = bytes.length === 32;
     const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
@@ -375,7 +413,10 @@ export class Point {
     return point;
   }
 
-  // Converts hash string or Uint8Array to Point.
+  /**
+   * Converts hash string or Uint8Array to Point.
+   * @param hex 32-byte (schnorr) or 33/65-byte (ECDSA) hex
+   */
   static fromHex(hex: Hex): Point {
     const bytes = ensureBytes(hex);
     const header = bytes[0];
@@ -393,10 +434,13 @@ export class Point {
     return Point.BASE.multiply(normalizePrivateKey(privateKey));
   }
 
-  // Recovers public key from ECDSA signature.
-  // https://crypto.stackexchange.com/questions/60218
-  // Uses following formula:
-  // Q = (1/r)(sP - hG)
+  /**
+   * Recovers public key from ECDSA signature.
+   * https://crypto.stackexchange.com/questions/60218
+   * ```
+   * Q = (1 / r)(sP - hG)
+   * ```
+   */
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
     let h: bigint = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
     const sig = normalizeSignature(signature);
@@ -1091,7 +1135,8 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   const { r, s } = sig;
   if (opts.strict && sig.hasHighS()) return false;
   const h = truncateHash(msgHash);
-  if (h === _0n) return false; // Probably forged, protect against fault attacks
+  // Non-standard behavior: Probably forged, protect against fault attacks.
+  if (h === _0n) return false;
   let pubKey;
   try {
     pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
