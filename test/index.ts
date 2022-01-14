@@ -225,7 +225,7 @@ describe('secp256k1', () => {
         '0101010101010101010101010101010101010101010101010101010101010101'
       );
       for (let [msg, exp] of CASES) {
-        const res = await secp.sign(msg, privKey);
+        const res = await secp.sign(msg, privKey, {extraEntropy: undefined});
         expect(hex(res)).toBe(exp);
         const rs = secp.Signature.fromDER(res).toCompactHex();
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
