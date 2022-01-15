@@ -483,12 +483,11 @@ export class Point {
   // A point on curve is valid if it conforms to equation.
   assertValidity(): void {
     const msg = 'Point is not on elliptic curve';
-    const { P } = CURVE;
     const { x, y } = this;
-    if (x === _0n || y === _0n || x >= P || y >= P) throw new Error(msg);
+    if (!isWithinCurvePrime(x) || !isWithinCurvePrime(y)) throw new Error(msg);
     const left = mod(y * y);
     const right = weistrass(x);
-    if ((left - right) % P !== _0n) throw new Error(msg);
+    if (mod(left - right) !== _0n) throw new Error(msg);
   }
 
   equals(other: Point): boolean {
@@ -915,6 +914,10 @@ function isWithinCurveOrder(num: bigint): boolean {
   return _0n < num && num < CURVE.n;
 }
 
+function isWithinCurvePrime(num: bigint): boolean {
+  return 0n < num && num < CURVE.P;
+}
+
 /**
  * Converts signature params into point & r/s, checks them for validity.
  * k must be in range [1, n-1]
@@ -1195,13 +1198,12 @@ function hasEvenY(point: Point) {
 
 class SchnorrSignature {
   constructor(readonly r: bigint, readonly s: bigint) {
-    if (r < _1n || r >= CURVE.P || !isWithinCurveOrder(s)) throw new Error('Invalid signature');
+    if (!isWithinCurvePrime(r) || !isWithinCurveOrder(s)) throw new Error('Invalid signature');
   }
   static fromHex(hex: Hex) {
     const bytes = ensureBytes(hex);
-    if (bytes.length !== 64) {
+    if (bytes.length !== 64)
       throw new TypeError(`SchnorrSignature.fromHex: expected 64 bytes, not ${bytes.length}`);
-    }
     const r = bytesToNumber(bytes.slice(0, 32));
     const s = bytesToNumber(bytes.slice(32, 64));
     return new SchnorrSignature(r, s);
