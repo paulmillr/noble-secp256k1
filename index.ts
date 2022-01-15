@@ -354,7 +354,6 @@ class JacobianPoint {
 // Stores precomputed values for points.
 const pointPrecomputes = new WeakMap<Point, JacobianPoint[]>();
 
-
 /**
  * Default Point works in default aka affine coordinates: (x, y)
  */
@@ -693,7 +692,7 @@ function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== 'string') {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
   }
-  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
+  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex' + hex.length);
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
     const j = i * 2;
@@ -711,6 +710,7 @@ function ensureBytes(hex: Hex): Uint8Array {
 
 // Big Endian
 function bytesToNumber(bytes: Uint8Array): bigint {
+  if (!(bytes instanceof Uint8Array)) throw new Error('Expected Uint8Array');
   return hexToNumber(bytesToHex(bytes));
 }
 
@@ -876,24 +876,23 @@ class HmacDrbg {
     this.counter += 1;
   }
 
-  async reseed(seed = new Uint8Array(), extraData = new Uint8Array()) {
-    const empty = new Uint8Array();
-    this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed, extraData);
+  async reseed(seed = new Uint8Array()) {
+    this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed);
     this.v = await this.hmac(this.v);
     if (seed.length === 0) return;
-    this.k = await this.hmac(this.v, Uint8Array.from([0x01]), seed, extraData);
+
+    this.k = await this.hmac(this.v, Uint8Array.from([0x01]), seed);
     this.v = await this.hmac(this.v);
   }
-  reseedSync(seed = new Uint8Array(), extraData = new Uint8Array()) {
-    if (typeof utils.hmacSha256Sync !== 'function') {
+  reseedSync(seed = new Uint8Array()) {
+    if (typeof utils.hmacSha256Sync !== 'function')
       throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
-    }
-    this.k = this.hmacSync(this.v, Uint8Array.from([0x00]), seed, extraData);
-    if (this.k instanceof Promise) {
-      throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
-    }
+    this.k = this.hmacSync(this.v, Uint8Array.from([0x00]), seed);
     this.v = this.hmacSync(this.v);
+    if (this.k instanceof Promise)
+      throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
     if (seed.length === 0) return;
+
     this.k = this.hmacSync(this.v, Uint8Array.from([0x01]), seed);
     this.v = this.hmacSync(this.v);
   }
@@ -928,6 +927,7 @@ function isWithinCurveOrder(num: bigint): boolean {
 function kmdToSig(kBytes: Uint8Array, m: bigint, d: bigint): RecoveredSig | undefined {
   const k = bytesToNumber(kBytes);
   if (!isWithinCurveOrder(k)) return;
+  // Important: all mod() calls in the function must be done over `n`
   const { n } = CURVE;
   const q = Point.BASE.multiply(k);
   // r = x mod n
@@ -1018,33 +1018,52 @@ export function getSharedSecret(
   return b.multiply(normalizePrivateKey(privateA)).toRawBytes(isCompressed);
 }
 
-type OptsRecov = { recovered: true; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
-type OptsNoRecov = { recovered?: false; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
-type Opts = { recovered?: boolean; canonical?: boolean; der?: boolean; extraEntropy?: Hex };
+type Ent = Hex | true;
+type OptsRecov = { recovered: true; canonical?: boolean; der?: boolean; extraEntropy?: Ent };
+type OptsNoRecov = { recovered?: false; canonical?: boolean; der?: boolean; extraEntropy?: Ent };
+type Opts = { recovered?: boolean; canonical?: boolean; der?: boolean; extraEntropy?: Ent };
 type SignOutput = Uint8Array | [Uint8Array, number];
 
-// Steps A, B and C of RFC6979
-// Creates RFC6979 seed & extraData; converts msg/privKey to numbers.
-function initSigArgs(msgHash: Hex, privateKey: PrivKey, extraData?: Hex) {
+// RFC6979 methods
+function bits2int(bytes: Uint8Array) {
+  const slice = bytes.length > 32 ? bytes.slice(0, 32) : bytes;
+  return bytesToNumber(slice);
+}
+function bits2octets(bytes: Uint8Array): Uint8Array {
+  const z1 = bits2int(bytes);
+  const z2 = mod(z1, CURVE.n);
+  // Waiting for libsecp256k1 pull request for now
+  // return int2octets(z2 < _0n ? z1 : z2);
+  return int2octets(z1);
+}
+function int2octets(num: bigint): Uint8Array {
+  if (typeof num !== 'bigint') throw new Error('Expected bigint');
+  const hex = pad64(num); // pad64 prohibits >32 bytes
+  return hexToBytes(hex);
+}
+
+// Steps A, D of RFC6979 3.2
+// Creates RFC6979 seed; converts msg/privKey to numbers.
+function initSigArgs(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Ent) {
   if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
-  const num = typeof msgHash === 'string' ? hexToNumber(msgHash) : bytesToNumber(msgHash);
   // Step A is ignored, since we already provide hash instead of msg
-  const h1 = pad32b(num);
-  const m = bytesToNumber(h1);
+  const h1 = ensureBytes(msgHash);
   const d = normalizePrivateKey(privateKey);
-  const x = pad32b(d);
-  // seed is constructed from private key and message
-  const seed = concatBytes(x, h1);
-  // RFC6979 3.6: additional k' could be provided
   // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
-  if (extraData != null) {
-    const e = pad32b(
-      typeof extraData === 'string' ? hexToNumber(extraData) : bytesToNumber(extraData)
-    );
+  const seedArgs = [int2octets(d), bits2octets(h1)];
+  // RFC6979 3.6: additional k' could be provided
+  if (extraEntropy != null) {
+    if (extraEntropy === true) extraEntropy = utils.randomBytes(32);
+    const e = pad32b(bytesToNumber(ensureBytes(extraEntropy)));
     if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data');
-    extraData = e;
+    seedArgs.push(e);
   }
-  return { seed, extraData, m, d };
+  // seed is constructed from private key and message
+  // Step D
+  // V, 0x00 are done in HmacDRBG constructor.
+  const seed = concatBytes(...seedArgs);
+  const m = bits2int(h1);
+  return { seed, m, d };
 }
 
 // Takes signature with its recovery bit, normalizes it
@@ -1081,12 +1100,12 @@ function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignO
 async function sign(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
-  // Steps A, B and C of RFC6979.
-  const { seed, extraData, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
+  // Steps A, D of RFC6979 3.2.
+  const { seed, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
   let sig: RecoveredSig | undefined;
-  // Steps D, E, F, G
+  // Steps B, C, D, E, F, G
   const drbg = new HmacDrbg();
-  await drbg.reseed(seed, extraData);
+  await drbg.reseed(seed);
   // Step H3, repeat until k is in range [1, n-1]
   while (!(sig = kmdToSig(await drbg.generate(), m, d))) await drbg.reseed();
   return finalizeSig(sig, opts);
@@ -1096,11 +1115,12 @@ async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<Si
 function signSync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): [U8A, number];
 function signSync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
-  const { seed, extraData, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
+  // Steps A, D of RFC6979 3.2.
+  const { seed, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
   let sig: RecoveredSig | undefined;
-  // Steps D, E, F, G
+  // Steps B, C, D, E, F, G
   const drbg = new HmacDrbg();
-  drbg.reseedSync(seed, extraData);
+  drbg.reseedSync(seed);
   // Step H3, repeat until k is in range [1, n-1]
   while (!(sig = kmdToSig(drbg.generateSync(), m, d))) drbg.reseedSync();
   return finalizeSig(sig, opts);

@@ -255,7 +255,7 @@ describe('secp256k1', () => {
 
   describe('.verify()', () => {
     it('should verify signature', async () => {
-      const MSG = '1';
+      const MSG = '01';
       const PRIV_KEY = 0x2n;
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
@@ -263,7 +263,7 @@ describe('secp256k1', () => {
       expect(secp.verify(signature, MSG, publicKey)).toBe(true);
     });
     it('should not verify signature with wrong public key', async () => {
-      const MSG = '1';
+      const MSG = '01';
       const PRIV_KEY = 0x2n;
       const WRONG_PRIV_KEY = 0x22n;
       const signature = await secp.sign(MSG, PRIV_KEY);
@@ -272,7 +272,7 @@ describe('secp256k1', () => {
       expect(secp.verify(signature, MSG, publicKey)).toBe(false);
     });
     it('should not verify signature with wrong hash', async () => {
-      const MSG = '1';
+      const MSG = '01';
       const PRIV_KEY = 0x2n;
       const WRONG_MSG = '11';
       const signature = await secp.sign(MSG, PRIV_KEY);

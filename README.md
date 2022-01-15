@@ -124,7 +124,7 @@ Generates low-s deterministic ECDSA signature as per RFC6979.
 - `options?.canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
   `true` makes signatures compatible with libsecp256k1,
   `false` makes signatures compatible with openssl
-- `options?.extraEntropy: Uint8Array | string` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979
+- `options?.extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy
 - `options?.der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
@@ -189,7 +189,7 @@ Generates Schnorr signature as per BIP0340. Asynchronous, so use `await`.
 
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
-- `auxilaryRandom?: Uint8Array` — optional 32 random bytes. By default, the method gathers cryptogarphically secure random.
+- `auxilaryRandom?: Uint8Array` — optional 32 random bytes. By default, the method gathers cryptogarphically secure entropy
 - Returns Schnorr signature in Hex format.
 
 ##### `schnorr.verify(signature, hash, publicKey)`
@@ -204,6 +204,12 @@ function schnorrVerify(signature: Uint8Array | string, msgHash: Uint8Array | str
 #### Point methods
 
 ##### Helpers
+
+###### `utils.randomBytes(): Uint8Array`
+
+Returns `Uint8Array` of 32 cryptographically secure random bytes.
+
+Uses `crypto.web.getRandomValues` in browser, `require('crypto').randomBytes` in node.js.
 
 ###### `utils.randomPrivateKey(): Uint8Array`
 
