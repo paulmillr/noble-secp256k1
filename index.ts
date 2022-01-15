@@ -867,7 +867,12 @@ class HmacDrbg {
     return utils.hmacSha256(this.k, ...values);
   }
   private hmacSync(...values: Uint8Array[]) {
-    return utils.hmacSha256Sync!(this.k, ...values);
+    if (typeof utils.hmacSha256Sync !== 'function')
+      throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
+    const res = utils.hmacSha256Sync!(this.k, ...values);
+    if (res instanceof Promise)
+      throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
+    return res;
   }
   incr() {
     if (this.counter >= 1000) {
@@ -880,29 +885,23 @@ class HmacDrbg {
     this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed);
     this.v = await this.hmac(this.v);
     if (seed.length === 0) return;
-
     this.k = await this.hmac(this.v, Uint8Array.from([0x01]), seed);
     this.v = await this.hmac(this.v);
   }
   reseedSync(seed = new Uint8Array()) {
-    if (typeof utils.hmacSha256Sync !== 'function')
-      throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
     this.k = this.hmacSync(this.v, Uint8Array.from([0x00]), seed);
     this.v = this.hmacSync(this.v);
-    if (this.k instanceof Promise)
-      throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
     if (seed.length === 0) return;
-
     this.k = this.hmacSync(this.v, Uint8Array.from([0x01]), seed);
     this.v = this.hmacSync(this.v);
   }
 
-  async generate() {
+  async generate(): Promise<Uint8Array> {
     this.incr();
     this.v = await this.hmac(this.v);
     return this.v;
   }
-  generateSync() {
+  generateSync(): Uint8Array {
     this.incr();
     this.v = this.hmacSync(this.v);
     return this.v;
