@@ -880,6 +880,7 @@ class HmacDrbg {
     this.counter += 1;
   }
 
+  // We concatenate extraData into seed
   async reseed(seed = new Uint8Array()) {
     this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed);
     this.v = await this.hmac(this.v);
@@ -1224,13 +1225,13 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
 
 // Schnorr signature verifies itself before producing an output, which makes it safer
 async function schnorrSign(
-  msgHash: Hex,
+  message: Hex,
   privateKey: PrivKey,
   auxRand: Hex = utils.randomBytes()
 ): Promise<Uint8Array> {
-  if (msgHash == null) throw new TypeError(`sign: Expected valid message, not "${msgHash}"`);
+  if (message == null) throw new TypeError(`sign: Expected valid message, not "${message}"`);
   const { n } = CURVE;
-  const m = ensureBytes(msgHash);
+  const m = ensureBytes(message);
   const d0 = normalizePrivateKey(privateKey); // <== does isWithinCurveOrder check
   const rand = ensureBytes(auxRand);
   if (rand.length !== 32) throw new TypeError('sign: Expected 32 bytes of aux randomness');
@@ -1259,10 +1260,10 @@ async function schnorrSign(
 // no schnorrSignSync() for now
 
 // Also used in sign() function.
-async function schnorrVerify(signature: Hex, msgHash: Hex, publicKey: Hex): Promise<boolean> {
+async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
   const sig =
     signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
-  const m = ensureBytes(msgHash);
+  const m = ensureBytes(message);
 
   const P = normalizePublicKey(publicKey);
   const e = await createChallenge(sig.r, P, m);
