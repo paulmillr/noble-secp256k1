@@ -117,6 +117,16 @@ function sign(msgHash: Uint8Array | string, privateKey: Uint8Array | string, opt
 
 Generates low-s deterministic ECDSA signature as per RFC6979.
 
+It's strongly recommended to pass `{extraEntropy: true}` to improve security of signatures:
+
+- In case the entropy generator is broken, signatures would be just like they are without the option
+- It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
+- Schnorr signatures are adding extra entropy every time
+- The only disadvantage to this is the fact signatures won't be exactly equal to fully-deterministic sigs;
+  think backwards-compatibility with test vectors. They would still be valid, though
+
+`sign` arguments:
+
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format
