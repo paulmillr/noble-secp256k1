@@ -1,4 +1,4 @@
-/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+/*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 // https://www.secg.org/sec2-v2.pdf
 
 // Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
