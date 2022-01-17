@@ -36,7 +36,8 @@ import * as secp from "@noble/secp256k1";
 (async () => {
   // You pass a hex string, or Uint8Array
   const privateKey = "6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e";
-  const messageHash = await secp.utils.sha256('hello world');
+  const message = "hello world";
+  const messageHash = await secp.utils.sha256(message);
   const publicKey = secp.getPublicKey(privateKey);
   const signature = await secp.sign(messageHash, privateKey);
   const isSigned = secp.verify(signature, messageHash, publicKey);
@@ -50,8 +51,8 @@ import * as secp from "@noble/secp256k1";
 
   // Supports Schnorr signatures
   const rpub = secp.schnorr.getPublicKey(privateKey);
-  const rsignature = await secp.schnorr.sign(messageHash, privateKey);
-  const risSigned = await secp.schnorr.verify(rsignature, messageHash, rpub);
+  const rsignature = await secp.schnorr.sign(message, privateKey);
+  const risSigned = await secp.schnorr.verify(rsignature, message, rpub);
 })();
 ```
 
