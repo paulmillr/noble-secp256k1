@@ -1035,9 +1035,7 @@ function bits2int(bytes: Uint8Array) {
 function bits2octets(bytes: Uint8Array): Uint8Array {
   const z1 = bits2int(bytes);
   const z2 = mod(z1, CURVE.n);
-  // Waiting for libsecp256k1 pull request for now
-  // return int2octets(z2 < _0n ? z1 : z2);
-  return int2octets(z1);
+  return int2octets(z2 < _0n ? z1 : z2);
 }
 function int2octets(num: bigint): Uint8Array {
   if (typeof num !== 'bigint') throw new Error('Expected bigint');
