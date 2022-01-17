@@ -27,7 +27,7 @@
     "crypto": false
   },
   "devDependencies": {
-    "@noble/hashes": "^0.5.6",
+    "@noble/hashes": "~1.0.0",
     "@rollup/plugin-commonjs": "^21.0.0",
     "@rollup/plugin-node-resolve": "^13.0.0",
     "@types/jest": "^27",
