@@ -72,5 +72,11 @@
     "transform": {
       "^.+\\.ts$": "ts-jest"
     }
-  }
+  },
+  "funding": [
+    {
+      "type": "individual",
+      "url": "https://paulmillr.com/funding/"
+    }
+  ]
 }
