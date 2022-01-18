@@ -704,7 +704,9 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 function ensureBytes(hex: Hex): Uint8Array {
-  return hex instanceof Uint8Array ? hex : hexToBytes(hex);
+  // Uint8Array.from() instead of hash.slice() because node.js Buffer
+  // is instance of Uint8Array, and its slice() creates **mutable** copy
+  return hex instanceof Uint8Array ? Uint8Array.from(hex) : hexToBytes(hex);
 }
 
 // Big Endian
