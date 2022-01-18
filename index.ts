@@ -484,7 +484,7 @@ export class Point {
   assertValidity(): void {
     const msg = 'Point is not on elliptic curve';
     const { x, y } = this;
-    if (!isWithinCurvePrime(x) || !isWithinCurvePrime(y)) throw new Error(msg);
+    if (!isValidFieldElement(x) || !isValidFieldElement(y)) throw new Error(msg);
     const left = mod(y * y);
     const right = weistrass(x);
     if (mod(left - right) !== _0n) throw new Error(msg);
@@ -915,8 +915,8 @@ function isWithinCurveOrder(num: bigint): boolean {
   return _0n < num && num < CURVE.n;
 }
 
-function isWithinCurvePrime(num: bigint): boolean {
-  return 0n < num && num < CURVE.P;
+function isValidFieldElement(num: bigint): boolean {
+  return _0n < num && num < CURVE.P;
 }
 
 /**
@@ -1199,7 +1199,7 @@ function hasEvenY(point: Point) {
 
 class SchnorrSignature {
   constructor(readonly r: bigint, readonly s: bigint) {
-    if (!isWithinCurvePrime(r) || !isWithinCurveOrder(s)) throw new Error('Invalid signature');
+    if (!isValidFieldElement(r) || !isWithinCurveOrder(s)) throw new Error('Invalid signature');
   }
   static fromHex(hex: Hex) {
     const bytes = ensureBytes(hex);
