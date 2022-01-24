@@ -658,8 +658,7 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 
 // We can't do `instanceof Uint8Array` because it's unreliable between Web Workers etc
 function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
-  // Caching fn and tag is 1% faster. We don't do it.
-  return bytes != null && Object.prototype.toString.call(bytes) === '[object Uint8Array]';
+  return bytes instanceof Uint8Array;
 }
 
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
