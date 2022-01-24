@@ -47,7 +47,10 @@ import * as secp from "@noble/secp256k1";
 
   // Malleable signatures, compatible with openssl
   const signatureM = await secp.sign(messageHash, privateKey, { canonical: false });
-  
+
+  // If you need hex strings
+  const hex = secp.utils.bytesToHex;
+  console.log(hex(publicKey));
 
   // Supports Schnorr signatures
   const rpub = secp.schnorr.getPublicKey(privateKey);
