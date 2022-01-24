@@ -724,7 +724,7 @@ function ensureBytes(hex: Hex): Uint8Array {
 }
 
 function normalizeScalar(num: number | bigint): bigint {
-  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
+  if (typeof num === 'number' && Number.isSafeInteger(num) && num > 0) return BigInt(num);
   if (typeof num === 'bigint' && isWithinCurveOrder(num)) return num;
   throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
@@ -979,6 +979,11 @@ function normalizePublicKey(publicKey: PubKey): Point {
   }
 }
 
+/**
+ * Signatures can be in 64-byte compact representation,
+ * or in (variable-length)-byte DER representation.
+ * Since DER could also be 64 bytes, we check for it first.
+ */
 function normalizeSignature(signature: Sig): Signature {
   if (signature instanceof Signature) {
     signature.assertValidity();
@@ -991,10 +996,23 @@ function normalizeSignature(signature: Sig): Signature {
   }
 }
 
+/**
+ * Computes public key for secp256k1 private key.
+ * @param privateKey 32-byte private key
+ * @param isCompressed whether to return full (65-byte), or compact (33-byte) key
+ * @returns short/full public key
+ */
 export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Array {
   return Point.fromPrivateKey(privateKey).toRawBytes(isCompressed);
 }
 
+/**
+ * Recovers public key from signature and recovery bit.
+ * @param msgHash message hash
+ * @param signature DER or compact sig
+ * @param recovery 0 or 1
+ * @returns Public key
+ */
 export function recoverPublicKey(
   msgHash: Hex,
   signature: Sig,
@@ -1013,9 +1031,15 @@ function isPub(item: PrivKey | PubKey): boolean {
   return false;
 }
 
-// ECDH (Elliptic Curve Diffie Hellman) implementation.
-// 1. Checks for validity of private key
-// 2. Checks for the public key of being on-curve
+/**
+ * ECDH (Elliptic Curve Diffie Hellman) implementation.
+ * 1. Checks for validity of private key
+ * 2. Checks for the public key of being on-curve
+ * @param privateA private key
+ * @param publicB different public key
+ * @param isCompressed
+ * @returns
+ */
 export function getSharedSecret(
   privateA: PrivKey,
   publicB: PubKey,
@@ -1046,7 +1070,7 @@ function bits2octets(bytes: Uint8Array): Uint8Array {
 }
 function int2octets(num: bigint): Uint8Array {
   if (typeof num !== 'bigint') throw new Error('Expected bigint');
-  const hex = pad64(num); // pad64 prohibits >32 bytes
+  const hex = numTo32bStr(num); // prohibits >32 bytes
   return hexToBytes(hex);
 }
 
@@ -1062,6 +1086,7 @@ function initSigArgs(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Ent) {
   // RFC6979 3.6: additional k' could be provided
   if (extraEntropy != null) {
     if (extraEntropy === true) extraEntropy = utils.randomBytes(32);
+    const e = ensureBytes(extraEntropy);
     if (e.length !== 32) throw new Error('sign: Expected 32 bytes of extra data');
     seedArgs.push(e);
   }
@@ -1148,6 +1173,7 @@ const vopts: VOpts = { strict: true };
  *
  * ```
  * verify(r, s, m, P) where
+ *   w = 1/s mod n
  *   u1 = mw mod n
  *   u2 = rw mod n
  *   (x2, y2) = G × u1 + P × u2
@@ -1158,12 +1184,14 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   let sig;
   try {
     sig = normalizeSignature(signature);
+    msgHash = ensureBytes(msgHash);
   } catch (error) {
     return false;
   }
   const { r, s } = sig;
   if (opts.strict && sig.hasHighS()) return false;
   const h = truncateHash(msgHash);
+
   // Non-standard behavior: Probably forged, protect against fault attacks.
   if (h === _0n) return false;
   let pubKey;

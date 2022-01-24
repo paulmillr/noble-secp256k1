@@ -11,18 +11,37 @@ const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.
 const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
 
 const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
+// prettier-ignore
+const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
+
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
-function hexToArray(hex: string): Uint8Array {
-  hex = hex.length & 1 ? `0${hex}` : hex;
+// Caching slows it down 2-3x
+function hexToBytes(hex: string): Uint8Array {
+  if (typeof hex !== 'string') {
+    throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
+  }
+  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex' + hex.length);
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
-    let j = i * 2;
-    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
+    const j = i * 2;
+    const hexByte = hex.slice(j, j + 2);
+    const byte = Number.parseInt(hexByte, 16);
+    if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
+    array[i] = byte;
   }
   return array;
 }
+
+function hexToNumber(hex: string): bigint {
+  if (typeof hex !== 'string') {
+    throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
+  }
+  // Big Endian
+  return BigInt(`0x${hex}`);
+}
+
 
 describe('secp256k1', () => {
   it('.getPublicKey()', () => {
@@ -39,15 +58,13 @@ describe('secp256k1', () => {
       expect(toBEHex(point2.x)).toBe(x);
       expect(toBEHex(point2.y)).toBe(y);
 
-      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToArray(toBEHex(BigInt(priv)))));
+      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToBytes(toBEHex(BigInt(priv)))));
       expect(toBEHex(point3.x)).toBe(x);
       expect(toBEHex(point3.y)).toBe(y);
     }
   });
   it('.getPublicKey() rejects invalid keys', () => {
-    // prettier-ignore
-    const invalid = [0, true, false, undefined, null, 1.1, -5, 'deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
-    for (const item of invalid) {
+    for (const item of INVALID_ITEMS) {
       expect(() => secp.getPublicKey(item as any)).toThrowError();
     }
   });
@@ -66,7 +83,7 @@ describe('secp256k1', () => {
       expect(toBEHex(point2.x)).toBe(x);
       expect(toBEHex(point2.y)).toBe(y);
 
-      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToArray(toBEHex(BigInt(priv)))));
+      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToBytes(toBEHex(BigInt(priv)))));
       expect(toBEHex(point3.x)).toBe(x);
       expect(toBEHex(point3.y)).toBe(y);
     }
@@ -117,7 +134,6 @@ describe('secp256k1', () => {
         if (expected) {
           expect(p.add(q).toHex(true)).toBe(expected);
         } else {
-          // console.log(p, q);
           if (!p.equals(q.negate())) {
             expect(() => p.add(q).toHex(true)).toThrowError();
           }
@@ -126,13 +142,6 @@ describe('secp256k1', () => {
     });
 
     it('#multiply(privateKey)', () => {
-      function hexToNumber(hex: string): bigint {
-        if (typeof hex !== 'string') {
-          throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
-        }
-        // Big Endian
-        return BigInt(`0x${hex}`);
-      }
       for (const vector of points.valid.pointMultiply) {
         const { P, d, expected } = vector;
         const p = secp.Point.fromHex(P);
@@ -221,7 +230,7 @@ describe('secp256k1', () => {
           '3045022100d18990bba7832bb283e3ecf8700b67beb39acc73f4200ed1c331247c46edccc602202e5c8bbfe47ae159512c583b30a3fa86575cddc62527a03de7756517ae4c6c73',
         ],
       ];
-      const privKey = hexToArray(
+      const privKey = hexToBytes(
         '0101010101010101010101010101010101010101010101010101010101010101'
       );
       for (let [msg, exp] of CASES) {
@@ -255,7 +264,7 @@ describe('secp256k1', () => {
 
   describe('.verify()', () => {
     it('should verify signature', async () => {
-      const MSG = '01';
+      const MSG = '01'.repeat(32);
       const PRIV_KEY = 0x2n;
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
@@ -263,7 +272,7 @@ describe('secp256k1', () => {
       expect(secp.verify(signature, MSG, publicKey)).toBe(true);
     });
     it('should not verify signature with wrong public key', async () => {
-      const MSG = '01';
+      const MSG = '01'.repeat(32);
       const PRIV_KEY = 0x2n;
       const WRONG_PRIV_KEY = 0x22n;
       const signature = await secp.sign(MSG, PRIV_KEY);
@@ -272,9 +281,9 @@ describe('secp256k1', () => {
       expect(secp.verify(signature, MSG, publicKey)).toBe(false);
     });
     it('should not verify signature with wrong hash', async () => {
-      const MSG = '01';
+      const MSG = '01'.repeat(32);
       const PRIV_KEY = 0x2n;
-      const WRONG_MSG = '11';
+      const WRONG_MSG = '11'.repeat(32);
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
       expect(publicKey.length).toBe(65);
@@ -371,14 +380,21 @@ describe('secp256k1', () => {
       const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
       const privateKey = 123456789n;
       const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
-      const [signature, recovery] = await secp.sign(message, privateKey, {
-        recovered: true,
-        canonical: true,
-      });
+      const [signature, recovery] = await secp.sign(message, privateKey, {recovered: true});
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);
       expect(hex(recoveredPubkey!)).toBe(publicKey);
       expect(secp.verify(signature, message, publicKey)).toBe(true);
+    });
+    it('should handle RFC 6979 vectors', async () => {
+      for (const vector of ecdsa.valid) {
+        if (secp.utils.mod(hexToNumber(vector.m), secp.CURVE.n) === 0n) continue;
+        let [usig, rec] = await secp.sign(vector.m, vector.d, { der: false, recovered: true });
+        let sig = hex(usig);
+        const vpub = secp.getPublicKey(vector.d);
+        const recovered = secp.recoverPublicKey(vector.m, sig, rec)!;
+        expect(hex(recovered)).toBe(hex(vpub));
+      }
     });
   });
 
@@ -428,7 +444,7 @@ describe('secp256k1', () => {
       for (let group of wp.testGroups) {
         const pubKey = secp.Point.fromHex(group.key.uncompressed);
         for (let test of group.tests) {
-          const m = await secp.utils.sha256(hexToArray(test.msg));
+          const m = await secp.utils.sha256(hexToBytes(test.msg));
           if (test.result === 'valid' || test.result === 'acceptable') {
             const verified = secp.verify(test.sig, m, pubKey);
             if (secp.Signature.fromDER(test.sig).hasHighS()) {
