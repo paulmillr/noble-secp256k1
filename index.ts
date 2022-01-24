@@ -447,8 +447,9 @@ export class Point {
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid recovery bit');
     }
+    if (h === 0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
     const prefix = 2 + (recovery & 1);
-    const P_ = Point.fromHex(`0${prefix}${pad64(r)}`);
+    const P_ = Point.fromHex(`0${prefix}${numTo32bStr(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
     const hG = JacobianPoint.BASE.multiply(h);
     const rinv = invert(r, CURVE.n);
@@ -463,11 +464,11 @@ export class Point {
   }
 
   toHex(isCompressed = false): string {
-    const x = pad64(this.x);
+    const x = numTo32bStr(this.x);
     if (isCompressed) {
       return `${this.y & _1n ? '03' : '02'}${x}`;
     } else {
-      return `04${x}${pad64(this.y)}`;
+      return `04${x}${numTo32bStr(this.y)}`;
     }
   }
 
@@ -564,7 +565,7 @@ export class Signature {
 
   // pair (32 bytes of r, 32 bytes of s)
   static fromCompact(hex: Hex) {
-    const arr = hex instanceof Uint8Array;
+    const arr = isUi8a(hex);
     const name = 'Signature.fromCompact';
     if (typeof hex !== 'string' && !arr)
       throw new TypeError(`${name}: Expected string or Uint8Array`);
@@ -576,7 +577,7 @@ export class Signature {
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromDER(hex: Hex) {
-    const arr = hex instanceof Uint8Array;
+    const arr = isUi8a(hex);
     if (typeof hex !== 'string' && !arr)
       throw new TypeError(`Signature.fromDER: Expected string or Uint8Array`);
     const { r, s } = parseDERSignature(arr ? hex : hexToBytes(hex));
@@ -633,14 +634,14 @@ export class Signature {
     return hexToBytes(this.toCompactHex());
   }
   toCompactHex() {
-    return pad64(this.r) + pad64(this.s);
+    return numTo32bStr(this.r) + numTo32bStr(this.s);
   }
 }
 
-// Concatenates two Uint8Arrays into one.
+// Concatenates several Uint8Arrays into one.
 // TODO: check if we're copying data instead of moving it and if that's ok
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
-  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Uint8Array list expected');
+  if (!arrays.every(isUi8a)) throw new Error('Uint8Array list expected');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -654,8 +655,16 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
+
+// We can't do `instanceof Uint8Array` because it's unreliable between Web Workers etc
+function isUi8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
+  // Caching fn and tag is 1% faster. We don't do it.
+  return bytes != null && Object.prototype.toString.call(bytes) === '[object Uint8Array]';
+}
+
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
+  if (!isUi8a(uint8a)) throw new Error('Expected Uint8Array');
   // pre-caching improves the speed 6x
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
@@ -664,13 +673,13 @@ function bytesToHex(uint8a: Uint8Array): string {
   return hex;
 }
 
-function pad64(num: number | bigint): string {
-  if (num > POW_2_256) throw new Error('pad64: invalid number');
+function numTo32bStr(num: number | bigint): string {
+  if (num > POW_2_256) throw new Error('Expected number < 2^256');
   return num.toString(16).padStart(64, '0');
 }
 
-function pad32b(num: bigint): Uint8Array {
-  return hexToBytes(pad64(num));
+function numTo32b(num: bigint): Uint8Array {
+  return hexToBytes(numTo32bStr(num));
 }
 
 function numberToHex(num: number | bigint): string {
@@ -703,16 +712,15 @@ function hexToBytes(hex: string): Uint8Array {
   return array;
 }
 
+// Big Endian
+function bytesToNumber(bytes: Uint8Array): bigint {
+  return hexToNumber(bytesToHex(bytes));
+}
+
 function ensureBytes(hex: Hex): Uint8Array {
   // Uint8Array.from() instead of hash.slice() because node.js Buffer
   // is instance of Uint8Array, and its slice() creates **mutable** copy
-  return hex instanceof Uint8Array ? Uint8Array.from(hex) : hexToBytes(hex);
-}
-
-// Big Endian
-function bytesToNumber(bytes: Uint8Array): bigint {
-  if (!(bytes instanceof Uint8Array)) throw new Error('Expected Uint8Array');
-  return hexToNumber(bytesToHex(bytes));
+  return isUi8a(hex) ? Uint8Array.from(hex) : hexToBytes(hex);
 }
 
 function normalizeScalar(num: number | bigint): bigint {
@@ -955,7 +963,7 @@ function normalizePrivateKey(key: PrivKey): bigint {
   } else if (typeof key === 'string') {
     if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
     num = hexToNumber(key);
-  } else if (key instanceof Uint8Array) {
+  } else if (isUi8a(key)) {
     if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
     num = bytesToNumber(key);
   } else {
@@ -999,7 +1007,7 @@ export function recoverPublicKey(
 }
 
 function isPub(item: PrivKey | PubKey): boolean {
-  const arr = item instanceof Uint8Array;
+  const arr = isUi8a(item);
   const str = typeof item === 'string';
   const len = (arr || str) && (item as Hex).length;
   if (arr) return len === 33 || len === 65;
@@ -1048,7 +1056,7 @@ function int2octets(num: bigint): Uint8Array {
 // Steps A, D of RFC6979 3.2
 // Creates RFC6979 seed; converts msg/privKey to numbers.
 function initSigArgs(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Ent) {
-  if (msgHash == null) throw new Error(`sign: expected valid msgHash, not "${msgHash}"`);
+  if (msgHash == null) throw new Error(`sign: expected valid message hash, not "${msgHash}"`);
   // Step A is ignored, since we already provide hash instead of msg
   const h1 = ensureBytes(msgHash);
   const d = normalizePrivateKey(privateKey);
@@ -1057,8 +1065,7 @@ function initSigArgs(msgHash: Hex, privateKey: PrivKey, extraEntropy?: Ent) {
   // RFC6979 3.6: additional k' could be provided
   if (extraEntropy != null) {
     if (extraEntropy === true) extraEntropy = utils.randomBytes(32);
-    const e = pad32b(bytesToNumber(ensureBytes(extraEntropy)));
-    if (e.length !== 32) throw new Error('secp256k1: Expected 32 bytes of extra data');
+    if (e.length !== 32) throw new Error('sign: Expected 32 bytes of extra data');
     seedArgs.push(e);
   }
   // seed is constructed from private key and message
@@ -1190,7 +1197,7 @@ async function taggedHash(tag: string, ...messages: Uint8Array[]): Promise<bigin
 }
 
 async function createChallenge(x: bigint, P: Point, message: Uint8Array) {
-  const rx = pad32b(x);
+  const rx = numTo32b(x);
   const t = await taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
   return mod(t, CURVE.n);
 }
@@ -1212,7 +1219,7 @@ class SchnorrSignature {
     return new SchnorrSignature(r, s);
   }
   toHex(): string {
-    return pad64(this.r) + pad64(this.s);
+    return numTo32bStr(this.r) + numTo32bStr(this.s);
   }
   toRawBytes(): Uint8Array {
     return hexToBytes(this.toHex());
@@ -1244,7 +1251,7 @@ async function schnorrSign(
   const t0h = await taggedHash('BIP0340/aux', rand);
   const t = d ^ t0h;
 
-  const k0h = await taggedHash('BIP0340/nonce', pad32b(t), P.toRawX(), m);
+  const k0h = await taggedHash('BIP0340/nonce', numTo32b(t), P.toRawX(), m);
   const k0 = mod(k0h, n);
   if (k0 === _0n) throw new Error('sign: Creation of signature failed. k is zero');
 
