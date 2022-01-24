@@ -441,9 +441,9 @@ export class Point {
    * ```
    */
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
-    let h: bigint = msgHash instanceof Uint8Array ? bytesToNumber(msgHash) : hexToNumber(msgHash);
-    const sig = normalizeSignature(signature);
-    const { r, s } = sig;
+    msgHash = ensureBytes(msgHash);
+    const h = truncateHash(msgHash);
+    const { r, s } = normalizeSignature(signature);
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid recovery bit');
     }
@@ -842,18 +842,15 @@ function splitScalarEndo(k: bigint) {
   return { k1neg, k1, k2neg, k2 };
 }
 
-function truncateHash(hash: string | Uint8Array): bigint {
-  if (typeof hash !== 'string') hash = bytesToHex(hash);
-  let msg = hexToNumber(hash || '0');
-  const byteLength = hash.length / 2;
+// Ensures ECDSA message hashes are 32 bytes and < curve order
+function truncateHash(hash: Uint8Array): bigint {
+  const { n } = CURVE;
+  const byteLength = hash.length;
   const delta = byteLength * 8 - 256; // size of curve.n
-  if (delta > 0) {
-    msg = msg >> BigInt(delta);
-  }
-  if (msg >= CURVE.n) {
-    msg -= CURVE.n;
-  }
-  return msg;
+  let h = bytesToNumber(hash);
+  if (delta > 0) h = h >> BigInt(delta);
+  if (h >= n) h -= n;
+  return h;
 }
 
 // RFC6979 related code
