@@ -565,7 +565,7 @@ export class Signature {
 
   // pair (32 bytes of r, 32 bytes of s)
   static fromCompact(hex: Hex) {
-    const arr = isUi8a(hex);
+    const arr = isUint8a(hex);
     const name = 'Signature.fromCompact';
     if (typeof hex !== 'string' && !arr)
       throw new TypeError(`${name}: Expected string or Uint8Array`);
@@ -577,7 +577,7 @@ export class Signature {
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromDER(hex: Hex) {
-    const arr = isUi8a(hex);
+    const arr = isUint8a(hex);
     if (typeof hex !== 'string' && !arr)
       throw new TypeError(`Signature.fromDER: Expected string or Uint8Array`);
     const { r, s } = parseDERSignature(arr ? hex : hexToBytes(hex));
@@ -641,7 +641,7 @@ export class Signature {
 // Concatenates several Uint8Arrays into one.
 // TODO: check if we're copying data instead of moving it and if that's ok
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
-  if (!arrays.every(isUi8a)) throw new Error('Uint8Array list expected');
+  if (!arrays.every(isUint8a)) throw new Error('Uint8Array list expected');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -657,14 +657,14 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 // ---------------------
 
 // We can't do `instanceof Uint8Array` because it's unreliable between Web Workers etc
-function isUi8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
+function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
   // Caching fn and tag is 1% faster. We don't do it.
   return bytes != null && Object.prototype.toString.call(bytes) === '[object Uint8Array]';
 }
 
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
-  if (!isUi8a(uint8a)) throw new Error('Expected Uint8Array');
+  if (!isUint8a(uint8a)) throw new Error('Expected Uint8Array');
   // pre-caching improves the speed 6x
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
@@ -720,7 +720,7 @@ function bytesToNumber(bytes: Uint8Array): bigint {
 function ensureBytes(hex: Hex): Uint8Array {
   // Uint8Array.from() instead of hash.slice() because node.js Buffer
   // is instance of Uint8Array, and its slice() creates **mutable** copy
-  return isUi8a(hex) ? Uint8Array.from(hex) : hexToBytes(hex);
+  return isUint8a(hex) ? Uint8Array.from(hex) : hexToBytes(hex);
 }
 
 function normalizeScalar(num: number | bigint): bigint {
@@ -960,7 +960,7 @@ function normalizePrivateKey(key: PrivKey): bigint {
   } else if (typeof key === 'string') {
     if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
     num = hexToNumber(key);
-  } else if (isUi8a(key)) {
+  } else if (isUint8a(key)) {
     if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
     num = bytesToNumber(key);
   } else {
@@ -1022,7 +1022,7 @@ export function recoverPublicKey(
 }
 
 function isPub(item: PrivKey | PubKey): boolean {
-  const arr = isUi8a(item);
+  const arr = isUint8a(item);
   const str = typeof item === 'string';
   const len = (arr || str) && (item as Hex).length;
   if (arr) return len === 33 || len === 65;
