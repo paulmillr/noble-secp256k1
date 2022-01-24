@@ -447,7 +447,7 @@ export class Point {
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid recovery bit');
     }
-    if (h === 0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
+    if (h === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
     const prefix = 2 + (recovery & 1);
     const P_ = Point.fromHex(`0${prefix}${numTo32bStr(r)}`);
     const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
