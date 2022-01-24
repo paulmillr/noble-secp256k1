@@ -241,6 +241,10 @@ Returns `Uint8Array` of 32 cryptographically secure random bytes that can be use
 
 Converts a byte array to hex string.
 
+###### `utils.mod(number: number | bigint, modulo = CURVE.P): bigint`
+
+Modulo operation. Note: JS `%` operator is remainder, not modulo.
+
 ###### `utils.sha256` and `utils.hmacSha256`
 
 Asynchronous methods that calculate `SHA256` and `HMAC-SHA256`. Use browser built-ins by default.
