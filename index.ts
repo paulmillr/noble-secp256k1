@@ -387,6 +387,7 @@ export class Point {
   private static fromCompressedHex(bytes: Uint8Array) {
     const isShort = bytes.length === 32;
     const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
+    if (!isValidFieldElement(x)) throw new Error('Point is not on curve');
     const y2 = weistrass(x); // y² = x³ + ax + b
     let y = sqrtMod(y2); // y = y² ^ (p+1)/4
     const isYOdd = (y & _1n) === _1n;
