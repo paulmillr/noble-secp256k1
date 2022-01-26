@@ -663,7 +663,7 @@ function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
 
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
-  if (!isUint8a(uint8a)) throw new Error('Expected Uint8Array');
+  if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
   // pre-caching improves the speed 6x
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
@@ -705,7 +705,7 @@ function hexToBytes(hex: string): Uint8Array {
     const j = i * 2;
     const hexByte = hex.slice(j, j + 2);
     const byte = Number.parseInt(hexByte, 16);
-    if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
+    if (Number.isNaN(byte) || byte < 0) throw new Error('Invalid byte sequence');
     array[i] = byte;
   }
   return array;
@@ -719,7 +719,7 @@ function bytesToNumber(bytes: Uint8Array): bigint {
 function ensureBytes(hex: Hex): Uint8Array {
   // Uint8Array.from() instead of hash.slice() because node.js Buffer
   // is instance of Uint8Array, and its slice() creates **mutable** copy
-  return isUint8a(hex) ? Uint8Array.from(hex) : hexToBytes(hex);
+  return hex instanceof Uint8Array ? Uint8Array.from(hex) : hexToBytes(hex);
 }
 
 function normalizeScalar(num: number | bigint): bigint {
