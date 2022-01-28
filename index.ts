@@ -613,12 +613,12 @@ export class Signature {
     return hexToBytes(this.toDERHex(isCompressed));
   }
   toDERHex(isCompressed = false) {
-    const sHex = sliceDER(numberToHex(this.s));
+    const sHex = sliceDER(numberToHexUnpadded(this.s));
     if (isCompressed) return sHex;
-    const rHex = sliceDER(numberToHex(this.r));
-    const rLen = numberToHex(rHex.length / 2);
-    const sLen = numberToHex(sHex.length / 2);
-    const length = numberToHex(rHex.length / 2 + sHex.length / 2 + 4);
+    const rHex = sliceDER(numberToHexUnpadded(this.r));
+    const rLen = numberToHexUnpadded(rHex.length / 2);
+    const sLen = numberToHexUnpadded(sHex.length / 2);
+    const length = numberToHexUnpadded(rHex.length / 2 + sHex.length / 2 + 4);
     return `30${length}02${rLen}${rHex}02${sLen}${sHex}`;
   }
 
@@ -682,7 +682,7 @@ function numTo32b(num: bigint): Uint8Array {
   return hexToBytes(numTo32bStr(num));
 }
 
-function numberToHex(num: number | bigint): string {
+function numberToHexUnpadded(num: number | bigint): string {
   const hex = num.toString(16);
   return hex.length & 1 ? `0${hex}` : hex;
 }
@@ -1341,6 +1341,19 @@ export const utils = {
     }
   },
 
+  // Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
+  // and convert them into private key, with the modulo bias being neglible.
+  // As per FIPS 186 B.1.1.
+  // https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
+  hashToPrivateKey: (hash: Hex): Uint8Array => {
+    hash = ensureBytes(hash);
+    if (hash.length < 40) throw new Error('Expected 40+ bytes of private key as per FIPS 186');
+    const num = mod(bytesToNumber(hash), CURVE.n);
+    // This should never happen
+    if (num === _0n || num === _1n) throw new Error('Invalid private key');
+    return numTo32b(num);
+  },
+
   randomBytes: (bytesLength: number = 32): Uint8Array => {
     if (crypto.web) {
       return crypto.web.getRandomValues(new Uint8Array(bytesLength));
@@ -1352,16 +1365,10 @@ export const utils = {
     }
   },
 
-  // NIST SP 800-56A rev 3, section 5.6.1.2.2
-  // https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
+  // Takes curve order + 64 bits from CSPRNG
+  // so that modulo bias is neglible, matches FIPS 186 B.1.1.
   randomPrivateKey: (): Uint8Array => {
-    let i = 8;
-    while (i--) {
-      const b32 = utils.randomBytes(32);
-      const num = bytesToNumber(b32);
-      if (isWithinCurveOrder(num) && num !== _1n) return b32;
-    }
-    throw new Error('Valid private key was not found in 8 iterations. PRNG is broken');
+    return utils.hashToPrivateKey(utils.randomBytes(40));
   },
 
   bytesToHex,
