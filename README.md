@@ -210,7 +210,7 @@ Generates Schnorr signature as per BIP0340. Asynchronous, so use `await`.
 - `auxilaryRandom?: Uint8Array` — optional 32 random bytes. By default, the method gathers cryptogarphically secure entropy
 - Returns Schnorr signature in Hex format.
 
-##### `schnorr.verify(signature, hash, publicKey)`
+##### `schnorr.verify(signature, message, publicKey)`
 ```typescript
 function schnorrVerify(signature: Uint8Array | string, message: Uint8Array | string, publicKey: Uint8Array | string): boolean
 ```
