@@ -89,8 +89,8 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`verify(signature, msgHash, publicKey)`](#verifysignature-msghash-publickey)
 - [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
 - [`schnorr.getPublicKey(privateKey)`](#schnorrgetpublickeyprivatekey)
-- [`schnorr.sign(hash, privateKey)`](#schnorrsignhash-privatekey)
-- [`schnorr.verify(signature, hash, publicKey)`](#schnorrverifysignature-hash-publickey)
+- [`schnorr.sign(message, privateKey)`](#schnorrsignmessage-privatekey)
+- [`schnorr.verify(signature, message, publicKey)`](#schnorrverifysignature-message-publickey)
 - [Helpers](#helpers)
 
 ##### `getPublicKey(privateKey)`
@@ -139,10 +139,10 @@ It's strongly recommended to pass `{extraEntropy: true}` to improve security of 
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format
 - `options?.recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
-- `options?.canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
-  `true` makes signatures compatible with libsecp256k1,
-  `false` makes signatures compatible with openssl
 - `options?.extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy
+- `options?.canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
+  `true` (default) makes signatures compatible with libsecp256k1,
+  `false` makes signatures compatible with openssl
 - `options?.der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
@@ -198,24 +198,24 @@ Returns 32-byte public key. *Warning:* it is incompatible with non-schnorr pubke
 
 Specifically, its *y* coordinate may be flipped. See BIP340 for clarification.
 
-##### `schnorr.sign(hash, privateKey)`
+##### `schnorr.sign(message, privateKey)`
 ```typescript
-function schnorrSign(msgHash: Uint8Array | string, privateKey: Uint8Array | string, auxilaryRandom?: Uint8Array): Promise<Uint8Array>;
+function schnorrSign(message: Uint8Array | string, privateKey: Uint8Array | string, auxilaryRandom?: Uint8Array): Promise<Uint8Array>;
 ```
 
 Generates Schnorr signature as per BIP0340. Asynchronous, so use `await`.
 
-- `msgHash: Uint8Array | string` - message hash which would be signed
+- `message: Uint8Array | string` - message (not hash) which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `auxilaryRandom?: Uint8Array` — optional 32 random bytes. By default, the method gathers cryptogarphically secure entropy
 - Returns Schnorr signature in Hex format.
 
 ##### `schnorr.verify(signature, hash, publicKey)`
 ```typescript
-function schnorrVerify(signature: Uint8Array | string, msgHash: Uint8Array | string, publicKey: Uint8Array | string): boolean
+function schnorrVerify(signature: Uint8Array | string, message: Uint8Array | string, publicKey: Uint8Array | string): boolean
 ```
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
-- `msgHash: Uint8Array | string` - message hash that needs to be verified
+- `message: Uint8Array | string` - message (not hash) that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
