@@ -2,7 +2,7 @@
 
 [Fastest](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from BIP0340.
+ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from [BIP0340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki).
 
 [**Audited**](#security) with crowdfunding by an independent security firm. Tested against thousands of test vectors from a different library. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
 
@@ -165,10 +165,15 @@ function getSharedSecret(privateKeyA: Uint8Array | string | bigint, publicKeyB: 
 
 Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private key and a different public key.
 
-To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
+- To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
+- If you have one public key you'll be creating lots of secrets against,
+  consider massive speed-up by using precomputations:
 
-To speed-up the function massively by precomputing EC multiplications,
-use `getSharedSecret(privateKeyA, secp.utils.precompute(8, publicKeyB))`
+    ```js
+    const pub = secp.utils.precompute(8, publicKeyB);
+    // Use pub everywhere instead of publicKeyB
+    getSharedSecret(privKey, pub); // Now 12x faster
+    ```
 
 ##### `recoverPublicKey(hash, signature, recovery)`
 ```typescript
@@ -188,9 +193,9 @@ To get Point instance, use `Point.fromSignature(hash, signature, recovery)`.
 function schnorrGetPublicKey(privateKey: Uint8Array | string): Uint8Array;
 ```
 
-Returns 32-byte public key. *Warning:* it is incompatible with non-schnorr pubkey.
+Calculates 32-byte public key from a private key.
 
-Specifically, its *y* coordinate may be flipped. See BIP340 for clarification.
+*Warning:* it is incompatible with non-schnorr pubkey. Specifically, its *y* coordinate may be flipped. See [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) for clarification.
 
 ##### `schnorr.sign(message, privateKey)`
 ```typescript
@@ -215,6 +220,7 @@ function schnorrVerify(signature: Uint8Array | string, message: Uint8Array | str
 
 #### Utilities
 
+secp256k1 exposes a few internal utilities for improved developer experience:
 
 ```typescript
 const utils: {
@@ -222,12 +228,13 @@ const utils: {
   // and convert them into private key, with the modulo bias being neglible.
   // As per FIPS 186 B.1.1.
   hashToPrivateKey: (hash: Hex) => Uint8Array;
-  // Returns `Uint8Array` of 32 cryptographically secure random bytes.
-  randomBytes: (bytesLength?: number) => Uint8Array;
   // Returns `Uint8Array` of 32 cryptographically secure random bytes that can be used as private key
   randomPrivateKey: () => Uint8Array;
   // Checks private key for validity
   isValidPrivateKey(privateKey: PrivKey): boolean;
+
+  // Returns `Uint8Array` of x cryptographically secure random bytes.
+  randomBytes: (bytesLength?: number) => Uint8Array;
   // Converts Uint8Array to hex string
   bytesToHex: typeof bytesToHex;
   // Modular division over curve prime
