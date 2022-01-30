@@ -121,12 +121,12 @@ It's strongly recommended to pass `{ extraEntropy: true }` to improve security o
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format with following keys:
-- `recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
-- `extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy
-- `canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
-  `true` (default) makes signatures compatible with libsecp256k1,
-  `false` makes signatures compatible with openssl
-- `der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
+    - `recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
+    - `extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy
+    - `canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
+      `true` (default) makes signatures compatible with libsecp256k1,
+      `false` makes signatures compatible with openssl
+    - `der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
 
