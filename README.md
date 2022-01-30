@@ -117,19 +117,23 @@ Generates low-s deterministic ECDSA signature as per RFC6979.
       `false` makes signatures compatible with openssl
     - `der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
     - `extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy. **Strongly recommended** to pass `true` to improve security:
-        - In case the entropy generator is broken, signatures would be just like they are without the option
+        - Schnorr signatures are doing it every time
         - It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
-        - Schnorr signatures are adding extra entropy every time
-        - The only disadvantage to this is the fact signatures won't be exactly equal to fully-deterministic sigs;
-          think backwards-compatibility with test vectors. They would still be valid, though
+        - If the entropy generator is broken, signatures would be the same as they are without the option
+        - Signatures with extra entropy would have different `r` / `s`, which means they
+        would still be valid, but may break some test vectors if you're cross-testing against other libs
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
+
+```typescript
+function signSync(msgHash: Uint8Array | string, privateKey: Uint8Array | string, opts?: Options): Uint8Array | [Uint8Array, number];
+```
 
 `signSync` counterpart could also be used, you need to set `utils.hmacSha256Sync` to a function with signature `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`. Example with `noble-hashes` package:
 
 ```ts
-const { hmac } = require('@noble/hashes/hmac');
-const { sha256 } = require('@noble/hashes/sha256');
+import { hmac } = from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
 secp256k1.utils.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => {
   const h = hmac.create(sha256, key);
   msgs.forEach(msg => h.update(msg));
@@ -149,9 +153,9 @@ function verify(signature: Signature, msgHash: Uint8Array | string, publicKey: P
 - `msgHash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - `options?: Options` - *optional* object related to signature value and format
-- `options?.strict: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
-  `true` makes signatures compatible with libsecp256k1,
-  `false` makes signatures compatible with openssl
+  - `strict: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
+    `true` (default) makes signatures compatible with libsecp256k1,
+    `false` makes signatures compatible with openssl
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
 ##### `getSharedSecret(privateKeyA, publicKeyB)`
