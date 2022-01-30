@@ -108,25 +108,20 @@ function sign(msgHash: Uint8Array | string, privateKey: Uint8Array | string, opt
 
 Generates low-s deterministic ECDSA signature as per RFC6979.
 
-It's strongly recommended to pass `{ extraEntropy: true }` to improve security of signatures:
-
-- In case the entropy generator is broken, signatures would be just like they are without the option
-- It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
-- Schnorr signatures are adding extra entropy every time
-- The only disadvantage to this is the fact signatures won't be exactly equal to fully-deterministic sigs;
-  think backwards-compatibility with test vectors. They would still be valid, though
-
-`sign` arguments:
-
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format with following keys:
     - `recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
-    - `extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy
     - `canonical: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
       `true` (default) makes signatures compatible with libsecp256k1,
       `false` makes signatures compatible with openssl
     - `der: boolean = true` - whether the returned signature should be in DER format. If `false`, it would be in Compact format (32-byte r + 32-byte s)
+    - `extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy. **Strongly recommended** to pass `true` to improve security:
+        - In case the entropy generator is broken, signatures would be just like they are without the option
+        - It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
+        - Schnorr signatures are adding extra entropy every time
+        - The only disadvantage to this is the fact signatures won't be exactly equal to fully-deterministic sigs;
+          think backwards-compatibility with test vectors. They would still be valid, though
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
 
