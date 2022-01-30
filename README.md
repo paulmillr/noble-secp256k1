@@ -80,14 +80,14 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 ## API
 
 - [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
-- [`getSharedSecret(privateKeyA, publicKeyB)`](#getsharedsecretprivatekeya-publickeyb)
 - [`sign(msgHash, privateKey)`](#signmsghash-privatekey)
 - [`verify(signature, msgHash, publicKey)`](#verifysignature-msghash-publickey)
+- [`getSharedSecret(privateKeyA, publicKeyB)`](#getsharedsecretprivatekeya-publickeyb)
 - [`recoverPublicKey(hash, signature, recovery)`](#recoverpublickeyhash-signature-recovery)
 - [`schnorr.getPublicKey(privateKey)`](#schnorrgetpublickeyprivatekey)
 - [`schnorr.sign(message, privateKey)`](#schnorrsignmessage-privatekey)
 - [`schnorr.verify(signature, message, publicKey)`](#schnorrverifysignature-message-publickey)
-- [Helpers](#helpers)
+- [Utilities](#utilities)
 
 ##### `getPublicKey(privateKey)`
 ```typescript
@@ -99,19 +99,6 @@ function getPublicKey(privateKey: Uint8Array | string | bigint, isCompressed = f
 `isCompressed` (default is `false`) determines whether the output should contain `y` coordinate of the point.
 
 To get Point instance, use `Point.fromPrivateKey(privateKey)`.
-
-##### `getSharedSecret(privateKeyA, publicKeyB)`
-```typescript
-function getSharedSecret(privateKeyA: Uint8Array | string | bigint, publicKeyB: Uint8Array | string | Point): Uint8Array;
-```
-
-Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private key and a different public key.
-
-To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
-
-To speed-up the function massively by precomputing EC multiplications,
-use `getSharedSecret(privateKeyA, secp.utils.precompute(8, publicKeyB))`
-
 
 ##### `sign(msgHash, privateKey)`
 ```typescript
@@ -172,6 +159,18 @@ function verify(signature: Signature, msgHash: Uint8Array | string, publicKey: P
   `false` makes signatures compatible with openssl
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
+##### `getSharedSecret(privateKeyA, publicKeyB)`
+```typescript
+function getSharedSecret(privateKeyA: Uint8Array | string | bigint, publicKeyB: Uint8Array | string | Point): Uint8Array;
+```
+
+Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private key and a different public key.
+
+To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`.
+
+To speed-up the function massively by precomputing EC multiplications,
+use `getSharedSecret(privateKeyA, secp.utils.precompute(8, publicKeyB))`
+
 ##### `recoverPublicKey(hash, signature, recovery)`
 ```typescript
 function recoverPublicKey(msgHash: Uint8Array | string, signature: Uint8Array | string, recovery: number): Uint8Array | undefined;
@@ -215,56 +214,40 @@ function schnorrVerify(signature: Uint8Array | string, message: Uint8Array | str
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `boolean`: `true` if `signature == hash`; otherwise `false`
 
-#### Point methods
+#### Utilities
 
-##### Helpers
-
-###### `utils.randomBytes(): Uint8Array`
-
-Returns `Uint8Array` of 32 cryptographically secure random bytes.
-
-Uses `crypto.web.getRandomValues` in browser, `require('crypto').randomBytes` in node.js.
-
-###### `utils.randomPrivateKey(): Uint8Array`
-
-Returns `Uint8Array` of 32 cryptographically secure random bytes that can be used as private key. The signature is:
-
-```ts
-(key: Uint8Array, ...msgs: Uint8Array[]): Uint8Array;
-```
-
-###### `utils.bytesToHex(bytes: Uint8Array): string`
-
-Converts a byte array to hex string.
-
-###### `utils.mod(number: number | bigint, modulo = CURVE.P): bigint`
-
-Modulo operation. Note: JS `%` operator is remainder, not modulo.
-
-###### `utils.sha256` and `utils.hmacSha256`
-
-Asynchronous methods that calculate `SHA256` and `HMAC-SHA256`. Use browser built-ins by default.
-
-###### `utils.sha256Sync` and `utils.hmacSha256Sync`
-
-The functions are not defined by default, but could be used to implement `signSync` method (see above).
-
-###### `utils.precompute(W = 8, point = BASE_POINT): Point`
-
-Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
-
-This is done by default, no need to run it unless you want to
-disable precomputation or change window size.
-
-We're doing scalar multiplication (used in getPublicKey etc) with
-precomputed BASE_POINT values.
-
-This slows down first getPublicKey() by milliseconds (see Speed section),
-but allows to speed-up subsequent getPublicKey() calls up to 20x.
-
-You may want to precompute values for your own point.
 
 ```typescript
+const utils: {
+  // Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
+  // and convert them into private key, with the modulo bias being neglible.
+  // As per FIPS 186 B.1.1.
+  hashToPrivateKey: (hash: Hex) => Uint8Array;
+  // Returns `Uint8Array` of 32 cryptographically secure random bytes.
+  randomBytes: (bytesLength?: number) => Uint8Array;
+  // Returns `Uint8Array` of 32 cryptographically secure random bytes that can be used as private key
+  randomPrivateKey: () => Uint8Array;
+  // Checks private key for validity
+  isValidPrivateKey(privateKey: PrivKey): boolean;
+  // Converts Uint8Array to hex string
+  bytesToHex: typeof bytesToHex;
+  // Modular division over curve prime
+  mod: (number: number | bigint, modulo = CURVE.P): bigint;
+  sha256: (message: Uint8Array) => Promise<Uint8Array>;
+  hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
+
+  // You can set up your synchronous methods for `signSync` to work. The argument order is
+  // identical to async methods from above
+  sha256Sync: undefined;
+  hmacSha256Sync: undefined;
+
+  // 1. Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
+  // 2. Precomputes point multiplication table. Is done by default on first `getPublicKey()` call.
+  // If you want your first getPublicKey to take 0.16ms instead of 20ms, make sure to call
+  // utils.precompute() somewhere without arguments first.
+  precompute(windowSize?: number, point?: Point): Point;
+};
+
 secp256k1.CURVE.P // Field, 2 ** 256 - 2 ** 32 - 977
 secp256k1.CURVE.n // Order, 2 ** 256 - 432420386565659656852420866394968145599
 secp256k1.Point.BASE // new secp256k1.Point(Gx, Gy) where

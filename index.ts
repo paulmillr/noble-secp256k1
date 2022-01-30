@@ -1341,10 +1341,14 @@ export const utils = {
     }
   },
 
-  // Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
-  // and convert them into private key, with the modulo bias being neglible.
-  // As per FIPS 186 B.1.1.
-  // https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
+  /**
+   * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
+   * and convert them into private key, with the modulo bias being neglible.
+   * As per FIPS 186 B.1.1.
+   * https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
+   * @param hash hash output from sha512, or a similar function
+   * @returns valid private key
+   */
   hashToPrivateKey: (hash: Hex): Uint8Array => {
     hash = ensureBytes(hash);
     if (hash.length < 40 || hash.length > 1024)
@@ -1409,6 +1413,14 @@ export const utils = {
   sha256Sync: undefined as Sha256FnSync,
   hmacSha256Sync: undefined as HmacFnSync,
 
+  /**
+   * 1. Returns cached point which you can use to pass to `getSharedSecret` or `#multiply` by it.
+   * 2. Precomputes point multiplication table. Is done by default on first `getPublicKey()` call.
+   * If you want your first getPublicKey to take 0.16ms instead of 20ms, make sure to call
+   * utils.precompute() somewhere without arguments first.
+   * @param windowSize 2, 4, 8, 16
+   * @returns cached point
+   */
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point === Point.BASE ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
