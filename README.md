@@ -74,11 +74,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - `imports.json`
 
     ```json
-    {
-      "imports": {
-        "crypto": "https://deno.land/std@0.119.0/node/crypto.ts"
-      }
-    }
+    {"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}
     ```
 
 ## API
