@@ -30,32 +30,28 @@ Use NPM in node.js / browser, or include single file from
 ```js
 // Common.js and ECMAScript Modules (ESM)
 import * as secp from "@noble/secp256k1";
-// If you're using single file, use global variable instead:
-// nobleSecp256k1
+// If you're using single file, use global variable instead: `window.nobleSecp256k1`
 
 (async () => {
-  // You pass a hex string, or Uint8Array
-  const privateKey = "6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e";
-  const message = "hello world";
-  const messageHash = await secp.utils.sha256(message);
+  // privateKey can be Uint8Array or hex string
+  const privateKey = secp.utils.randomPrivateKey();
   const publicKey = secp.getPublicKey(privateKey);
+  const messageHash = await secp.utils.sha256("hello world");
   const signature = await secp.sign(messageHash, privateKey);
-  const isSigned = secp.verify(signature, messageHash, publicKey);
+  const isValid = secp.verify(signature, messageHash, publicKey);
 
-  // Sigs with improved security (see README)
+  // Signatures with improved security (see extraEntropy docs in README)
   const signatureE = await secp.sign(messageHash, privateKey, { extraEntropy: true });
-
   // Malleable signatures, compatible with openssl
   const signatureM = await secp.sign(messageHash, privateKey, { canonical: false });
 
-  // If you need hex strings
-  const hex = secp.utils.bytesToHex;
-  console.log(hex(publicKey));
+  // Default output is Uint8Array. If you need hex string as an output:
+  console.log(secp.utils.bytesToHex(publicKey));
 
-  // Supports Schnorr signatures
+  // Schnorr signatures
   const rpub = secp.schnorr.getPublicKey(privateKey);
   const rsignature = await secp.schnorr.sign(message, privateKey);
-  const risSigned = await secp.schnorr.verify(rsignature, message, rpub);
+  const risValid = await secp.schnorr.verify(rsignature, message, rpub);
 })();
 ```
 
