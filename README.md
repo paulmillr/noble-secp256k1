@@ -63,19 +63,8 @@ To use the module with [Deno](https://deno.land),
 you will need [import map](https://deno.land/manual/linking_to_external_code/import_maps):
 
 - `deno run --import-map=imports.json app.ts`
-
-- `app.ts`
-
-    ```typescript
-    import * as secp from "https://deno.land/x/secp256k1/mod.ts";
-    const publicKey = secp.getPublicKey(secp.utils.randomPrivateKey());
-    console.log(publicKey);
-    ```
-- `imports.json`
-
-    ```json
-    {"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}
-    ```
+- app.ts: `import * as secp from "https://deno.land/x/secp256k1/mod.ts";`
+- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}`
 
 ## API
 
