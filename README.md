@@ -33,10 +33,11 @@ import * as secp from "@noble/secp256k1";
 // If you're using single file, use global variable instead: `window.nobleSecp256k1`
 
 (async () => {
-  // privateKey can be Uint8Array or hex string
+  // keys, messages & other inputs can be Uint8Arrays or hex strings
+  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
   const privateKey = secp.utils.randomPrivateKey();
-  const publicKey = secp.getPublicKey(privateKey);
   const messageHash = await secp.utils.sha256("hello world");
+  const publicKey = secp.getPublicKey(privateKey);
   const signature = await secp.sign(messageHash, privateKey);
   const isValid = secp.verify(signature, messageHash, publicKey);
 
@@ -93,7 +94,7 @@ function sign(msgHash: Uint8Array | string, privateKey: Uint8Array | string, opt
 
 Generates low-s deterministic ECDSA signature as per RFC6979.
 
-- `msgHash: Uint8Array | string` - message hash which would be signed
+- `msgHash: Uint8Array | string` - 32-byte message hash which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - *optional* object related to signature value and format with following keys:
     - `recovered: boolean = false` - whether the recovered bit should be included in the result. In this case, the result would be an array of two items.
