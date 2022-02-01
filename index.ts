@@ -1007,6 +1007,16 @@ export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Ar
 }
 
 /**
+ * Converts public key to full or compact public key.
+ * @param publicKey public key
+ * @param isCompressed whether to return full (65-byte), or compact (33-byte) key
+ * @returns short/full public key
+ */
+export function convertPublicKey(publicKey: PubKey, isCompressed = false): Uint8Array {
+  return normalizePublicKey(publicKey).toRawBytes(isCompressed);
+}
+
+/**
  * Recovers public key from signature and recovery bit.
  * @param msgHash message hash
  * @param signature DER or compact sig
