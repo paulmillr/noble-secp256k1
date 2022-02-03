@@ -344,6 +344,7 @@ class JacobianPoint {
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   // (x, y, z) ∋ (x=x/z², y=y/z³)
   toAffine(invZ: bigint = invert(this.z)): Point {
+    if (invZ <= _0n) throw new Error('Invalid inverted z');
     const invZ2 = invZ ** _2n;
     const x = mod(this.x * invZ2);
     const y = mod(this.y * invZ2 * invZ);
