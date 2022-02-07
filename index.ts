@@ -191,9 +191,16 @@ class JacobianPoint {
    */
   multiplyUnsafe(scalar: bigint): JacobianPoint {
     let n = normalizeScalar(scalar);
+
+    const G = JacobianPoint.BASE;
+    const P0 = JacobianPoint.ZERO;
+    if (n === _0n) return P0;
+    if (this.equals(P0) || n === _1n) return this;
+    if (this.equals(G)) return this.wNAF(n).p;
+
     // The condition is not executed unless you change global var
     if (!USE_ENDOMORPHISM) {
-      let p = JacobianPoint.ZERO;
+      let p = P0;
       let d: JacobianPoint = this;
       while (n > _0n) {
         if (n & _1n) p = p.add(d);
@@ -203,8 +210,8 @@ class JacobianPoint {
       return p;
     }
     let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
-    let k1p = JacobianPoint.ZERO;
-    let k2p = JacobianPoint.ZERO;
+    let k1p = P0;
+    let k2p = P0;
     let d: JacobianPoint = this;
     while (k1 > _0n || k2 > _0n) {
       if (k1 & _1n) k1p = k1p.add(d);
@@ -323,7 +330,7 @@ class JacobianPoint {
     // Fake point, we use it to achieve constant-time multiplication.
     let fake: JacobianPoint;
     if (USE_ENDOMORPHISM) {
-      let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
+      const { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
       let { p: k1p, f: f1p } = this.wNAF(k1, affinePoint);
       let { p: k2p, f: f2p } = this.wNAF(k2, affinePoint);
       if (k1neg) k1p = k1p.negate();
@@ -332,7 +339,7 @@ class JacobianPoint {
       point = k1p.add(k2p);
       fake = f1p.add(f2p);
     } else {
-      let { p, f } = this.wNAF(n, affinePoint);
+      const { p, f } = this.wNAF(n, affinePoint);
       point = p;
       fake = f;
     }
@@ -344,11 +351,13 @@ class JacobianPoint {
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   // (x, y, z) ∋ (x=x/z², y=y/z³)
   toAffine(invZ: bigint = invert(this.z)): Point {
-    if (invZ <= _0n) throw new Error('Invalid inverted z');
-    const invZ2 = invZ ** _2n;
-    const x = mod(this.x * invZ2);
-    const y = mod(this.y * invZ2 * invZ);
-    return new Point(x, y);
+    const { x, y, z } = this;
+    const iz2 = mod(invZ * invZ);
+    const ax = mod(x * iz2);
+    const ay = mod(y * iz2 * invZ);
+    const zz = mod(z * invZ);
+    if (zz !== _1n) throw new Error('invZ was invalid');
+    return new Point(ax, ay);
   }
 }
 
