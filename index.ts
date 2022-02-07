@@ -102,13 +102,16 @@ class JacobianPoint {
    * Compare one point to another.
    */
   equals(other: JacobianPoint): boolean {
-    const a = this;
-    const b = other;
-    const az2 = mod(a.z * a.z);
-    const az3 = mod(a.z * az2);
-    const bz2 = mod(b.z * b.z);
-    const bz3 = mod(b.z * bz2);
-    return mod(a.x * bz2) === mod(az2 * b.x) && mod(a.y * bz3) === mod(az3 * b.y);
+    if (!(other instanceof JacobianPoint)) throw new TypeError('JacobianPoint expected');
+    const { x: X1, y: Y1, z: Z1 } = this;
+    const { x: X2, y: Y2, z: Z2 } = other;
+    const Z1Z1 = mod(Z1 ** _2n);
+    const Z2Z2 = mod(Z2 ** _2n);
+    const U1 = mod(X1 * Z2Z2);
+    const U2 = mod(X2 * Z1Z1);
+    const S1 = mod(mod(Y1 * Z2) * Z2Z2);
+    const S2 = mod(mod(Y2 * Z1) * Z1Z1);
+    return U1 === U2 && S1 === S2;
   }
 
   /**
@@ -123,13 +126,11 @@ class JacobianPoint {
   // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
   // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
   double(): JacobianPoint {
-    const X1 = this.x;
-    const Y1 = this.y;
-    const Z1 = this.z;
+    const { x: X1, y: Y1, z: Z1 } = this;
     const A = mod(X1 ** _2n);
     const B = mod(Y1 ** _2n);
     const C = mod(B ** _2n);
-    const D = mod(_2n * (mod(mod((X1 + B) ** _2n)) - A - C));
+    const D = mod(_2n * (mod((X1 + B) ** _2n) - A - C));
     const E = mod(_3n * A);
     const F = mod(E ** _2n);
     const X3 = mod(F - _2n * D);
@@ -142,24 +143,19 @@ class JacobianPoint {
   // Note: cannot be reused for other curves when a != 0.
   // http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-1998-cmo-2
   // Cost: 12M + 4S + 6add + 1*2.
-  // Note: 2007 Bernstein-Lange (11M + 5S + 9add + 4*2) is actually *slower*. No idea why.
+  // Note: 2007 Bernstein-Lange (11M + 5S + 9add + 4*2) is actually 10% slower.
   add(other: JacobianPoint): JacobianPoint {
-    if (!(other instanceof JacobianPoint)) {
-      throw new TypeError('JacobianPoint#add: expected JacobianPoint');
-    }
-    const X1 = this.x;
-    const Y1 = this.y;
-    const Z1 = this.z;
-    const X2 = other.x;
-    const Y2 = other.y;
-    const Z2 = other.z;
+    if (!(other instanceof JacobianPoint)) throw new TypeError('JacobianPoint expected');
+    const { x: X1, y: Y1, z: Z1 } = this;
+    const { x: X2, y: Y2, z: Z2 } = other;
     if (X2 === _0n || Y2 === _0n) return this;
     if (X1 === _0n || Y1 === _0n) return other;
+    // We're using same code in equals()
     const Z1Z1 = mod(Z1 ** _2n);
     const Z2Z2 = mod(Z2 ** _2n);
     const U1 = mod(X1 * Z2Z2);
     const U2 = mod(X2 * Z1Z1);
-    const S1 = mod(Y1 * Z2 * Z2Z2);
+    const S1 = mod(mod(Y1 * Z2) * Z2Z2);
     const S2 = mod(mod(Y2 * Z1) * Z1Z1);
     const H = mod(U2 - U1);
     const r = mod(S2 - S1);
@@ -355,8 +351,7 @@ class JacobianPoint {
     const iz2 = mod(invZ * invZ);
     const ax = mod(x * iz2);
     const ay = mod(y * iz2 * invZ);
-    const zz = mod(z * invZ);
-    if (zz !== _1n) throw new Error('invZ was invalid');
+    if (mod(z * invZ) !== _1n) throw new Error('invZ was invalid');
     return new Point(ax, ay);
   }
 }
