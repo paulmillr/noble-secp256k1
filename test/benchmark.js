@@ -33,7 +33,7 @@ run(async (windowSize) => {
   // await mark('getPublicKey 256 bit', samples * 10, () => {
   //   secp.getPublicKey('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb');
   // });
-  await mark('getPublicKey(utils.randomPrivateKey())', samples * 10, () => {
+  await mark('getPublicKey(utils.randomPrivateKey())', 2500, () => {
     secp.getPublicKey(secp.utils.randomPrivateKey());
   });
 
@@ -43,32 +43,33 @@ run(async (windowSize) => {
   const pub2 = secp.getPublicKey(priv2, false);
   const msg = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
   const signature = await secp.sign(msg, priv);
-  await mark('sign', samples, async () => {
+
+  await mark('sign', 2500, async () => {
     await secp.sign(msg, priv);
   });
 
-  await mark('signSync', samples, () => secp.signSync(msg, priv));
+  await mark('signSync', 2500, () => secp.signSync(msg, priv));
 
-  await mark('verify', samples, () => {
+  await mark('verify', 500, () => {
     secp.verify(signature, msg, pub);
   });
 
   const [rsig, reco] = await secp.sign(msg, priv, { canonical: true, recovered: true });
-  await mark('recoverPublicKey', samples, () => {
+  await mark('recoverPublicKey', 250, () => {
     secp.recoverPublicKey(msg, rsig, reco);
   });
 
-  await mark('getSharedSecret aka ecdh', samples, () => {
+  await mark('getSharedSecret aka ecdh', 300, () => {
     secp.getSharedSecret(priv, pub2);
   });
 
   const pub2Pre = secp.utils.precompute(windowSize, secp.Point.fromHex(pub2));
-  await mark('getSharedSecret (precomputed)', samples, () => {
+  await mark('getSharedSecret (precomputed)', 2500, () => {
     secp.getSharedSecret(priv, pub2Pre);
   });
 
   let i = 0;
-  await mark('Point.fromHex (decompression)', samples * 2, () => {
+  await mark('Point.fromHex (decompression)', 6000, () => {
     const p = points[i++ % points.length];
     secp.Point.fromHex(p);
   });
@@ -77,8 +78,8 @@ run(async (windowSize) => {
   const spri = '0000000000000000000000000000000000000000000000000000000000000003';
   const spub = secp.Point.fromPrivateKey(spri);
   const ssig = await secp.schnorr.sign(smsg, spri);
-  await mark('schnorr.sign', samples, () => secp.schnorr.sign(smsg, spri));
-  await mark('schnorr.verify', samples, () => secp.schnorr.verify(ssig, smsg, spub));
+  await mark('schnorr.sign', 250, () => secp.schnorr.sign(smsg, spri));
+  await mark('schnorr.verify', 250, () => secp.schnorr.verify(ssig, smsg, spub));
 
   console.log();
   logMem();
