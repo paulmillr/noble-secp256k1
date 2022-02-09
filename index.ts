@@ -347,10 +347,13 @@ class JacobianPoint {
   // (x, y, z) ∋ (x=x/z², y=y/z³)
   toAffine(invZ: bigint = invert(this.z)): Point {
     const { x, y, z } = this;
-    const iz2 = mod(invZ * invZ);
+    const iz1 = invZ;
+    const iz2 = mod(iz1 * iz1);
+    const iz3 = mod(iz2 * iz1);
     const ax = mod(x * iz2);
-    const ay = mod(y * iz2 * invZ);
-    if (mod(z * invZ) !== _1n) throw new Error('invZ was invalid');
+    const ay = mod(y * iz3);
+    const zz = mod(z * iz1);
+    if (zz !== _1n) throw new Error('invZ was invalid');
     return new Point(ax, ay);
   }
 }
