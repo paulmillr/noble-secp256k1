@@ -273,13 +273,12 @@ class JacobianPoint {
     let p = JacobianPoint.ZERO;
     let f = JacobianPoint.ZERO;
 
-    const windows = USE_ENDOMORPHISM ? 128 / W + 1 : 256 / W + 1;
+    const windows = 1 + (USE_ENDOMORPHISM ? 128 / W : 256 / W); // W=8 17
     const windowSize = 2 ** (W - 1); // W=8 128
     const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b11111111 for W=8
     const maxNumber = 2 ** W; // W=8 256
     const shiftBy = BigInt(W); // W=8 8
 
-    // TODO: review this more carefully
     for (let window = 0; window < windows; window++) {
       const offset = window * windowSize;
       // Extract W bits.
@@ -843,7 +842,9 @@ function splitScalarEndo(k: bigint) {
   const k2neg = k2 > POW_2_128;
   if (k1neg) k1 = n - k1;
   if (k2neg) k2 = n - k2;
-  if (k1 > POW_2_128 || k2 > POW_2_128) throw new Error('splitScalarEndo: Endomorphism failed');
+  if (k1 > POW_2_128 || k2 > POW_2_128) {
+    throw new Error('splitScalarEndo: Endomorphism failed, k=' + k);
+  }
   return { k1neg, k1, k2neg, k2 };
 }
 
