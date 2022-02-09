@@ -807,8 +807,6 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   return mod(x, modulo);
 }
 
-// Takes a list of numbers, inverts all of them
-// [1, 2, 3]
 /**
  * Takes a list of numbers, efficiently inverts all of them.
  * @param nums list of bigints
