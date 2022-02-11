@@ -741,7 +741,7 @@ function normalizeScalar(num: number | bigint): bigint {
 // Calculates a modulo b
 function mod(a: bigint, b: bigint = CURVE.P): bigint {
   const result = a % b;
-  return result >= 0 ? result : b + result;
+  return result >= _0n ? result : b + result;
 }
 
 // Does x ^ (2 ^ power). E.g. 30 ^ (2 ^ 4)
