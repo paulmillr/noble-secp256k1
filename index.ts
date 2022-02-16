@@ -1016,7 +1016,7 @@ function normalizeSignature(signature: Sig): Signature {
 /**
  * Computes public key for secp256k1 private key.
  * @param privateKey 32-byte private key
- * @param isCompressed whether to return full (65-byte), or compact (33-byte) key
+ * @param isCompressed whether to return compact (33-byte), or full (65-byte) key
  * @returns short/full public key
  */
 export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Array {
@@ -1028,14 +1028,16 @@ export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Ar
  * @param msgHash message hash
  * @param signature DER or compact sig
  * @param recovery 0 or 1
+ * @param isCompressed whether to return compact (33-byte), or full (65-byte) key
  * @returns Public key
  */
 export function recoverPublicKey(
   msgHash: Hex,
   signature: Sig,
-  recovery: number
+  recovery: number,
+  isCompressed = false
 ): Uint8Array | undefined {
-  return Point.fromSignature(msgHash, signature, recovery).toRawBytes();
+  return Point.fromSignature(msgHash, signature, recovery).toRawBytes(isCompressed);
 }
 
 function isPub(item: PrivKey | PubKey): boolean {
@@ -1054,8 +1056,8 @@ function isPub(item: PrivKey | PubKey): boolean {
  * 2. Checks for the public key of being on-curve
  * @param privateA private key
  * @param publicB different public key
- * @param isCompressed
- * @returns
+ * @param isCompressed whether to return compact (33-byte), or full (65-byte) key
+ * @returns shared public key
  */
 export function getSharedSecret(
   privateA: PrivKey,
