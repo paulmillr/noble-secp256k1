@@ -5,13 +5,13 @@
     "lib": ["es2020"],
     "module": "es6",
     "moduleResolution": "node",
-    "outDir": "lib/esm",
+    "outDir": "../lib/esm",
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
     "esModuleInterop": true,
-    "baseUrl": ".",
+    "baseUrl": "..",
   },
-  "include": ["index.ts"],
+  "include": ["../index.ts"],
   "exclude": ["node_modules", "lib"]
 }
