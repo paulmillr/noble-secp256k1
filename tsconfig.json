@@ -5,14 +5,14 @@
     "lib": ["es2020"],
     "module": "commonjs",
     "moduleResolution": "node",
-    "outDir": "../lib",
+    "outDir": "lib",
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "baseUrl": "..",
+    "baseUrl": ".",
   },
-  "include": ["../index.ts"],
+  "include": ["index.ts"],
   "exclude": ["node_modules", "lib"]
 }
