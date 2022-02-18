@@ -1024,7 +1024,7 @@ export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Ar
 }
 
 /**
- * Recovers public key from signature and recovery bit.
+ * Recovers public key from signature and recovery bit. Throws on invalid sig/hash.
  * @param msgHash message hash
  * @param signature DER or compact sig
  * @param recovery 0 or 1
@@ -1036,7 +1036,7 @@ export function recoverPublicKey(
   signature: Sig,
   recovery: number,
   isCompressed = false
-): Uint8Array | undefined {
+): Uint8Array {
   return Point.fromSignature(msgHash, signature, recovery).toRawBytes(isCompressed);
 }
 
