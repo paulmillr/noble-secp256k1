@@ -1040,6 +1040,9 @@ export function recoverPublicKey(
   return Point.fromSignature(msgHash, signature, recovery).toRawBytes(isCompressed);
 }
 
+/**
+ * Quick and dirty check for item being public key. Does not validate hex, or being on-curve.
+ */
 function isPub(item: PrivKey | PubKey): boolean {
   const arr = isUint8a(item);
   const str = typeof item === 'string';
