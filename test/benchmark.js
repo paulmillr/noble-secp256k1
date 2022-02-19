@@ -55,7 +55,7 @@ run(async (windowSize) => {
   });
 
   const [rsig, reco] = await secp.sign(msg, priv, { canonical: true, recovered: true });
-  await mark('recoverPublicKey', 250, () => {
+  await mark('recoverPublicKey', 450, () => {
     secp.recoverPublicKey(msg, rsig, reco);
   });
 

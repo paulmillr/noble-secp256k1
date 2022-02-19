@@ -392,7 +392,7 @@ export class Point {
    */
   private static fromCompressedHex(bytes: Uint8Array) {
     const isShort = bytes.length === 32;
-    const x = bytesToNumber(isShort ? bytes : bytes.slice(1));
+    const x = bytesToNumber(isShort ? bytes : bytes.subarray(1));
     if (!isValidFieldElement(x)) throw new Error('Point is not on curve');
     const y2 = weistrass(x); // y² = x³ + ax + b
     let y = sqrtMod(y2); // y = y² ^ (p+1)/4
@@ -412,8 +412,8 @@ export class Point {
 
   // Schnorr doesn't support uncompressed points, so this is only for ECDSA
   private static fromUncompressedHex(bytes: Uint8Array) {
-    const x = bytesToNumber(bytes.slice(1, 33));
-    const y = bytesToNumber(bytes.slice(33));
+    const x = bytesToNumber(bytes.subarray(1, 33));
+    const y = bytesToNumber(bytes.subarray(33, 65));
     const point = new Point(x, y);
     point.assertValidity();
     return point;
@@ -425,13 +425,14 @@ export class Point {
    */
   static fromHex(hex: Hex): Point {
     const bytes = ensureBytes(hex);
+    const len = bytes.length;
     const header = bytes[0];
-    if (bytes.length === 32 || (bytes.length === 33 && (header === 0x02 || header === 0x03))) {
+    if (len === 32 || (len === 33 && (header === 0x02 || header === 0x03))) {
       return this.fromCompressedHex(bytes);
     }
-    if (bytes.length === 65 && header === 0x04) return this.fromUncompressedHex(bytes);
+    if (len === 65 && header === 0x04) return this.fromUncompressedHex(bytes);
     throw new Error(
-      `Point.fromHex: received invalid point. Expected 32-33 compressed bytes or 65 uncompressed bytes, not ${bytes.length}`
+      `Point.fromHex: received invalid point. Expected 32-33 compressed bytes or 65 uncompressed bytes, not ${len}`
     );
   }
 
@@ -477,7 +478,8 @@ export class Point {
   toHex(isCompressed = false): string {
     const x = numTo32bStr(this.x);
     if (isCompressed) {
-      return `${this.y & _1n ? '03' : '02'}${x}`;
+      const prefix = this.y & _1n ? '03' : '02';
+      return `${prefix}${x}`;
     } else {
       return `04${x}${numTo32bStr(this.y)}`;
     }
@@ -1252,8 +1254,8 @@ async function createChallenge(x: bigint, P: Point, message: Uint8Array) {
   return mod(t, CURVE.n);
 }
 
-function hasEvenY(point: Point) {
-  return mod(point.y, _2n) === _0n;
+function hasEvenY(point: Point): boolean {
+  return (point.y & _1n) === _0n;
 }
 
 class SchnorrSignature {
@@ -1264,8 +1266,8 @@ class SchnorrSignature {
     const bytes = ensureBytes(hex);
     if (bytes.length !== 64)
       throw new TypeError(`SchnorrSignature.fromHex: expected 64 bytes, not ${bytes.length}`);
-    const r = bytesToNumber(bytes.slice(0, 32));
-    const s = bytesToNumber(bytes.slice(32, 64));
+    const r = bytesToNumber(bytes.subarray(0, 32));
+    const s = bytesToNumber(bytes.subarray(32, 64));
     return new SchnorrSignature(r, s);
   }
   toHex(): string {
