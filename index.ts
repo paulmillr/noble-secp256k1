@@ -72,7 +72,7 @@ const USE_ENDOMORPHISM = CURVE.a === _0n;
  * Default Point works in 2d / affine coordinates: (x, y)
  * We're doing calculations in jacobi, because its operations don't require costly inversion.
  */
-class JacobianPoint {
+export class JacobianPoint {
   constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint) {}
 
   static readonly BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, _1n);
@@ -191,8 +191,7 @@ class JacobianPoint {
     const G = JacobianPoint.BASE;
     const P0 = JacobianPoint.ZERO;
     if (n === _0n) return P0;
-    if (this.equals(P0) || n === _1n) return this;
-    if (this.equals(G)) return this.wNAF(n).p;
+    if (n === _1n) return this;
 
     // The condition is not executed unless you change global var
     if (!USE_ENDOMORPHISM) {
@@ -443,28 +442,31 @@ export class Point {
 
   /**
    * Recovers public key from ECDSA signature.
-   * https://crypto.stackexchange.com/questions/60218
-   * ```
-   * Q = (1 / r)(sP - hG)
-   * ```
+   * https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm#Public_key_recovery
    */
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
+    const { n } = CURVE;
     msgHash = ensureBytes(msgHash);
-    const h = truncateHash(msgHash);
+    const z = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid recovery bit');
     }
-    if (h === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
+    if (z === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
+    const rinv = invert(r, n);
+    const u1 = mod(-z * rinv, n);
+    const u2 = mod(s * rinv, n);
+    const u1G = JacobianPoint.BASE.multiply(u1);
     const prefix = 2 + (recovery & 1);
-    const P_ = Point.fromHex(`0${prefix}${numTo32bStr(r)}`);
-    const sP = JacobianPoint.fromAffine(P_).multiplyUnsafe(s);
-    const hG = JacobianPoint.BASE.multiply(h);
-    const rinv = invert(r, CURVE.n);
-    const Q = sP.subtract(hG).multiplyUnsafe(rinv);
-    const point = Q.toAffine();
-    point.assertValidity();
-    return point;
+    const R = Point.fromHex(`0${prefix}${numTo32bStr(r)}`);
+    const Rj = JacobianPoint.fromAffine(R);
+    const u2R = Rj.multiply(u2);
+    const Q = u1G.add(u2R);
+    if (Q.equals(JacobianPoint.ZERO))
+      throw new Error('Cannot recover signature: point at infinify');
+    const Qa = Q.toAffine();
+    Qa.assertValidity();
+    return Qa;
   }
 
   toRawBytes(isCompressed = false): Uint8Array {

@@ -14,7 +14,6 @@ const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
 // prettier-ignore
 const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
 
-
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
 // Caching slows it down 2-3x
@@ -41,7 +40,6 @@ function hexToNumber(hex: string): bigint {
   // Big Endian
   return BigInt(`0x${hex}`);
 }
-
 
 describe('secp256k1', () => {
   it('.getPublicKey()', () => {
@@ -167,6 +165,18 @@ describe('secp256k1', () => {
         expect(() => secp.Point.BASE.multiply(num)).toThrowError();
       }
     });
+
+    // multiply() should equal multiplyUnsafe()
+    // it('JacobianPoint#multiplyUnsafe', () => {
+    //   const p0 = new secp.JacobianPoint(
+    //     55066263022277343669578718895168534326250603453777594175500187360389116729240n,
+    //     32670510020758816978083085130507043184471273380659243275938904335757337482424n,
+    //     1n
+    //   );
+    //   const z = 106011723082030650010038151861333186846790370053628296836951575624442507889495n;
+    //   console.log(p0.multiply(z));
+    //   console.log(secp.JacobianPoint.normalizeZ([p0.multiplyUnsafe(z)])[0])
+    // });
   });
 
   describe('Signature', () => {
@@ -234,7 +244,7 @@ describe('secp256k1', () => {
         '0101010101010101010101010101010101010101010101010101010101010101'
       );
       for (let [msg, exp] of CASES) {
-        const res = await secp.sign(msg, privKey, {extraEntropy: undefined});
+        const res = await secp.sign(msg, privKey, { extraEntropy: undefined });
         expect(hex(res)).toBe(exp);
         const rs = secp.Signature.fromDER(res).toCompactHex();
         expect(secp.Signature.fromCompact(rs).toDERHex()).toBe(exp);
@@ -337,7 +347,7 @@ describe('secp256k1', () => {
       const s = 115792089237316195423570985008687907852837564279074904382605163141518161494334n;
       const pub = new secp.Point(x, y);
       const sig = new secp.Signature(r, s);
-      expect(secp.verify(sig, msg, pub, {strict: false})).toBeTruthy();
+      expect(secp.verify(sig, msg, pub, { strict: false })).toBeTruthy();
     });
     it('should not verify invalid deterministic signatures with RFC 6979', () => {
       for (const vector of ecdsa.invalid.verify) {
@@ -380,11 +390,18 @@ describe('secp256k1', () => {
       const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
       const privateKey = 123456789n;
       const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
-      const [signature, recovery] = await secp.sign(message, privateKey, {recovered: true});
+      const [signature, recovery] = await secp.sign(message, privateKey, { recovered: true });
       const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
       expect(recoveredPubkey).not.toBe(null);
       expect(hex(recoveredPubkey!)).toBe(publicKey);
       expect(secp.verify(signature, message, publicKey)).toBe(true);
+    });
+    it('should not recover zero points', () => {
+      const msgHash = '6b8d2c81b11b2d699528dde488dbdf2f94293d0d33c32e347f255fa4a6c1f0a9';
+      const sig =
+        '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817986b8d2c81b11b2d699528dde488dbdf2f94293d0d33c32e347f255fa4a6c1f0a9';
+      const recovery = 0;
+      expect(() => secp.recoverPublicKey(msgHash, sig, recovery)).toThrowError();
     });
     it('should handle RFC 6979 vectors', async () => {
       for (const vector of ecdsa.valid) {
