@@ -456,7 +456,6 @@ export class Point {
     const prefix = recovery & 1 ? '03' : '02';
     const Ra = Point.fromHex(prefix + numTo32bStr(r));
     const R = JacobianPoint.fromAffine(Ra);
-
     const rinv = invert(r, n);
 
     const u1 = mod(-z * rinv, n);
