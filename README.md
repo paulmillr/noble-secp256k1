@@ -303,7 +303,7 @@ Benchmarks measured with Apple M1 on MacOS 12.
     getPublicKey(utils.randomPrivateKey()) x 6,300 ops/sec @ 158μs/op
     sign x 4,888 ops/sec @ 204μs/op
     verify x 950 ops/sec @ 1ms/op
-    recoverPublicKey x 499 ops/sec @ 2ms/op
+    recoverPublicKey x 860 ops/sec @ 1ms/op
     getSharedSecret aka ecdh x 576 ops/sec @ 1ms/op
     getSharedSecret (precomputed) x 6,688 ops/sec @ 149μs/op
     Point.fromHex (decompression) x 12,553 ops/sec @ 79μs/op
