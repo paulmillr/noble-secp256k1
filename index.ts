@@ -72,7 +72,7 @@ const USE_ENDOMORPHISM = CURVE.a === _0n;
  * Default Point works in 2d / affine coordinates: (x, y)
  * We're doing calculations in jacobi, because its operations don't require costly inversion.
  */
-export class JacobianPoint {
+class JacobianPoint {
   constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint) {}
 
   static readonly BASE = new JacobianPoint(CURVE.Gx, CURVE.Gy, _1n);
@@ -446,23 +446,20 @@ export class Point {
    * https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm#Public_key_recovery
    */
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
-    const { n } = CURVE;
     msgHash = ensureBytes(msgHash);
-    const z = truncateHash(msgHash);
+    const h = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid recovery bit');
     }
-    if (z === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
+    if (h === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
     const prefix = recovery & 1 ? '03' : '02';
     const Ra = Point.fromHex(prefix + numTo32bStr(r));
     const R = JacobianPoint.fromAffine(Ra);
+    const { n } = CURVE;
     const rinv = invert(r, n);
-
-    const u1 = mod(-z * rinv, n);
-    const u2 = mod(s * rinv, n);
-    const u1G = JacobianPoint.BASE.multiply(u1);
-    const u2R = R.multiplyUnsafe(u2);
+    const u1G = JacobianPoint.BASE.multiply(mod(-h * rinv, n));
+    const u2R = R.multiplyUnsafe(mod(s * rinv, n));
     const Q = u1G.add(u2R);
     if (Q.equals(JacobianPoint.ZERO))
       throw new Error('Cannot recover signature: point at infinify');
@@ -992,6 +989,9 @@ function normalizePrivateKey(key: PrivKey): bigint {
   return num;
 }
 
+/**
+ * Normalizes hex, bytes, Point to Point. Checks for curve equation.
+ */
 function normalizePublicKey(publicKey: PubKey): Point {
   if (publicKey instanceof Point) {
     publicKey.assertValidity();
@@ -1228,13 +1228,13 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
     return false;
   }
   const { n } = CURVE;
-  const s1 = invert(s, n); // s^-1
-  const u1 = mod(h * s1, n);
-  const u2 = mod(r * s1, n);
-  const Ghs1 = JacobianPoint.BASE.multiply(u1);
-  const Prs1 = pubKey.multiplyUnsafe(u2);
-  const R = Ghs1.add(Prs1).toAffine();
-  const v = mod(R.x, n);
+  const sinv = invert(s, n); // s^-1
+  const u1G = JacobianPoint.BASE.multiply(mod(h * sinv, n));
+  const u2Q = pubKey.multiplyUnsafe(mod(r * sinv, n));
+  const R = u1G.add(u2Q);
+  if (R.equals(JacobianPoint.ZERO)) return false;
+  const Ra = R.toAffine();
+  const v = mod(Ra.x, n);
   return v === r;
 }
 
@@ -1284,7 +1284,14 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
   return Point.fromPrivateKey(privateKey).toRawX();
 }
 
-// Schnorr signature verifies itself before producing an output, which makes it safer
+//
+/**
+ * Schnorr signature verifies itself before producing an output, which makes it safer.
+ * @param message
+ * @param privateKey
+ * @param auxRand
+ * @returns
+ */
 async function schnorrSign(
   message: Hex,
   privateKey: PrivKey,
@@ -1311,30 +1318,38 @@ async function schnorrSign(
   const R = Point.fromPrivateKey(k0);
   const k = hasEvenY(R) ? k0 : n - k0;
   const e = await createChallenge(R.x, P, m);
-  const sig = new SchnorrSignature(R.x, mod(k + e * d, n));
-  const isValid = await schnorrVerify(sig.toRawBytes(), m, P.toRawX());
+  const sig = new SchnorrSignature(R.x, mod(k + e * d, n)).toRawBytes();
+  const isValid = await schnorrVerify(sig, m, P.toRawX());
 
   if (!isValid) throw new Error('sign: Invalid signature produced');
-  return sig.toRawBytes();
+  return sig;
 }
 
 // no schnorrSignSync() for now
 
 // Also used in sign() function.
+/**
+ *
+ * @param signature
+ * @param message
+ * @param publicKey
+ * @returns
+ */
 async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
   const sig =
     signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
+  const { r, s } = sig;
   const m = ensureBytes(message);
 
   const P = normalizePublicKey(publicKey);
-  const e = await createChallenge(sig.r, P, m);
+  const e = await createChallenge(r, P, m);
 
   // R = s⋅G - e⋅P
-  const sG = Point.fromPrivateKey(sig.s);
-  const eP = P.multiply(e);
-  const R = sG.subtract(eP);
+  const sG = JacobianPoint.BASE.multiply(normalizePrivateKey(s));
+  const eP = JacobianPoint.fromAffine(P).multiplyUnsafe(e);
+  const R = sG.subtract(eP).toAffine();
 
-  if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== sig.r) return false;
+  if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== r) return false;
   return true;
 }
 
