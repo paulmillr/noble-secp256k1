@@ -78,8 +78,8 @@ run(async (windowSize) => {
   const spri = '0000000000000000000000000000000000000000000000000000000000000003';
   const spub = secp.Point.fromPrivateKey(spri);
   const ssig = await secp.schnorr.sign(smsg, spri);
-  await mark('schnorr.sign', 250, () => secp.schnorr.sign(smsg, spri));
-  await mark('schnorr.verify', 250, () => secp.schnorr.verify(ssig, smsg, spub));
+  await mark('schnorr.sign', 350, () => secp.schnorr.sign(smsg, spri));
+  await mark('schnorr.verify', 500, () => secp.schnorr.verify(ssig, smsg, spub));
 
   console.log();
   logMem();

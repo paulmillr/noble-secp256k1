@@ -341,6 +341,19 @@ class JacobianPoint {
     return JacobianPoint.normalizeZ([point, fake])[0];
   }
 
+  /**
+   * Efficiently calculate aP + bQ. Only fast if this == BASE
+   * TODO: Utilize Shamir's trick
+   * @returns non-zero affine point
+   */
+  multiplyAndAddUnsafe(Q: Point, a: bigint, b: bigint): Point | undefined {
+    const P = this;
+    const aP = P.multiply(a);
+    const bQ = JacobianPoint.fromAffine(Q).multiplyUnsafe(b);
+    const sum = aP.add(bQ);
+    return sum.equals(JacobianPoint.ZERO) ? undefined : sum.toAffine();
+  }
+
   // Converts Jacobian point to affine (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   // (x, y, z) ∋ (x=x/z², y=y/z³)
@@ -444,6 +457,12 @@ export class Point {
   /**
    * Recovers public key from ECDSA signature.
    * https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm#Public_key_recovery
+   * ```
+   * recover(r, s, h) where
+   *   u1 = hs^-1 mod n
+   *   u2 = sr^-1 mod n
+   *   Q = u1⋅G + u2⋅R
+   * ```
    */
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
     msgHash = ensureBytes(msgHash);
@@ -454,18 +473,16 @@ export class Point {
     }
     if (h === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
     const prefix = recovery & 1 ? '03' : '02';
-    const Ra = Point.fromHex(prefix + numTo32bStr(r));
-    const R = JacobianPoint.fromAffine(Ra);
+    const R = Point.fromHex(prefix + numTo32bStr(r));
     const { n } = CURVE;
     const rinv = invert(r, n);
-    const u1G = JacobianPoint.BASE.multiply(mod(-h * rinv, n));
-    const u2R = R.multiplyUnsafe(mod(s * rinv, n));
-    const Q = u1G.add(u2R);
-    if (Q.equals(JacobianPoint.ZERO))
-      throw new Error('Cannot recover signature: point at infinify');
-    const Qa = Q.toAffine();
-    Qa.assertValidity();
-    return Qa;
+    // Q = u1⋅G + u2⋅R
+    const u1 = mod(-h * rinv, n);
+    const u2 = mod(s * rinv, n);
+    const Q = JacobianPoint.BASE.multiplyAndAddUnsafe(R, u1, u2);
+    if (!Q) throw new Error('Cannot recover signature: point at infinify');
+    Q.assertValidity();
+    return Q;
   }
 
   toRawBytes(isCompressed = false): Uint8Array {
@@ -1199,12 +1216,11 @@ const vopts: VOpts = { strict: true };
  * https://www.secg.org/sec1-v2.pdf, section 4.1.4.
  *
  * ```
- * verify(r, s, m, P) where
- *   w = 1/s mod n
- *   u1 = mw mod n
- *   u2 = rw mod n
- *   (x2, y2) = G × u1 + P × u2
- *   x2 == r
+ * verify(r, s, h, P) where
+ *   u1 = hs^-1 mod n
+ *   u2 = rs^-1 mod n
+ *   R = u1⋅G - u2⋅P
+ *   mod(R.x, n) == r
  * ```
  */
 export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = vopts): boolean {
@@ -1221,20 +1237,20 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
 
   // Non-standard behavior: Probably forged, protect against fault attacks.
   if (h === _0n) return false;
-  let pubKey;
+  let P;
   try {
-    pubKey = JacobianPoint.fromAffine(normalizePublicKey(publicKey));
+    P = normalizePublicKey(publicKey);
   } catch (error) {
     return false;
   }
   const { n } = CURVE;
   const sinv = invert(s, n); // s^-1
-  const u1G = JacobianPoint.BASE.multiply(mod(h * sinv, n));
-  const u2Q = pubKey.multiplyUnsafe(mod(r * sinv, n));
-  const R = u1G.add(u2Q);
-  if (R.equals(JacobianPoint.ZERO)) return false;
-  const Ra = R.toAffine();
-  const v = mod(Ra.x, n);
+  // R = u1⋅G - u2⋅P
+  const u1 = mod(h * sinv, n);
+  const u2 = mod(r * sinv, n);
+  const R = JacobianPoint.BASE.multiplyAndAddUnsafe(P, u1, u2);
+  if (!R) return false;
+  const v = mod(R.x, n);
   return v === r;
 }
 
@@ -1260,7 +1276,7 @@ function hasEvenY(point: Point): boolean {
 
 class SchnorrSignature {
   constructor(readonly r: bigint, readonly s: bigint) {
-    if (!isValidFieldElement(r) || !isWithinCurveOrder(s)) throw new Error('Invalid signature');
+    this.assertValidity();
   }
   static fromHex(hex: Hex) {
     const bytes = ensureBytes(hex);
@@ -1269,6 +1285,10 @@ class SchnorrSignature {
     const r = bytesToNumber(bytes.subarray(0, 32));
     const s = bytesToNumber(bytes.subarray(32, 64));
     return new SchnorrSignature(r, s);
+  }
+  assertValidity() {
+    const { r, s } = this;
+    if (!isValidFieldElement(r) || !isWithinCurveOrder(s)) throw new Error('Invalid signature');
   }
   toHex(): string {
     return numTo32bStr(this.r) + numTo32bStr(this.s);
@@ -1286,11 +1306,11 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
 
 //
 /**
- * Schnorr signature verifies itself before producing an output, which makes it safer.
- * @param message
- * @param privateKey
- * @param auxRand
- * @returns
+ * Creates Schnorr signature.
+ * It verifies itself before producing an output, which makes it safer.
+ * @param message message (not message hash)
+ * @param privateKey private key
+ * @param auxRand random bytes that would be added to k. Bad RNG won't break it.
  */
 async function schnorrSign(
   message: Hex,
@@ -1327,29 +1347,21 @@ async function schnorrSign(
 
 // no schnorrSignSync() for now
 
-// Also used in sign() function.
 /**
- *
- * @param signature
- * @param message
- * @param publicKey
- * @returns
+ * Verifies Schnorr signature.
  */
 async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
-  const sig =
-    signature instanceof SchnorrSignature ? signature : SchnorrSignature.fromHex(signature);
+  const raw = signature instanceof SchnorrSignature;
+  const sig = raw ? signature : SchnorrSignature.fromHex(signature);
+  if (raw) sig.assertValidity(); // just in case
   const { r, s } = sig;
   const m = ensureBytes(message);
-
   const P = normalizePublicKey(publicKey);
   const e = await createChallenge(r, P, m);
-
   // R = s⋅G - e⋅P
-  const sG = JacobianPoint.BASE.multiply(normalizePrivateKey(s));
-  const eP = JacobianPoint.fromAffine(P).multiplyUnsafe(e);
-  const R = sG.subtract(eP).toAffine();
-
-  if (R.equals(Point.BASE) || !hasEvenY(R) || R.x !== r) return false;
+  // -eP == (n-e)P
+  const R = JacobianPoint.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
+  if (!R || !hasEvenY(R) || R.x !== r) return false;
   return true;
 }
 
