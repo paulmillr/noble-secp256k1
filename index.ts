@@ -341,19 +341,6 @@ class JacobianPoint {
     return JacobianPoint.normalizeZ([point, fake])[0];
   }
 
-  /**
-   * Efficiently calculate aP + bQ. Only fast if this == BASE
-   * TODO: Utilize Shamir's trick
-   * @returns non-zero affine point
-   */
-  multiplyAndAddUnsafe(Q: Point, a: bigint, b: bigint): Point | undefined {
-    const P = this;
-    const aP = P.multiply(a);
-    const bQ = JacobianPoint.fromAffine(Q).multiplyUnsafe(b);
-    const sum = aP.add(bQ);
-    return sum.equals(JacobianPoint.ZERO) ? undefined : sum.toAffine();
-  }
-
   // Converts Jacobian point to affine (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   // (x, y, z) ∋ (x=x/z², y=y/z³)
@@ -479,7 +466,7 @@ export class Point {
     // Q = u1⋅G + u2⋅R
     const u1 = mod(-h * rinv, n);
     const u2 = mod(s * rinv, n);
-    const Q = JacobianPoint.BASE.multiplyAndAddUnsafe(R, u1, u2);
+    const Q = Point.BASE.multiplyAndAddUnsafe(R, u1, u2);
     if (!Q) throw new Error('Cannot recover signature: point at infinify');
     Q.assertValidity();
     return Q;
@@ -544,6 +531,20 @@ export class Point {
 
   multiply(scalar: number | bigint) {
     return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
+  }
+
+  /**
+   * Efficiently calculate aP + bQ. Only fast if this == BASE.
+   * Unsafe, can expose private key, if used incorrectly.
+   * TODO: Utilize Shamir's trick
+   * @returns non-zero affine point
+   */
+  multiplyAndAddUnsafe(Q: Point, a: bigint, b: bigint): Point | undefined {
+    const P = JacobianPoint.fromAffine(this);
+    const aP = P.multiply(a);
+    const bQ = JacobianPoint.fromAffine(Q).multiplyUnsafe(b);
+    const sum = aP.add(bQ);
+    return sum.equals(JacobianPoint.ZERO) ? undefined : sum.toAffine();
   }
 }
 
@@ -1248,7 +1249,7 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   // R = u1⋅G - u2⋅P
   const u1 = mod(h * sinv, n);
   const u2 = mod(r * sinv, n);
-  const R = JacobianPoint.BASE.multiplyAndAddUnsafe(P, u1, u2);
+  const R = Point.BASE.multiplyAndAddUnsafe(P, u1, u2);
   if (!R) return false;
   const v = mod(R.x, n);
   return v === r;
@@ -1370,7 +1371,7 @@ async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Prom
   const e = await createChallenge(r, P, m);
   // R = s⋅G - e⋅P
   // -eP == (n-e)P
-  const R = JacobianPoint.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
+  const R = Point.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
   if (!R || !hasEvenY(R) || R.x !== r) return false;
   return true;
 }
