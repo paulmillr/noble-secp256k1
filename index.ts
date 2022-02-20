@@ -1352,11 +1352,21 @@ async function schnorrSign(
  */
 async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
   const raw = signature instanceof SchnorrSignature;
-  const sig = raw ? signature : SchnorrSignature.fromHex(signature);
-  if (raw) sig.assertValidity(); // just in case
+  let sig: SchnorrSignature;
+  try {
+    sig = raw ? signature : SchnorrSignature.fromHex(signature);
+    if (raw) sig.assertValidity(); // just in case
+  } catch (error) {
+    return false;
+  }
   const { r, s } = sig;
   const m = ensureBytes(message);
-  const P = normalizePublicKey(publicKey);
+  let P: Point;
+  try {
+    P = normalizePublicKey(publicKey);
+  } catch (error) {
+    return false;
+  }
   const e = await createChallenge(r, P, m);
   // R = s⋅G - e⋅P
   // -eP == (n-e)P

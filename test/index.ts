@@ -365,20 +365,18 @@ describe('secp256k1', () => {
       .slice(1, -1);
     for (let vec of vectors) {
       const [index, sec, pub, rnd, msg, expSig, passes, comment] = vec;
-      if (index == '4' && !sec) continue; // pass test for now — it has invalid private key?
-
       it(`should sign with Schnorr scheme vector ${index}`, async () => {
-        if (passes === 'TRUE') {
+        if (sec) {
           const sig = await secp.schnorr.sign(msg, sec, rnd);
           expect(hex(secp.schnorr.getPublicKey(sec))).toBe(pub.toLowerCase());
           expect(hex(sig)).toBe(expSig.toLowerCase());
           expect(await secp.schnorr.verify(sig, msg, pub)).toBe(true);
         } else {
-          try {
-            await secp.schnorr.sign(msg, sec, rnd);
-            expect(false);
-          } catch (error) {
-            expect(error).toBeInstanceOf(Error);
+          const passed = await secp.schnorr.verify(expSig, msg, pub);
+          if (passes === 'TRUE') {
+            expect(passed).toBeTruthy();
+          } else {
+            expect(passed).toBeFalsy();
           }
         }
       });
