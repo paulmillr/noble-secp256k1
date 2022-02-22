@@ -1249,6 +1249,8 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   // R = u1⋅G - u2⋅P
   const u1 = mod(h * sinv, n);
   const u2 = mod(r * sinv, n);
+  // Some implementations compare R.x in jacobian, without inversion.
+  // The speed-up is <5%, so we don't complicate the code.
   const R = Point.BASE.multiplyAndAddUnsafe(P, u1, u2);
   if (!R) return false;
   const v = mod(R.x, n);
