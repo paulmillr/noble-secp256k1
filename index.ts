@@ -1444,6 +1444,7 @@ export const utils = {
   },
 
   bytesToHex,
+  hexToBytes,
   mod,
 
   sha256: async (message: Uint8Array): Promise<Uint8Array> => {

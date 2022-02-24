@@ -226,6 +226,8 @@ const utils: {
   randomBytes: (bytesLength?: number) => Uint8Array;
   // Converts Uint8Array to hex string
   bytesToHex: typeof bytesToHex;
+  // Converts hex string to Uint8Array
+  hexToBytes: typeof hexToBytes;
   // Modular division over curve prime
   mod: (number: number | bigint, modulo = CURVE.P): bigint;
   sha256: (message: Uint8Array) => Promise<Uint8Array>;
