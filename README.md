@@ -231,8 +231,8 @@ const utils: {
   sha256: (message: Uint8Array) => Promise<Uint8Array>;
   hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
 
-  // You can set up your synchronous methods for `signSync` to work. The argument order is
-  // identical to async methods from above
+  // You can set up your synchronous methods for `signSync`/`signSchnorrSync` to work.
+  // The argument order is identical to async methods from above
   sha256Sync: undefined;
   hmacSha256Sync: undefined;
 

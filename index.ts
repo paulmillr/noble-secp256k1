@@ -906,16 +906,8 @@ class HmacDrbg {
     this.k = new Uint8Array(32).fill(0);
     this.counter = 0;
   }
-  private hmac(...values: Uint8Array[]) {
-    return utils.hmacSha256(this.k, ...values);
-  }
-  private hmacSync(...values: Uint8Array[]) {
-    if (typeof utils.hmacSha256Sync !== 'function')
-      throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
-    const res = utils.hmacSha256Sync!(this.k, ...values);
-    if (res instanceof Promise)
-      throw new Error('To use sync sign(), ensure utils.hmacSha256 is sync');
-    return res;
+  private *hmac(...values: Uint8Array[]): U8AGenerator<Uint8Array> {
+    return yield* hmacSha256(this.k, ...values);
   }
   incr() {
     if (this.counter >= 1000) {
@@ -925,29 +917,17 @@ class HmacDrbg {
   }
 
   // We concatenate extraData into seed
-  async reseed(seed = new Uint8Array()) {
-    this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed);
-    this.v = await this.hmac(this.v);
+  *reseed(seed = new Uint8Array()): U8AGenerator<void> {
+    this.k = yield* this.hmac(this.v, Uint8Array.from([0x00]), seed);
+    this.v = yield* this.hmac(this.v);
     if (seed.length === 0) return;
-    this.k = await this.hmac(this.v, Uint8Array.from([0x01]), seed);
-    this.v = await this.hmac(this.v);
-  }
-  reseedSync(seed = new Uint8Array()) {
-    this.k = this.hmacSync(this.v, Uint8Array.from([0x00]), seed);
-    this.v = this.hmacSync(this.v);
-    if (seed.length === 0) return;
-    this.k = this.hmacSync(this.v, Uint8Array.from([0x01]), seed);
-    this.v = this.hmacSync(this.v);
+    this.k = yield* this.hmac(this.v, Uint8Array.from([0x01]), seed);
+    this.v = yield* this.hmac(this.v);
   }
 
-  async generate(): Promise<Uint8Array> {
+  *generate(): U8AGenerator<Uint8Array> {
     this.incr();
-    this.v = await this.hmac(this.v);
-    return this.v;
-  }
-  generateSync(): Uint8Array {
-    this.incr();
-    this.v = this.hmacSync(this.v);
+    this.v = yield* this.hmac(this.v);
     return this.v;
   }
   // There is no need in clean() method
@@ -1176,35 +1156,29 @@ function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignO
  * ```
  * @param opts recovered, canonical, der, extraEntropy
  */
-async function sign(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
-async function sign(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
-async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
+function* sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): U8AGenerator<SignOutput> {
   // Steps A, D of RFC6979 3.2.
   const { seed, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
   let sig: RecoveredSig | undefined;
   // Steps B, C, D, E, F, G
   const drbg = new HmacDrbg();
-  await drbg.reseed(seed);
+  yield* drbg.reseed(seed);
   // Step H3, repeat until k is in range [1, n-1]
-  while (!(sig = kmdToSig(await drbg.generate(), m, d))) await drbg.reseed();
+  while (!(sig = kmdToSig(yield* drbg.generate(), m, d))) yield* drbg.reseed();
   return finalizeSig(sig, opts);
 }
 
-// Two methods because some people cannot use async sign
+function signAsync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): Promise<[U8A, number]>;
+function signAsync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise<U8A>;
+function signAsync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
+  return callAsync(sign(msgHash, privKey, opts));
+}
 function signSync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): [U8A, number];
 function signSync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
-  // Steps A, D of RFC6979 3.2.
-  const { seed, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
-  let sig: RecoveredSig | undefined;
-  // Steps B, C, D, E, F, G
-  const drbg = new HmacDrbg();
-  drbg.reseedSync(seed);
-  // Step H3, repeat until k is in range [1, n-1]
-  while (!(sig = kmdToSig(drbg.generateSync(), m, d))) drbg.reseedSync();
-  return finalizeSig(sig, opts);
+  return callSync(sign(msgHash, privKey, opts));
 }
-export { sign, signSync };
+export { signAsync as sign, signSync };
 
 type VOpts = {
   strict?: boolean;
@@ -1259,17 +1233,16 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
 
 // Schnorr-specific code as per BIP0340.
 
-// Strip first byte that signifies whether y is positive or negative, leave only x.
-async function taggedHash(tag: string, ...messages: Uint8Array[]): Promise<bigint> {
+function* taggedHash(tag: string, ...messages: Uint8Array[]): U8AGenerator<bigint> {
   const tagB = new Uint8Array(tag.split('').map((c) => c.charCodeAt(0)));
-  const tagH = await utils.sha256(tagB);
-  const h = await utils.sha256(concatBytes(tagH, tagH, ...messages));
+  const tagH = yield* sha256(tagB);
+  const h = yield* sha256(concatBytes(tagH, tagH, ...messages));
   return bytesToNumber(h);
 }
 
-async function createChallenge(x: bigint, P: Point, message: Uint8Array) {
+function* createChallenge(x: bigint, P: Point, message: Uint8Array): U8AGenerator<bigint> {
   const rx = numTo32b(x);
-  const t = await taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
+  const t = yield* taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
   return mod(t, CURVE.n);
 }
 
@@ -1307,7 +1280,6 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
   return Point.fromPrivateKey(privateKey).toRawX();
 }
 
-//
 /**
  * Creates Schnorr signature.
  * It verifies itself before producing an output, which makes it safer.
@@ -1315,11 +1287,11 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
  * @param privateKey private key
  * @param auxRand random bytes that would be added to k. Bad RNG won't break it.
  */
-async function schnorrSign(
+function* schnorrSign(
   message: Hex,
   privateKey: PrivKey,
   auxRand: Hex = utils.randomBytes()
-): Promise<Uint8Array> {
+): U8AGenerator<Uint8Array> {
   if (message == null) throw new TypeError(`sign: Expected valid message, not "${message}"`);
   const { n } = CURVE;
   const m = ensureBytes(message);
@@ -1330,30 +1302,32 @@ async function schnorrSign(
   const P = Point.fromPrivateKey(d0);
   const d = hasEvenY(P) ? d0 : n - d0;
 
-  const t0h = await taggedHash('BIP0340/aux', rand);
+  const t0h = yield* taggedHash('BIP0340/aux', rand);
   const t = d ^ t0h;
 
-  const k0h = await taggedHash('BIP0340/nonce', numTo32b(t), P.toRawX(), m);
+  const k0h = yield* taggedHash('BIP0340/nonce', numTo32b(t), P.toRawX(), m);
   const k0 = mod(k0h, n);
   if (k0 === _0n) throw new Error('sign: Creation of signature failed. k is zero');
 
   // R = k'⋅G
   const R = Point.fromPrivateKey(k0);
   const k = hasEvenY(R) ? k0 : n - k0;
-  const e = await createChallenge(R.x, P, m);
+  const e = yield* createChallenge(R.x, P, m);
   const sig = new SchnorrSignature(R.x, mod(k + e * d, n)).toRawBytes();
-  const isValid = await schnorrVerify(sig, m, P.toRawX());
+  const isValid = yield* schnorrVerify(sig, m, P.toRawX());
 
   if (!isValid) throw new Error('sign: Invalid signature produced');
   return sig;
 }
 
-// no schnorrSignSync() for now
-
 /**
  * Verifies Schnorr signature.
  */
-async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
+function* schnorrVerify(
+  signature: Hex | SchnorrSignature,
+  message: Hex,
+  publicKey: PubKey
+): U8AGenerator<boolean> {
   const raw = signature instanceof SchnorrSignature;
   let sig: SchnorrSignature;
   try {
@@ -1370,7 +1344,7 @@ async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Prom
   } catch (error) {
     return false;
   }
-  const e = await createChallenge(r, P, m);
+  const e = yield* createChallenge(r, P, m);
   // R = s⋅G - e⋅P
   // -eP == (n-e)P
   const R = Point.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
@@ -1381,8 +1355,14 @@ async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Prom
 export const schnorr = {
   Signature: SchnorrSignature,
   getPublicKey: schnorrGetPublicKey,
-  sign: schnorrSign,
-  verify: schnorrVerify,
+  sign: (message: Hex, privateKey: PrivKey, auxRand?: Hex): Promise<Uint8Array> =>
+    callAsync(schnorrSign(message, privateKey, auxRand)),
+  verify: (signature: Hex | SchnorrSignature, message: Hex, publicKey: PubKey): Promise<boolean> =>
+    callAsync(schnorrVerify(signature, message, publicKey)),
+  signSync: (message: Hex, privateKey: PrivKey, auxRand?: Hex): Uint8Array =>
+    callSync(schnorrSign(message, privateKey, auxRand)),
+  verifySync: (signature: Hex | SchnorrSignature, message: Hex, publicKey: PubKey): boolean =>
+    callSync(schnorrVerify(signature, message, publicKey)),
 };
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
@@ -1446,13 +1426,15 @@ export const utils = {
   bytesToHex,
   mod,
 
-  sha256: async (message: Uint8Array): Promise<Uint8Array> => {
+  sha256: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
     if (crypto.web) {
-      const buffer = await crypto.web.subtle.digest('SHA-256', message.buffer);
+      const buffer = await crypto.web.subtle.digest('SHA-256', concatBytes(...messages));
       return new Uint8Array(buffer);
     } else if (crypto.node) {
       const { createHash } = crypto.node;
-      return Uint8Array.from(createHash('sha256').update(message).digest());
+      const hash = createHash('sha256');
+      messages.forEach((m) => hash.update(m));
+      return Uint8Array.from(hash.digest());
     } else {
       throw new Error("The environment doesn't have sha256 function");
     }
@@ -1495,3 +1477,47 @@ export const utils = {
     return cached;
   },
 };
+
+// Sync/Async adaptor
+// Idea from https://github.com/loganfsmyth/gensync
+
+type Sha256Args = { type: 'sha256'; messages: Uint8Array[] };
+type HmacSha256Args = { type: 'hmacSha256'; key: Uint8Array; messages: Uint8Array[] };
+type U8AGeneratorArgs = Sha256Args | HmacSha256Args;
+type U8AGenerator<Ret> = Generator<U8AGeneratorArgs, Ret, Uint8Array>;
+
+function* sha256(...messages: Uint8Array[]): U8AGenerator<Uint8Array> {
+  return yield { type: 'sha256', messages };
+}
+
+function* hmacSha256(key: Uint8Array, ...messages: Uint8Array[]): U8AGenerator<Uint8Array> {
+  return yield { type: 'hmacSha256', key, messages };
+}
+
+function callSync<Ret>(gen: U8AGenerator<Ret>): Ret {
+  let result = gen.next();
+  while (!result.done) {
+    if (result.value.type === 'hmacSha256') {
+      if (typeof utils.hmacSha256Sync !== 'function')
+        throw new Error('utils.hmacSha256Sync is undefined, you need to set it');
+      result = gen.next(utils.hmacSha256Sync(result.value.key, ...result.value.messages));
+    } else if (result.value.type === 'sha256') {
+      if (typeof utils.sha256Sync !== 'function')
+        throw new Error('utils.sha256Sync is undefined, you need to set it');
+      result = gen.next(utils.sha256Sync(...result.value.messages));
+    }
+  }
+  return result.value;
+}
+
+async function callAsync<Ret>(gen: U8AGenerator<Ret>): Promise<Ret> {
+  let result = gen.next();
+  while (!result.done) {
+    if (result.value.type === 'hmacSha256') {
+      result = gen.next(await utils.hmacSha256(result.value.key, ...result.value.messages));
+    } else if (result.value.type === 'sha256') {
+      result = gen.next(await utils.sha256(...result.value.messages));
+    }
+  }
+  return result.value;
+}
