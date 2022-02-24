@@ -236,6 +236,10 @@ const utils: {
   sha256Sync: undefined;
   hmacSha256Sync: undefined;
 
+  // BIP0340-style tagged hashes
+  taggedHash: (tag: string, ...messages: Uint8Array[]) => Promise<Uint8Array>;
+  taggedHashSync: (tag: string, ...messages: Uint8Array[]) => Uint8Array;
+
   // 1. Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
   // 2. Precomputes point multiplication table. Is done by default on first `getPublicKey()` call.
   // If you want your first getPublicKey to take 0.16ms instead of 20ms, make sure to call

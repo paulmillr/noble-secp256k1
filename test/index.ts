@@ -465,6 +465,43 @@ describe('secp256k1', () => {
         expect(secp.utils.isValidPrivateKey(d)).toBe(expected);
       }
     });
+    it('privateAdd()', () => {
+      for (const vector of privates.valid.add) {
+        const { a, b, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.privateAdd(a, b))).toBe(expected);
+      }
+    });
+    it('privateNegate()', () => {
+      for (const vector of privates.valid.negate) {
+        const { a, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.privateNegate(a))).toBe(expected);
+      }
+    });
+    it('pointAddScalar()', () => {
+      for (const vector of points.valid.pointAddScalar) {
+        const { description, P, d, expected } = vector;
+        const compressed = !!expected && expected.length === 66; // compressed === 33 bytes
+        expect(secp.utils.bytesToHex(secp.utils.pointAddScalar(P, d, compressed))).toBe(expected);
+      }
+    });
+    it('pointAddScalar() invalid', () => {
+      for (const vector of points.invalid.pointAddScalar) {
+        const { P, d, exception } = vector;
+        expect(() => secp.utils.pointAddScalar(P, d)).toThrowError(RegExp(`${exception}`));
+      }
+    });
+    it('pointMultiply()', () => {
+      for (const vector of points.valid.pointMultiply) {
+        const { P, d, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.pointMultiply(P, d, true))).toBe(expected);
+      }
+    });
+    it('pointMultiply() invalid', () => {
+      for (const vector of points.invalid.pointMultiply) {
+        const { P, d, exception } = vector;
+        expect(() => secp.utils.pointMultiply(P, d)).toThrowError(RegExp(`${exception}`));
+      }
+    });
   });
 
   describe('wychenproof vectors', () => {

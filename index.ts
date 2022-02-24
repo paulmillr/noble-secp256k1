@@ -1233,16 +1233,27 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
 
 // Schnorr-specific code as per BIP0340.
 
-function* taggedHash(tag: string, ...messages: Uint8Array[]): U8AGenerator<bigint> {
-  const tagB = new Uint8Array(tag.split('').map((c) => c.charCodeAt(0)));
-  const tagH = yield* sha256(tagB);
-  const h = yield* sha256(concatBytes(tagH, tagH, ...messages));
-  return bytesToNumber(h);
+const TAGS = {
+  challenge: 'BIP0340/challenge',
+  aux: 'BIP0340/aux',
+  nonce: 'BIP0340/nonce',
+} as const;
+/** An object mapping tags to their tagged hash prefix of [SHA256(tag) | SHA256(tag)] */
+const TAGGED_HASH_PREFIXES: { [tag: string]: Uint8Array } = {};
+function* taggedHash(tag: string, ...messages: Uint8Array[]): U8AGenerator<Uint8Array> {
+  let tagP = TAGGED_HASH_PREFIXES[tag];
+  if (tagP === undefined) {
+    const tagH = yield* sha256(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
+    tagP = concatBytes(tagH, tagH);
+    TAGGED_HASH_PREFIXES[tag] = tagP;
+  }
+
+  return yield* sha256(tagP, ...messages);
 }
 
 function* createChallenge(x: bigint, P: Point, message: Uint8Array): U8AGenerator<bigint> {
   const rx = numTo32b(x);
-  const t = yield* taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
+  const t = bytesToNumber(yield* taggedHash('BIP0340/challenge', rx, P.toRawX(), message));
   return mod(t, CURVE.n);
 }
 
@@ -1303,10 +1314,10 @@ function* schnorrSign(
   const d = hasEvenY(P) ? d0 : n - d0;
 
   const t0h = yield* taggedHash('BIP0340/aux', rand);
-  const t = d ^ t0h;
+  const t = d ^ bytesToNumber(t0h);
 
   const k0h = yield* taggedHash('BIP0340/nonce', numTo32b(t), P.toRawX(), m);
-  const k0 = mod(k0h, n);
+  const k0 = mod(bytesToNumber(k0h), n);
   if (k0 === _0n) throw new Error('sign: Creation of signature failed. k is zero');
 
   // R = k'⋅G
@@ -1388,6 +1399,31 @@ export const utils = {
     }
   },
 
+  privateAdd: (privateKey: PrivKey, tweak: PrivKey): Uint8Array => {
+    const p = normalizePrivateKey(privateKey);
+    const t = normalizePrivateKey(tweak);
+    return numTo32b(mod(p + t, CURVE.n));
+  },
+
+  privateNegate: (privateKey: PrivKey): Uint8Array => {
+    const p = normalizePrivateKey(privateKey);
+    return numTo32b(CURVE.n - p);
+  },
+
+  pointAddScalar: (p: PubKey, tweak: PrivKey, isCompressed?: boolean): Uint8Array => {
+    const P = normalizePublicKey(p);
+    const t = normalizePrivateKey(tweak);
+    const Q = Point.BASE.multiplyAndAddUnsafe(P, t, _1n);
+    if (!Q) throw new Error('Tweaked point at infinity');
+    return Q.toRawBytes(isCompressed);
+  },
+
+  pointMultiply: (p: PubKey, tweak: PrivKey, isCompressed?: boolean): Uint8Array => {
+    const P = normalizePublicKey(p);
+    const t = normalizePrivateKey(tweak);
+    return P.multiply(t).toRawBytes(isCompressed);
+  },
+
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
    * and convert them into private key, with the modulo bias being neglible.
@@ -1461,6 +1497,12 @@ export const utils = {
 
   sha256Sync: undefined as Sha256FnSync,
   hmacSha256Sync: undefined as HmacFnSync,
+
+  taggedHash: (tag: string, ...messages: Uint8Array[]): Promise<Uint8Array> =>
+    callAsync(taggedHash(tag, ...messages)),
+
+  taggedHashSync: (tag: string, ...messages: Uint8Array[]): Uint8Array =>
+    callSync(taggedHash(tag, ...messages)),
 
   /**
    * 1. Returns cached point which you can use to pass to `getSharedSecret` or `#multiply` by it.
