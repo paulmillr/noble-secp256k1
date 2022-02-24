@@ -228,6 +228,8 @@ const utils: {
   bytesToHex: typeof bytesToHex;
   // Modular division over curve prime
   mod: (number: number | bigint, modulo = CURVE.P): bigint;
+  // Concatenates several Uint8Arrays into one
+  concatBytes: (...arrays: Uint8Array[]): Uint8Array;
   sha256: (message: Uint8Array) => Promise<Uint8Array>;
   hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
 
