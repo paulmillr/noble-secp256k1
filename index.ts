@@ -1259,18 +1259,8 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
 
 // Schnorr-specific code as per BIP0340.
 
-// Strip first byte that signifies whether y is positive or negative, leave only x.
-async function taggedHash(tag: string, ...messages: Uint8Array[]): Promise<bigint> {
-  const tagB = new Uint8Array(tag.split('').map((c) => c.charCodeAt(0)));
-  const tagH = await utils.sha256(tagB);
-  const h = await utils.sha256(concatBytes(tagH, tagH, ...messages));
-  return bytesToNumber(h);
-}
-
-async function createChallenge(x: bigint, P: Point, message: Uint8Array) {
-  const rx = numTo32b(x);
-  const t = await taggedHash('BIP0340/challenge', rx, P.toRawX(), message);
-  return mod(t, CURVE.n);
+function finalizeSchnorrChallenge(ch: Uint8Array): bigint {
+  return mod(bytesToNumber(ch), CURVE.n);
 }
 
 function hasEvenY(point: Point): boolean {
@@ -1307,7 +1297,38 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
   return Point.fromPrivateKey(privateKey).toRawX();
 }
 
-//
+function initSchnorrSigArgs(message: Hex, privateKey: PrivKey, auxRand: Hex) {
+  if (message == null) throw new TypeError(`sign: Expected valid message, not "${message}"`);
+  const m = ensureBytes(message);
+  const d0 = normalizePrivateKey(privateKey); // <== does isWithinCurveOrder check
+  const rand = ensureBytes(auxRand);
+  if (rand.length !== 32) throw new TypeError('sign: Expected 32 bytes of aux randomness');
+
+  const P = Point.fromPrivateKey(d0);
+  const px = P.toRawX();
+  const d = hasEvenY(P) ? d0 : CURVE.n - d0;
+  return { m, P, px, d, rand };
+}
+
+function initSchnorrNonce(d: bigint, t0h: Uint8Array): Uint8Array {
+  return numTo32b(d ^ bytesToNumber(t0h));
+}
+
+function finalizeSchnorrNonce(k0h: Uint8Array) {
+  const k0 = mod(bytesToNumber(k0h), CURVE.n);
+  if (k0 === _0n) throw new Error('sign: Creation of signature failed. k is zero');
+
+  // R = k'⋅G
+  const R = Point.fromPrivateKey(k0);
+  const rx = R.toRawX();
+  const k = hasEvenY(R) ? k0 : CURVE.n - k0;
+  return { R, rx, k };
+}
+
+function finalizeSchnorrSig(R: Point, k: bigint, e: bigint, d: bigint): Uint8Array {
+  return new SchnorrSignature(R.x, mod(k + e * d, CURVE.n)).toRawBytes();
+}
+
 /**
  * Creates Schnorr signature.
  * It verifies itself before producing an output, which makes it safer.
@@ -1320,57 +1341,53 @@ async function schnorrSign(
   privateKey: PrivKey,
   auxRand: Hex = utils.randomBytes()
 ): Promise<Uint8Array> {
-  if (message == null) throw new TypeError(`sign: Expected valid message, not "${message}"`);
-  const { n } = CURVE;
-  const m = ensureBytes(message);
-  const d0 = normalizePrivateKey(privateKey); // <== does isWithinCurveOrder check
-  const rand = ensureBytes(auxRand);
-  if (rand.length !== 32) throw new TypeError('sign: Expected 32 bytes of aux randomness');
-
-  const P = Point.fromPrivateKey(d0);
-  const d = hasEvenY(P) ? d0 : n - d0;
-
-  const t0h = await taggedHash('BIP0340/aux', rand);
-  const t = d ^ t0h;
-
-  const k0h = await taggedHash('BIP0340/nonce', numTo32b(t), P.toRawX(), m);
-  const k0 = mod(k0h, n);
-  if (k0 === _0n) throw new Error('sign: Creation of signature failed. k is zero');
-
-  // R = k'⋅G
-  const R = Point.fromPrivateKey(k0);
-  const k = hasEvenY(R) ? k0 : n - k0;
-  const e = await createChallenge(R.x, P, m);
-  const sig = new SchnorrSignature(R.x, mod(k + e * d, n)).toRawBytes();
-  const isValid = await schnorrVerify(sig, m, P.toRawX());
+  const { m, P, px, d, rand } = initSchnorrSigArgs(message, privateKey, auxRand);
+  const t = initSchnorrNonce(d, await utils.taggedHash(TAGS.aux, rand));
+  const { R, rx, k } = finalizeSchnorrNonce(await utils.taggedHash(TAGS.nonce, t, px, m));
+  const e = finalizeSchnorrChallenge(await utils.taggedHash(TAGS.challenge, rx, px, m));
+  const sig = finalizeSchnorrSig(R, k, e, d);
+  const isValid = await schnorrVerify(sig, m, px);
 
   if (!isValid) throw new Error('sign: Invalid signature produced');
   return sig;
 }
 
-// no schnorrSignSync() for now
-
 /**
- * Verifies Schnorr signature.
+ * Creates Schnorr signature synchronously.
+ * It verifies itself before producing an output, which makes it safer.
+ * @param message message (not message hash)
+ * @param privateKey private key
+ * @param auxRand random bytes that would be added to k. Bad RNG won't break it.
  */
-async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
+function schnorrSignSync(
+  message: Hex,
+  privateKey: PrivKey,
+  auxRand: Hex = utils.randomBytes()
+): Uint8Array {
+  const { m, P, px, d, rand } = initSchnorrSigArgs(message, privateKey, auxRand);
+  const t = initSchnorrNonce(d, utils.taggedHashSync(TAGS.aux, rand));
+  const { R, rx, k } = finalizeSchnorrNonce(utils.taggedHashSync(TAGS.nonce, t, px, m));
+  const e = finalizeSchnorrChallenge(utils.taggedHashSync(TAGS.challenge, rx, px, m));
+  const sig = finalizeSchnorrSig(R, k, e, d);
+  const isValid = schnorrVerifySync(sig, m, px);
+
+  if (!isValid) throw new Error('sign: Invalid signature produced');
+  return sig;
+}
+
+function initSchnorrVerify(signature: Hex, message: Hex, publicKey: Hex) {
   const raw = signature instanceof SchnorrSignature;
-  let sig: SchnorrSignature;
-  try {
-    sig = raw ? signature : SchnorrSignature.fromHex(signature);
-    if (raw) sig.assertValidity(); // just in case
-  } catch (error) {
-    return false;
-  }
-  const { r, s } = sig;
-  const m = ensureBytes(message);
-  let P: Point;
-  try {
-    P = normalizePublicKey(publicKey);
-  } catch (error) {
-    return false;
-  }
-  const e = await createChallenge(r, P, m);
+  const sig: SchnorrSignature = raw ? signature : SchnorrSignature.fromHex(signature);
+  if (raw) sig.assertValidity(); // just in case
+
+  return {
+    ...sig,
+    m: ensureBytes(message),
+    P: normalizePublicKey(publicKey),
+  };
+}
+
+function finalizeSchnorrVerify(r: bigint, P: Point, s: bigint, e: bigint): boolean {
   // R = s⋅G - e⋅P
   // -eP == (n-e)P
   const R = Point.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
@@ -1378,11 +1395,43 @@ async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Prom
   return true;
 }
 
+/**
+ * Verifies Schnorr signature.
+ */
+async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
+  try {
+    const { r, s, m, P } = initSchnorrVerify(signature, message, publicKey);
+    const e = finalizeSchnorrChallenge(
+      await utils.taggedHash(TAGS.challenge, numTo32b(r), P.toRawX(), m)
+    );
+    return finalizeSchnorrVerify(r, P, s, e);
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Verifies Schnorr signature synchronously.
+ */
+function schnorrVerifySync(signature: Hex, message: Hex, publicKey: Hex): boolean {
+  try {
+    const { r, s, m, P } = initSchnorrVerify(signature, message, publicKey);
+    const e = finalizeSchnorrChallenge(
+      utils.taggedHashSync(TAGS.challenge, numTo32b(r), P.toRawX(), m)
+    );
+    return finalizeSchnorrVerify(r, P, s, e);
+  } catch (error) {
+    return false;
+  }
+}
+
 export const schnorr = {
   Signature: SchnorrSignature,
   getPublicKey: schnorrGetPublicKey,
   sign: schnorrSign,
   verify: schnorrVerify,
+  signSync: schnorrSignSync,
+  verifySync: schnorrVerifySync,
 };
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
@@ -1398,6 +1447,14 @@ const crypto: { node?: any; web?: any } = {
   web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
 };
 
+const TAGS = {
+  challenge: 'BIP0340/challenge',
+  aux: 'BIP0340/aux',
+  nonce: 'BIP0340/nonce',
+} as const;
+/** An object mapping tags to their tagged hash prefix of [SHA256(tag) | SHA256(tag)] */
+const TAGGED_HASH_PREFIXES: { [tag: string]: Uint8Array } = {};
+
 export const utils = {
   isValidPrivateKey(privateKey: PrivKey) {
     try {
@@ -1406,6 +1463,31 @@ export const utils = {
     } catch (error) {
       return false;
     }
+  },
+
+  privateAdd: (privateKey: PrivKey, tweak: Hex): Uint8Array => {
+    const p = normalizePrivateKey(privateKey);
+    const t = bytesToNumber(ensureBytes(tweak));
+    return numTo32b(mod(p + t, CURVE.n));
+  },
+
+  privateNegate: (privateKey: PrivKey): Uint8Array => {
+    const p = normalizePrivateKey(privateKey);
+    return numTo32b(CURVE.n - p);
+  },
+
+  pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
+    const P = Point.fromHex(p);
+    const t = bytesToNumber(ensureBytes(tweak));
+    const Q = Point.BASE.multiplyAndAddUnsafe(P, t, _1n);
+    if (!Q) throw new Error('Tweaked point at infinity');
+    return Q.toRawBytes(isCompressed);
+  },
+
+  pointMultiply: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
+    const P = Point.fromHex(p);
+    const t = bytesToNumber(ensureBytes(tweak));
+    return P.multiply(t).toRawBytes(isCompressed);
   },
 
   /**
@@ -1446,13 +1528,15 @@ export const utils = {
   bytesToHex,
   mod,
 
-  sha256: async (message: Uint8Array): Promise<Uint8Array> => {
+  sha256: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
     if (crypto.web) {
-      const buffer = await crypto.web.subtle.digest('SHA-256', message.buffer);
+      const buffer = await crypto.web.subtle.digest('SHA-256', concatBytes(...messages));
       return new Uint8Array(buffer);
     } else if (crypto.node) {
       const { createHash } = crypto.node;
-      return Uint8Array.from(createHash('sha256').update(message).digest());
+      const hash = createHash('sha256');
+      messages.forEach((m) => hash.update(m));
+      return Uint8Array.from(hash.digest());
     } else {
       throw new Error("The environment doesn't have sha256 function");
     }
@@ -1479,6 +1563,30 @@ export const utils = {
 
   sha256Sync: undefined as Sha256FnSync,
   hmacSha256Sync: undefined as HmacFnSync,
+
+  taggedHash: async (tag: string, ...messages: Uint8Array[]): Promise<Uint8Array> => {
+    let tagP = TAGGED_HASH_PREFIXES[tag];
+    if (tagP === undefined) {
+      const tagH = await utils.sha256(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
+      tagP = concatBytes(tagH, tagH);
+      TAGGED_HASH_PREFIXES[tag] = tagP;
+    }
+
+    return utils.sha256(tagP, ...messages);
+  },
+
+  taggedHashSync: (tag: string, ...messages: Uint8Array[]): Uint8Array => {
+    if (typeof utils.sha256Sync !== 'function')
+      throw new Error('utils.sha256Sync is undefined, you need to set it');
+    let tagP = TAGGED_HASH_PREFIXES[tag];
+    if (tagP === undefined) {
+      const tagH = utils.sha256Sync(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
+      tagP = concatBytes(tagH, tagH);
+      TAGGED_HASH_PREFIXES[tag] = tagP;
+    }
+
+    return utils.sha256Sync(tagP, ...messages);
+  },
 
   /**
    * 1. Returns cached point which you can use to pass to `getSharedSecret` or `#multiply` by it.
