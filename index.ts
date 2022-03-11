@@ -11,6 +11,9 @@ const _1n = BigInt(1);
 const _2n = BigInt(2);
 const _3n = BigInt(3);
 const _8n = BigInt(8);
+const _32n = BigInt(32);
+const _64n = BigInt(64);
+const _64mask = BigInt('0xffffffffffffffff');
 
 // Curve fomula is y² = x³ + ax + b
 const POW_2_256 = _2n ** BigInt(256);
@@ -693,11 +696,11 @@ const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '
 function bytesToHex(uint8a: Uint8Array): string {
   if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
   // pre-caching improves the speed 6x
-  let hex = '';
+  const a = new Array(uint8a.length); // 40% faster vs progressive string concatenation
   for (let i = 0; i < uint8a.length; i++) {
-    hex += hexes[uint8a[i]];
+    a[i] = hexes[uint8a[i]];
   }
-  return hex;
+  return a.join('');
 }
 
 function numTo32bStr(num: number | bigint): string {
@@ -706,7 +709,15 @@ function numTo32bStr(num: number | bigint): string {
 }
 
 function numTo32b(num: bigint): Uint8Array {
-  return hexToBytes(numTo32bStr(num));
+  if (num > POW_2_256) throw new Error('Expected number < 2^256');
+  let b = BigInt(num);
+  const result = new Uint8Array(32);
+  const view = new DataView(result.buffer);
+  for (let i = 3; i >= 0; i--) {
+    view.setBigUint64(i * 8, b & _64mask);
+    b >>= _64n;
+  }
+  return result;
 }
 
 function numberToHexUnpadded(num: number | bigint): string {
@@ -728,20 +739,42 @@ function hexToBytes(hex: string): Uint8Array {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
   }
   if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex' + hex.length);
-  const array = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < array.length; i++) {
-    const j = i * 2;
-    const hexByte = hex.slice(j, j + 2);
-    const byte = Number.parseInt(hexByte, 16);
-    if (Number.isNaN(byte) || byte < 0) throw new Error('Invalid byte sequence');
-    array[i] = byte;
+  const nBytes = hex.length / 2;
+  const nUint32s = Math.ceil(nBytes / 4);
+  const buf = new ArrayBuffer(nUint32s * 4);
+  const view = new DataView(buf); // This lets us do big endian on all platforms
+  for (let i = hex.length, j = buf.byteLength - 4; i > 0; i -= 8, j -= 4) {
+    const uint32 = Number.parseInt(hex.substring(i - 8, i), 16);
+    view.setUint32(j, uint32);
   }
-  return array;
+  return new Uint8Array(buf, buf.byteLength - nBytes);
 }
 
 // Big Endian
 function bytesToNumber(bytes: Uint8Array): bigint {
-  return hexToNumber(bytesToHex(bytes));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+  let offs = 0;
+  let i = 0;
+  if (bytes.length % 2 === 1) {
+    i += view.getUint8(offs);
+    offs += 1;
+  }
+  if (bytes.length % 4 >= 2) {
+    i <<= 16;
+    i += view.getUint16(offs);
+    offs += 2;
+  }
+  let b = BigInt(i);
+  if (bytes.length % 8 >= 4) {
+    b <<= _32n;
+    b += BigInt(view.getUint32(offs));
+    offs += 4;
+  }
+  for (; offs < bytes.length; offs += 8) {
+    b <<= _64n;
+    b += view.getBigUint64(offs);
+  }
+  return b;
 }
 
 function ensureBytes(hex: Hex): Uint8Array {
