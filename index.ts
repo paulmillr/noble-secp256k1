@@ -534,14 +534,14 @@ export class Point {
   }
 
   /**
-   * Efficiently calculate aP + bQ. Only fast if this == BASE.
+   * Efficiently calculate aP + bQ.
    * Unsafe, can expose private key, if used incorrectly.
    * TODO: Utilize Shamir's trick
    * @returns non-zero affine point
    */
   multiplyAndAddUnsafe(Q: Point, a: bigint, b: bigint): Point | undefined {
     const P = JacobianPoint.fromAffine(this);
-    const aP = P.multiply(a);
+    const aP = a === _0n || a === _1n || this !== Point.BASE ? P.multiplyUnsafe(a) : P.multiply(a);
     const bQ = JacobianPoint.fromAffine(Q).multiplyUnsafe(b);
     const sum = aP.add(bQ);
     return sum.equals(JacobianPoint.ZERO) ? undefined : sum.toAffine();
