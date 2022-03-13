@@ -311,8 +311,8 @@ Benchmarks measured with Apple M1 on MacOS 12.
     getSharedSecret aka ecdh x 576 ops/sec @ 1ms/op
     getSharedSecret (precomputed) x 6,688 ops/sec @ 149μs/op
     Point.fromHex (decompression) x 12,553 ops/sec @ 79μs/op
-    schnorr.sign x 687 ops/sec @ 1ms/op
-    schnorr.verify x 990 ops/sec @ 1ms/op
+    schnorr.sign x 695 ops/sec @ 1ms/op
+    schnorr.verify x 1,010 ops/sec @ 989μs/op
 
 Compare to other libraries (`openssl` uses native bindings, not JS):
 

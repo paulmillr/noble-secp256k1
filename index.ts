@@ -1341,7 +1341,7 @@ async function schnorrSign(
   privateKey: PrivKey,
   auxRand: Hex = utils.randomBytes()
 ): Promise<Uint8Array> {
-  const { m, P, px, d, rand } = initSchnorrSigArgs(message, privateKey, auxRand);
+  const { m, px, d, rand } = initSchnorrSigArgs(message, privateKey, auxRand);
   const t = initSchnorrNonce(d, await utils.taggedHash(TAGS.aux, rand));
   const { R, rx, k } = finalizeSchnorrNonce(await utils.taggedHash(TAGS.nonce, t, px, m));
   const e = finalizeSchnorrChallenge(await utils.taggedHash(TAGS.challenge, rx, px, m));
@@ -1364,7 +1364,7 @@ function schnorrSignSync(
   privateKey: PrivKey,
   auxRand: Hex = utils.randomBytes()
 ): Uint8Array {
-  const { m, P, px, d, rand } = initSchnorrSigArgs(message, privateKey, auxRand);
+  const { m, px, d, rand } = initSchnorrSigArgs(message, privateKey, auxRand);
   const t = initSchnorrNonce(d, utils.taggedHashSync(TAGS.aux, rand));
   const { R, rx, k } = finalizeSchnorrNonce(utils.taggedHashSync(TAGS.nonce, t, px, m));
   const e = finalizeSchnorrChallenge(utils.taggedHashSync(TAGS.challenge, rx, px, m));
