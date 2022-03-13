@@ -1,6 +1,7 @@
 import * as fc from 'fast-check';
 import * as secp from '..';
 import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
 import * as sysPath from 'path';
 import * as ecdsa from './vectors/ecdsa.json';
 import * as ecdh from './vectors/ecdh.json';
@@ -13,6 +14,12 @@ const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), '
 const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
 // prettier-ignore
 const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
+
+secp.utils.sha256Sync = (...messages: Uint8Array[]): Uint8Array => {
+  const sha256 = createHash('sha256');
+  messages.forEach(m => sha256.update(m));
+  return sha256.digest();
+}
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
@@ -367,16 +374,22 @@ describe('secp256k1', () => {
       const [index, sec, pub, rnd, msg, expSig, passes, comment] = vec;
       it(`should sign with Schnorr scheme vector ${index}`, async () => {
         if (sec) {
-          const sig = await secp.schnorr.sign(msg, sec, rnd);
           expect(hex(secp.schnorr.getPublicKey(sec))).toBe(pub.toLowerCase());
+          const sig = await secp.schnorr.sign(msg, sec, rnd);
+          const sigS = secp.schnorr.signSync(msg, sec, rnd);
           expect(hex(sig)).toBe(expSig.toLowerCase());
-          expect(await secp.schnorr.verify(sig, msg, pub)).toBe(true);
+          expect(hex(sigS)).toBe(expSig.toLowerCase());
+          expect(await secp.schnorr.verify(sigS, msg, pub)).toBe(true);
+          expect(secp.schnorr.verifySync(sig, msg, pub)).toBe(true);
         } else {
           const passed = await secp.schnorr.verify(expSig, msg, pub);
+          const passedS = secp.schnorr.verifySync(expSig, msg, pub);
           if (passes === 'TRUE') {
             expect(passed).toBeTruthy();
+            expect(passedS).toBeTruthy();
           } else {
             expect(passed).toBeFalsy();
+            expect(passedS).toBeFalsy();
           }
         }
       });
@@ -450,6 +463,43 @@ describe('secp256k1', () => {
       for (const vector of privates.valid.isPrivate) {
         const { d, expected } = vector;
         expect(secp.utils.isValidPrivateKey(d)).toBe(expected);
+      }
+    });
+    it('privateAdd()', () => {
+      for (const vector of privates.valid.add) {
+        const { a, b, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.privateAdd(a, b))).toBe(expected);
+      }
+    });
+    it('privateNegate()', () => {
+      for (const vector of privates.valid.negate) {
+        const { a, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.privateNegate(a))).toBe(expected);
+      }
+    });
+    it('pointAddScalar()', () => {
+      for (const vector of points.valid.pointAddScalar) {
+        const { description, P, d, expected } = vector;
+        const compressed = !!expected && expected.length === 66; // compressed === 33 bytes
+        expect(secp.utils.bytesToHex(secp.utils.pointAddScalar(P, d, compressed))).toBe(expected);
+      }
+    });
+    it('pointAddScalar() invalid', () => {
+      for (const vector of points.invalid.pointAddScalar) {
+        const { P, d, exception } = vector;
+        expect(() => secp.utils.pointAddScalar(P, d)).toThrowError(RegExp(`${exception}`));
+      }
+    });
+    it('pointMultiply()', () => {
+      for (const vector of points.valid.pointMultiply) {
+        const { P, d, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.pointMultiply(P, d, true))).toBe(expected);
+      }
+    });
+    it('pointMultiply() invalid', () => {
+      for (const vector of points.invalid.pointMultiply) {
+        const { P, d, exception } = vector;
+        expect(() => secp.utils.pointMultiply(P, d)).toThrowError(RegExp(`${exception}`));
       }
     });
   });

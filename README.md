@@ -231,10 +231,14 @@ const utils: {
   sha256: (message: Uint8Array) => Promise<Uint8Array>;
   hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
 
-  // You can set up your synchronous methods for `signSync` to work. The argument order is
-  // identical to async methods from above
+  // You can set up your synchronous methods for `signSync`/`signSchnorrSync` to work.
+  // The argument order is identical to async methods from above
   sha256Sync: undefined;
   hmacSha256Sync: undefined;
+
+  // BIP0340-style tagged hashes
+  taggedHash: (tag: string, ...messages: Uint8Array[]) => Promise<Uint8Array>;
+  taggedHashSync: (tag: string, ...messages: Uint8Array[]) => Uint8Array;
 
   // 1. Returns cached point which you can use to pass to `getSharedSecret` or to `#multiply` by it.
   // 2. Precomputes point multiplication table. Is done by default on first `getPublicKey()` call.
