@@ -33,8 +33,11 @@ run(async (windowSize) => {
   // await mark('getPublicKey 256 bit', samples * 10, () => {
   //   secp.getPublicKey('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb');
   // });
+
+  let i = 0;
+  const privateKeys = new Array(2500).fill(0).map(() => secp.utils.randomPrivateKey());
   await mark('getPublicKey(utils.randomPrivateKey())', 2500, () => {
-    secp.getPublicKey(secp.utils.randomPrivateKey());
+    secp.getPublicKey(privateKeys[i++]);
   });
 
   const priv = 'f6fc7fd5acaf8603709160d203253d5cd17daa307483877ad811ec8411df56d2';
@@ -68,7 +71,7 @@ run(async (windowSize) => {
     secp.getSharedSecret(priv, pub2Pre);
   });
 
-  let i = 0;
+  i = 0;
   await mark('Point.fromHex (decompression)', 6000, () => {
     const p = points[i++ % points.length];
     secp.Point.fromHex(p);
@@ -80,6 +83,27 @@ run(async (windowSize) => {
   const ssig = await secp.schnorr.sign(smsg, spri);
   await mark('schnorr.sign', 350, () => secp.schnorr.sign(smsg, spri));
   await mark('schnorr.verify', 500, () => secp.schnorr.verify(ssig, smsg, spub));
+
+  const tweaks = privateKeys.map((pk) => BigInt(`0x${secp.utils.bytesToHex(pk)}`));
+  i = 0;
+  await mark('multiply (BPSJ8)', 1000, () => {
+    new secp.BPSJ8(secp.Point.BASE).multiply(tweaks[i++]);
+  });
+  i = 0;
+  await mark('multiply (precomputed)', 2500, () => {
+    secp.Point.BASE.multiply(tweaks[i++]);
+  });
+  const P = secp.Point.fromHex(points[0]);
+  i = 0;
+  await mark('multiply (not precomputed)', 500, () => {
+    P.multiply(tweaks[i++]);
+  });
+  i = 0;
+  await mark('multiplyUnsafe', 1000, () => {
+    secp.Point.BASE.multiplyUnsafe(tweaks[i++]);
+  });
+
+
 
   console.log();
   logMem();

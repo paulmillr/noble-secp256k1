@@ -360,6 +360,107 @@ class JacobianPoint {
 // Stores precomputed values for points.
 const pointPrecomputes = new WeakMap<Point, JacobianPoint[]>();
 
+function *genBits(bytes: Uint8Array): Generator<0 | 1> {
+  for (const B of bytes) {
+    yield B & 0x80 ? 1 : 0;
+    yield B & 0x40 ? 1 : 0;
+    yield B & 0x20 ? 1 : 0;
+    yield B & 0x10 ? 1 : 0;
+    yield B & 0x08 ? 1 : 0;
+    yield B & 0x04 ? 1 : 0;
+    yield B & 0x02 ? 1 : 0;
+    yield B & 0x01 ? 1 : 0;
+  }
+}
+
+// Kwang Ho Kim, Junyop Choe, Song Yun Kim, Namsu Kim, Sekung Hong.
+// Speeding up regular elliptic curve scalar multiplication without precomputation.
+// Advances in Mathematics of Communications, 2020, 14 (4) : 703-726.
+// doi: 10.3934/amc.2020090
+//
+// This algorithm is similar to standard double-and-add, but the number of
+// operations is not data dependent, making it suitable for use with secret
+// keys.
+export class BPSJ8 {
+  private T = [_0n, _0n, _0n, _0n, _0n];
+
+  constructor(private readonly P: Point) {}
+
+  multiply(scalar: bigint): Point {
+    if (scalar === _0n) return Point.ZERO;
+    if (scalar === _1n) return this.P;
+    if (scalar < _1n || scalar >= CURVE.P - _1n) throw new Error("Expecting scalar between 2 and P - 1");
+
+    const scalarBits = genBits(numTo32b(scalar));
+    while (!scalarBits.next().value);
+
+    this.setup();
+    for (const ki of scalarBits) this.ladd(ki);
+    return this.recover();
+  }
+
+  private setup() {
+    const t5 = mod(this.P.y ** _2n);                  //  2,3
+    this.T[2] = mod(this.P.x * t5);                   //  1,4
+    this.T[0] = mod(this.T[2] * BigInt(12));          //  5-7,9
+    this.T[2] = mod(this.P.x ** _2n);                 //  1,8
+    this.T[4] = mod(this.T[2] * BigInt(3));           // 10-11
+    this.T[2] = mod(this.T[4] + CURVE.a);             // 12
+    this.T[4] = mod(_2n * this.T[2]);                 // 13
+    this.T[3] = mod(this.T[2] ** _2n);                // 14
+    this.T[2] = mod(t5 ** _2n);                       // 15
+    this.T[3] = mod(this.T[3] - this.T[0]);           // 16
+    this.T[1] = mod(this.T[2] * BigInt(16));          // 17-20
+    this.T[2] = _0n;                                  // 21
+  }
+
+  // 8M + 4S + 9A
+  private ladd(b: 0 | 1) {
+    this.T[3-b] = mod(this.T[3-b] - this.T[2+b]);     //  1
+    let t5 = mod(this.T[4] * this.T[2+b]);            //  2
+    t5 = mod(this.T[1] + t5);                         //  3
+    let t6 = mod(t5 * this.T[3-b]);                   //  4
+    const t7 = mod(t5 ** _2n);                        //  5
+    t5 = mod(this.T[4] * t6);                         //  6
+    t5 = mod(t7 + t5);                                //  7
+    this.T[4] = mod(this.T[1] * t6);                  //  8
+    this.T[1] = mod(t6 ** _2n);                       //  9
+    this.T[0] = mod(this.T[0] * this.T[1]);           // 10-11
+    this.T[1] = mod(this.T[4] * this.T[1]);           // 12-13
+    t6 = mod(this.T[3-b] ** _2n);                     // 14
+    this.T[4] = mod(this.T[2+b] * t6);                // 15
+    this.T[4] = mod(this.T[4] - t7 + this.T[4] - t5); // 16-18
+    this.T[3-b] = mod(t7 * t5);                       // 19
+    t6 = this.T[4];                                   // 20
+    t6 = ((t6 & _1n) ? (t6 + CURVE.P) : t6) / _2n;    // 20
+    t6 = mod(t6 ** _2n);                              // 21
+    this.T[2+b] = mod(t6 - this.T[0] - this.T[3-b]);  // 22-23
+  }
+
+  private recover(): Point {
+    this.T[3] = mod(this.P.y * this.T[0]);            //  1 y_0*X_0
+    let t5 = mod(this.T[3] ** _2n);                   //  2 (y_0*X_0)^2
+    t5 = mod(t5 * BigInt(4));                         //  3-4 4*(y_0*X_0)^2
+    const t6 = mod(t5 * this.T[2]);                   //  5 4*(y_0*X_0)^2*X_1
+    this.T[0] = mod(t6 * this.T[4]);                  //  6 4*(y_0*X_0)^2*M*X_1
+    const t7 = mod(this.T[0] * this.T[3]);            //  7 4*(y_0*X_0)^3*M*X_1
+    this.T[0] = mod(this.P.x * this.T[1]);            //  8 x_0*Y_0
+    this.T[1] = mod(this.T[0] ** _2n);                //  9 (x_0*Y_0)^2
+    this.T[3] = mod(this.T[1] * this.T[0]);           // 10 (x_0*Y_0)^3
+    this.T[1] = mod(this.T[3] * BigInt(27));          // 11-17 27*(x_0*Y_0)^3
+    this.T[4] = invert(this.T[1]);                    // 18 1/(27*(x_0*Y_0)^3)
+    this.T[1] = mod(this.T[4] * t7);                  // 19 almost y_1
+    this.T[1] = mod(this.T[1] + this.P.y);            // 20 y_1
+    this.T[3] = mod(this.T[4] * this.T[0]);           // 21 1/(27*(x_0*Y_0)^2)
+    t5 = mod(this.T[3] * BigInt(3));                  // 22-23 1/(9*(x_0*Y_0)^2)
+    this.T[0] = mod(t5 * t6);                         // 24 almost x_1
+    this.T[0] = mod(this.T[0] + this.P.x);            // 25 x_1
+    // x_1 = 4*(y_0*X_0)^2*X_1 / (9*(x_0*Y_0)^2) + x_0
+    // y_1 = 4*(y_0*X_0)^3*M*X_1 / (27*(x_0*Y_0)^3) + y_0
+    return new Point(this.T[0], this.T[1]);
+  }
+}
+
 /**
  * Default Point works in default aka affine coordinates: (x, y)
  */
@@ -531,6 +632,10 @@ export class Point {
 
   multiply(scalar: number | bigint) {
     return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
+  }
+
+  multiplyUnsafe(scalar: number | bigint) {
+    return JacobianPoint.fromAffine(this).multiplyUnsafe(normalizeScalar(scalar)).toAffine();
   }
 
   /**
