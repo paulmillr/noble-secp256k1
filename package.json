@@ -15,7 +15,8 @@
     "format": "prettier --print-width 100 --single-quote --write index.ts",
     "test": "jest",
     "coverage": "jest --coverage",
-    "bench": "node test/benchmark.js"
+    "bench": "node test/benchmark.js",
+    "check": "node test/check.js"
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
