@@ -387,16 +387,18 @@ export class BPSJ8 {
   constructor(private readonly P: Point) {}
 
   multiply(scalar: bigint): Point {
-    if (scalar === _0n) return Point.ZERO;
-    if (scalar === _1n) return this.P;
-    if (scalar < _1n || scalar >= CURVE.P - _1n) throw new Error("Expecting scalar between 2 and P - 1");
+    if (!isValidFieldElement(scalar)) throw new Error("Expecting valid field element");
 
     const scalarBits = genBits(numTo32b(scalar));
-    while (!scalarBits.next().value);
+    this.setup();
+    while (!scalarBits.next().value) this.ladd(0);
 
     this.setup();
     for (const ki of scalarBits) this.ladd(ki);
-    return this.recover();
+    const P = this.recover();
+    if (scalar === _1n) return this.P;
+    if (scalar === CURVE.P - _1n) return this.P.negate();
+    return P;
   }
 
   private setup() {
@@ -631,7 +633,10 @@ export class Point {
   }
 
   multiply(scalar: number | bigint) {
-    return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
+    if (this._WINDOW_SIZE) {
+      return JacobianPoint.fromAffine(this).multiply(scalar, this).toAffine();
+    }
+    return new BPSJ8(this).multiply(normalizeScalar(scalar));
   }
 
   multiplyUnsafe(scalar: number | bigint) {
