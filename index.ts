@@ -130,7 +130,7 @@ class JacobianPoint {
     const A = mod(X1 ** _2n);
     const B = mod(Y1 ** _2n);
     const C = mod(B ** _2n);
-    const D = mod(_2n * (mod((X1 + B) ** _2n) - A - C));
+    const D = mod(_4n * X1 * B); // simplification of D = 2 * ((X1+B)² - A - C)
     const E = mod(_3n * A);
     const F = mod(E ** _2n);
     const X3 = mod(F - _2n * D);
