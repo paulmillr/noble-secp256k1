@@ -10,6 +10,7 @@ const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
 const _3n = BigInt(3);
+const _4n = BigInt(4);
 const _8n = BigInt(8);
 
 // Curve fomula is y² = x³ + ax + b
