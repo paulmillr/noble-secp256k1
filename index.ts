@@ -13,13 +13,13 @@ const _3n = BigInt(3);
 const _8n = BigInt(8);
 
 // Curve fomula is y² = x³ + ax + b
-const POW_2_256 = _2n ** BigInt(256);
+const POW_2_256 = BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639936');
 const CURVE = {
   // Params: a, b
   a: _0n,
   b: BigInt(7),
   // Field over which we'll do calculations
-  P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
+  P: POW_2_256 - BigInt('4294967296') - BigInt(977),
   // Curve order, a number of valid points in the field
   n: POW_2_256 - BigInt('432420386565659656852420866394968145599'),
   // Cofactor. It's 1, so other subgroups don't exist, and default subgroup is prime-order
@@ -105,8 +105,8 @@ class JacobianPoint {
     if (!(other instanceof JacobianPoint)) throw new TypeError('JacobianPoint expected');
     const { x: X1, y: Y1, z: Z1 } = this;
     const { x: X2, y: Y2, z: Z2 } = other;
-    const Z1Z1 = mod(Z1 ** _2n);
-    const Z2Z2 = mod(Z2 ** _2n);
+    const Z1Z1 = mod(Z1 * Z1);
+    const Z2Z2 = mod(Z2 * Z2);
     const U1 = mod(X1 * Z2Z2);
     const U2 = mod(X2 * Z1Z1);
     const S1 = mod(mod(Y1 * Z2) * Z2Z2);
@@ -127,12 +127,12 @@ class JacobianPoint {
   // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
   double(): JacobianPoint {
     const { x: X1, y: Y1, z: Z1 } = this;
-    const A = mod(X1 ** _2n);
-    const B = mod(Y1 ** _2n);
-    const C = mod(B ** _2n);
-    const D = mod(_2n * (mod((X1 + B) ** _2n) - A - C));
+    const A = mod(X1 * X1);
+    const B = mod(Y1 * Y1);
+    const C = mod(B * B);
+    const D = mod(_2n * (mod((X1 + B) * (X1 + B)) - A - C));
     const E = mod(_3n * A);
-    const F = mod(E ** _2n);
+    const F = mod(E * E);
     const X3 = mod(F - _2n * D);
     const Y3 = mod(E * (D - X3) - _8n * C);
     const Z3 = mod(_2n * Y1 * Z1);
@@ -151,8 +151,8 @@ class JacobianPoint {
     if (X2 === _0n || Y2 === _0n) return this;
     if (X1 === _0n || Y1 === _0n) return other;
     // We're using same code in equals()
-    const Z1Z1 = mod(Z1 ** _2n);
-    const Z2Z2 = mod(Z2 ** _2n);
+    const Z1Z1 = mod(Z1 * Z1);
+    const Z2Z2 = mod(Z2 * Z2);
     const U1 = mod(X1 * Z2Z2);
     const U2 = mod(X2 * Z1Z1);
     const S1 = mod(mod(Y1 * Z2) * Z2Z2);
@@ -167,10 +167,10 @@ class JacobianPoint {
         return JacobianPoint.ZERO;
       }
     }
-    const HH = mod(H ** _2n);
+    const HH = mod(H * H);
     const HHH = mod(H * HH);
     const V = mod(U1 * HH);
-    const X3 = mod(r ** _2n - HHH - _2n * V);
+    const X3 = mod(r * r - HHH - _2n * V);
     const Y3 = mod(r * (V - X3) - S1 * HHH);
     const Z3 = mod(Z1 * Z2 * H);
     return new JacobianPoint(X3, Y3, Z3);
@@ -856,7 +856,7 @@ function invertBatch(nums: bigint[], p: bigint = CURVE.P): bigint[] {
 }
 
 const divNearest = (a: bigint, b: bigint) => (a + b / _2n) / b;
-const POW_2_128 = _2n ** BigInt(128);
+const POW_2_128 = BigInt('340282366920938463463374607431768211456');
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalarEndo(k: bigint) {
