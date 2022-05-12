@@ -22,7 +22,7 @@
   "homepage": "https://paulmillr.com/noble/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paulmillr/noble-secp256k1.git"
+    "url": "https://github.com/BatiGencho/noble-secp256k1.git"
   },
   "license": "MIT",
   "browser": {
