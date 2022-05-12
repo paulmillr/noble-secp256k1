@@ -28,7 +28,7 @@
   "browser": {
     "crypto": false
   },
-  "devDependencies": {
+  "dependencies": {
     "@noble/hashes": "~1.0.0",
     "@rollup/plugin-commonjs": "21.0.1",
     "@rollup/plugin-node-resolve": "13.1.3",
