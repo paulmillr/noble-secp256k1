@@ -1500,7 +1500,7 @@ export const utils = {
    */
   hashToPrivateKey: (hash: Hex): Uint8Array => {
     hash = ensureBytes(hash);
-    if (hash.length < 40 || hash.length > 1024)
+    if (hash.length < 32 || hash.length > 1024)
       throw new Error('Expected 40-1024 bytes of private key as per FIPS 186');
     const num = mod(bytesToNumber(hash), CURVE.n);
     // This should never happen
