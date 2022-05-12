@@ -3,7 +3,8 @@
   "version": "1.5.5",
   "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA & Schnorr signatures",
   "files": [
-    "lib"
+    "lib",
+    "build"
   ],
   "main": "lib/index.js",
   "module": "lib/esm/index.js",
