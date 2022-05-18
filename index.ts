@@ -1476,6 +1476,11 @@ export const utils = {
     return numTo32b(CURVE.n - p);
   },
 
+  privateInvert: (privateKey: PrivKey): Uint8Array => {
+    const p = normalizePrivateKey(privateKey);
+    return numTo32b(invert(p, CURVE.n));
+  },
+
   pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
     const P = Point.fromHex(p);
     const t = bytesToNumber(ensureBytes(tweak));

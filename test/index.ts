@@ -477,6 +477,13 @@ describe('secp256k1', () => {
         expect(secp.utils.bytesToHex(secp.utils.privateNegate(a))).toBe(expected);
       }
     });
+    it('privateInvert()', () => {
+      for (const vector of privates.valid.invert) {
+        const { a, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.privateInvert(a))).toBe(expected);
+        expect(secp.utils.bytesToHex(secp.utils.privateInvert(expected))).toBe(a);
+      }
+    });
     it('pointAddScalar()', () => {
       for (const vector of points.valid.pointAddScalar) {
         const { description, P, d, expected } = vector;
