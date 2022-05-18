@@ -1471,6 +1471,12 @@ export const utils = {
     return numTo32b(mod(p + t, CURVE.n));
   },
 
+  privateMultiply: (a: PrivKey, b: PrivKey): Uint8Array => {
+    const aNum = normalizePrivateKey(a);
+    const bNum = normalizePrivateKey(b);
+    return numTo32b(mod(aNum * bNum, CURVE.n));
+  },
+
   privateNegate: (privateKey: PrivKey): Uint8Array => {
     const p = normalizePrivateKey(privateKey);
     return numTo32b(CURVE.n - p);

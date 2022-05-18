@@ -471,6 +471,12 @@ describe('secp256k1', () => {
         expect(secp.utils.bytesToHex(secp.utils.privateAdd(a, b))).toBe(expected);
       }
     });
+    it('privateMultiply()', () => {
+      for (const vector of privates.valid.multiply) {
+        const { a, b, expected } = vector;
+        expect(secp.utils.bytesToHex(secp.utils.privateMultiply(a, b))).toBe(expected);
+      }
+    });
     it('privateNegate()', () => {
       for (const vector of privates.valid.negate) {
         const { a, expected } = vector;
