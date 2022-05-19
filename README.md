@@ -225,9 +225,13 @@ const utils: {
   // Returns `Uint8Array` of x cryptographically secure random bytes.
   randomBytes: (bytesLength?: number) => Uint8Array;
   // Converts Uint8Array to hex string
-  bytesToHex: typeof bytesToHex;
+  bytesToHex(uint8a: Uint8Array): string;
+  hexToBytes(hex: string): Uint8Array;
+  concatBytes(...arrays: Uint8Array[]): Uint8Array;
   // Modular division over curve prime
   mod: (number: number | bigint, modulo = CURVE.P): bigint;
+  // Modular inversion
+  invert(number: bigint, modulo?: bigint): bigint;
   sha256: (message: Uint8Array) => Promise<Uint8Array>;
   hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
 
