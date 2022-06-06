@@ -293,7 +293,7 @@ describe('secp256k1', () => {
     });
     it('should verify random signatures', async () =>
       fc.assert(
-        fc.asyncProperty(FC_BIGINT, fc.hexaString(64, 64), async (privKey, msg) => {
+        fc.asyncProperty(FC_BIGINT, fc.hexaString({minLength: 64, maxLength: 64}), async (privKey, msg) => {
           const pub = secp.getPublicKey(privKey);
           const sig = await secp.sign(msg, privKey);
           expect(secp.verify(sig, msg, pub)).toBeTruthy();
