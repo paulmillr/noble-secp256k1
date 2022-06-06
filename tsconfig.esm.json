@@ -9,7 +9,6 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "esModuleInterop": true,
     "baseUrl": ".",
   },
   "include": ["index.ts"],

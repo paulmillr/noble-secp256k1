@@ -3,7 +3,7 @@
 
 // Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
 // In browser the line is automatically removed during build time: uses crypto.subtle instead.
-import nodeCrypto from 'crypto';
+import * as nodeCrypto from 'crypto';
 
 // Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
 const _0n = BigInt(0);

@@ -10,7 +10,6 @@
     "removeComments": true,
     "preserveConstEnums": true,
     "resolveJsonModule": true,
-    "esModuleInterop": true,
     "baseUrl": ".",
   },
   "include": ["index.ts"],
