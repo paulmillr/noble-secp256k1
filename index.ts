@@ -1493,7 +1493,7 @@ export const utils = {
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
    * and convert them into private key, with the modulo bias being neglible.
-   * As per FIPS 186 B.1.1.
+   * As per FIPS 186 B.4.1.
    * https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
    * @param hash hash output from sha512, or a similar function
    * @returns valid private key
@@ -1502,9 +1502,7 @@ export const utils = {
     hash = ensureBytes(hash);
     if (hash.length < 40 || hash.length > 1024)
       throw new Error('Expected 40-1024 bytes of private key as per FIPS 186');
-    const num = mod(bytesToNumber(hash), CURVE.n);
-    // This should never happen
-    if (num === _0n || num === _1n) throw new Error('Invalid private key');
+    const num = mod(bytesToNumber(hash), CURVE.n - _1n) + _1n;
     return numTo32b(num);
   },
 
