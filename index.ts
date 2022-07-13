@@ -1236,8 +1236,6 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   if (opts.strict && sig.hasHighS()) return false;
   const h = truncateHash(msgHash);
 
-  // Non-standard behavior: Probably forged, protect against fault attacks.
-  if (h === _0n) return false;
   let P;
   try {
     P = normalizePublicKey(publicKey);

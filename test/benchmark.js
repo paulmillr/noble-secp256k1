@@ -37,6 +37,10 @@ run(async (windowSize) => {
     secp.getPublicKey(secp.utils.randomPrivateKey());
   });
 
+  // await mark('generatePrivateKey()', 2500000, () => {
+  //   secp.utils.randomPrivateKey();
+  // })
+
   const priv = 'f6fc7fd5acaf8603709160d203253d5cd17daa307483877ad811ec8411df56d2';
   const pub = secp.getPublicKey(priv, false);
   const priv2 = '2e63f49054e1e44ccc2e6ef6ce387936efb16158f89cc302a2426e0b7fd66f66';
