@@ -186,11 +186,10 @@ class JacobianPoint {
    * an exposed private key e.g. sig verification, which works over *public* keys.
    */
   multiplyUnsafe(scalar: bigint): JacobianPoint {
+    // Will throw on 0
     let n = normalizeScalar(scalar);
 
-    const G = JacobianPoint.BASE;
     const P0 = JacobianPoint.ZERO;
-    if (n === _0n) return P0;
     if (n === _1n) return this;
 
     // The condition is not executed unless you change global var
@@ -1247,6 +1246,8 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   // R = u1⋅G - u2⋅P
   const u1 = mod(h * sinv, n);
   const u2 = mod(r * sinv, n);
+  // Early fail for msgHash=0
+  if (u1 === _0n) return false;
   // Some implementations compare R.x in jacobian, without inversion.
   // The speed-up is <5%, so we don't complicate the code.
   const R = Point.BASE.multiplyAndAddUnsafe(P, u1, u2);
