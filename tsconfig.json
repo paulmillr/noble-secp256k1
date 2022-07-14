@@ -2,7 +2,7 @@
   "compilerOptions": {
     "strict": true,
     "declaration": true,
-    "declarationMap": true,
+    "declarationMap": false,
     "target": "es2020",
     "lib": ["es2020"],
     "module": "commonjs",
