@@ -399,6 +399,14 @@ describe('secp256k1', () => {
       const recovery = 0;
       expect(() => secp.recoverPublicKey(msgHash, sig, recovery)).toThrowError();
     });
+    it('should handle all-zeros msghash', async () => {
+      const privKey = secp.utils.randomPrivateKey();
+      const pub = secp.getPublicKey(privKey);
+      const zeros = '0000000000000000000000000000000000000000000000000000000000000000';
+      const [sig, rec] = await secp.sign(zeros, privKey, { recovered: true });
+      const recoveredKey = secp.recoverPublicKey(zeros, sig, rec);
+      expect(recoveredKey).toEqual(pub);
+    });
     it('should handle RFC 6979 vectors', async () => {
       for (const vector of ecdsa.valid) {
         if (secp.utils.mod(hexToNumber(vector.m), secp.CURVE.n) === 0n) continue;

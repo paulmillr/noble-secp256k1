@@ -186,10 +186,10 @@ class JacobianPoint {
    * an exposed private key e.g. sig verification, which works over *public* keys.
    */
   multiplyUnsafe(scalar: bigint): JacobianPoint {
+    const P0 = JacobianPoint.ZERO;
+    if (typeof scalar === 'bigint' && scalar === _0n) return P0;
     // Will throw on 0
     let n = normalizeScalar(scalar);
-
-    const P0 = JacobianPoint.ZERO;
     if (n === _1n) return this;
 
     // The condition is not executed unless you change global var
@@ -457,7 +457,6 @@ export class Point {
     if (recovery !== 0 && recovery !== 1) {
       throw new Error('Cannot recover signature: invalid recovery bit');
     }
-    if (h === _0n) throw new Error('Cannot recover signature: msgHash cannot be 0');
     const prefix = recovery & 1 ? '03' : '02';
     const R = Point.fromHex(prefix + numTo32bStr(r));
     const { n } = CURVE;
@@ -533,7 +532,7 @@ export class Point {
   }
 
   /**
-   * Efficiently calculate aP + bQ.
+   * Efficiently calculate `aP + bQ`.
    * Unsafe, can expose private key, if used incorrectly.
    * TODO: Utilize Shamir's trick
    * @returns non-zero affine point
@@ -1039,7 +1038,7 @@ function normalizeSignature(signature: Sig): Signature {
  * Computes public key for secp256k1 private key.
  * @param privateKey 32-byte private key
  * @param isCompressed whether to return compact (33-byte), or full (65-byte) key
- * @returns short/full public key
+ * @returns Public key, full by default; short when isCompressed=true
  */
 export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Array {
   return Point.fromPrivateKey(privateKey).toRawBytes(isCompressed);
@@ -1051,7 +1050,7 @@ export function getPublicKey(privateKey: PrivKey, isCompressed = false): Uint8Ar
  * @param signature DER or compact sig
  * @param recovery 0 or 1
  * @param isCompressed whether to return compact (33-byte), or full (65-byte) key
- * @returns Public key
+ * @returns Public key, full by default; short when isCompressed=true
  */
 export function recoverPublicKey(
   msgHash: Hex,
@@ -1246,8 +1245,7 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   // R = u1⋅G - u2⋅P
   const u1 = mod(h * sinv, n);
   const u2 = mod(r * sinv, n);
-  // Early fail for msgHash=0
-  if (u1 === _0n) return false;
+
   // Some implementations compare R.x in jacobian, without inversion.
   // The speed-up is <5%, so we don't complicate the code.
   const R = Point.BASE.multiplyAndAddUnsafe(P, u1, u2);
@@ -1466,7 +1464,7 @@ export const utils = {
 
   privateAdd: (privateKey: PrivKey, tweak: Hex): Uint8Array => {
     const p = normalizePrivateKey(privateKey);
-    const t = bytesToNumber(ensureBytes(tweak));
+    const t = normalizePrivateKey(tweak);
     return numTo32b(mod(p + t, CURVE.n));
   },
 
@@ -1477,7 +1475,7 @@ export const utils = {
 
   pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
     const P = Point.fromHex(p);
-    const t = bytesToNumber(ensureBytes(tweak));
+    const t = normalizePrivateKey(tweak);
     const Q = Point.BASE.multiplyAndAddUnsafe(P, t, _1n);
     if (!Q) throw new Error('Tweaked point at infinity');
     return Q.toRawBytes(isCompressed);

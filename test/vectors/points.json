@@ -10421,7 +10421,7 @@
         "description": "Normalize Scalar doesn't accept 0. -1 + 0 == -1",
         "P": "0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
         "d": "0000000000000000000000000000000000000000000000000000000000000000",
-        "exception": "valid private scalar"
+        "exception": "Expected private key"
       },
       {
         "description": "Uncompressed: Bad sequence prefix",
@@ -10541,19 +10541,19 @@
         "description": "Tweak >= G",
         "P": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
         "d": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
-        "exception": "Expected valid private scalar"
+        "exception": "Expected private key"
       },
       {
         "description": "Tweak >= G",
         "P": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
         "d": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142",
-        "exception": "Expected valid private scalar"
+        "exception": "Expected private key"
       },
       {
         "description": "Tweak >= G",
         "P": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
         "d": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        "exception": "Expected valid private scalar"
+        "exception": "Expected private key"
       }
     ],
     "pointCompress": [
