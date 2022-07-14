@@ -80,7 +80,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 function getPublicKey(privateKey: Uint8Array | string | bigint, isCompressed = false): Uint8Array;
 ```
 
-Creates public key for the corresponding private key.
+Creates public key for the corresponding private key. The default is full 65-byte key.
 
 - `isCompressed = false` determines whether to return compact (33-byte), or full (65-byte) key.
 
@@ -167,6 +167,9 @@ Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private ke
 ```typescript
 function recoverPublicKey(msgHash: Uint8Array | string, signature: Uint8Array | string, recovery: number, isCompressed = false): Uint8Array | undefined;
 ```
+
+Recovers public key from message hash, signature & recovery bit. The default is full 65-byte key.
+
 - `msgHash: Uint8Array | string` - message hash which would be signed
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
 - `recovery: number` - recovery bit returned by `sign` with `recovered` option
