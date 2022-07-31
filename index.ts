@@ -14,7 +14,7 @@ const _8n = BigInt(8);
 
 // Curve fomula is y² = x³ + ax + b
 const POW_2_256 = _2n ** BigInt(256);
-const CURVE = {
+const CURVE = Object.freeze({
   // Params: a, b
   a: _0n,
   b: BigInt(7),
@@ -29,7 +29,7 @@ const CURVE = {
   Gy: BigInt('32670510020758816978083085130507043184471273380659243275938904335757337482424'),
   // For endomorphism, see below
   beta: BigInt('0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee'),
-};
+});
 
 // Cleaner js output if that's on a separate line.
 export { CURVE };
