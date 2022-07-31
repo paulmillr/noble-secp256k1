@@ -13,15 +13,16 @@ const _3n = BigInt(3);
 const _8n = BigInt(8);
 
 // Curve fomula is y² = x³ + ax + b
-const POW_2_256 = _2n ** BigInt(256);
 const CURVE = Object.freeze({
   // Params: a, b
   a: _0n,
   b: BigInt(7),
-  // Field over which we'll do calculations
-  P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
-  // Curve order, a number of valid points in the field
-  n: POW_2_256 - BigInt('432420386565659656852420866394968145599'),
+  // Field over which we'll do calculations. Verify with:
+  //   console.log(CURVE.P === (2n**256n - 2n**32n - 977n))
+  P: BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f'),
+  // Curve order, total count of valid points in the field. Verify with:
+  //   console.log(CURVE.n === (2n**256n - 432420386565659656852420866394968145599n))
+  n: BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141'),
   // Cofactor. It's 1, so other subgroups don't exist, and default subgroup is prime-order
   h: _1n,
   // Base point (x, y) aka generator point
@@ -699,7 +700,7 @@ function bytesToHex(uint8a: Uint8Array): string {
 }
 
 function numTo32bStr(num: number | bigint): string {
-  if (num > POW_2_256) throw new Error('Expected number < 2^256');
+  if (num > _2n ** BigInt(256)) throw new Error('Expected number < 2^256');
   return num.toString(16).padStart(64, '0');
 }
 
