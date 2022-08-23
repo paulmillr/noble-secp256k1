@@ -33,7 +33,7 @@ run(async (windowSize) => {
   // await mark('getPublicKey 256 bit', samples * 10, () => {
   //   secp.getPublicKey('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfcb');
   // });
-  await mark('getPublicKey(utils.randomPrivateKey())', 2500, () => {
+  await mark('getPublicKey(utils.randomPrivateKey())', 5000, () => {
     secp.getPublicKey(secp.utils.randomPrivateKey());
   });
 
@@ -48,32 +48,32 @@ run(async (windowSize) => {
   const msg = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
   const signature = await secp.sign(msg, priv);
 
-  await mark('sign', 2500, async () => {
+  await mark('sign', 5000, async () => {
     await secp.sign(msg, priv);
   });
 
-  await mark('signSync', 2500, () => secp.signSync(msg, priv));
+  await mark('signSync (@noble/hashes)', 5000, () => secp.signSync(msg, priv));
 
-  await mark('verify', 500, () => {
+  await mark('verify', 1000, () => {
     secp.verify(signature, msg, pub);
   });
 
   const [rsig, reco] = await secp.sign(msg, priv, { canonical: true, recovered: true });
-  await mark('recoverPublicKey', 450, () => {
+  await mark('recoverPublicKey', 1000, () => {
     secp.recoverPublicKey(msg, rsig, reco);
   });
 
-  await mark('getSharedSecret aka ecdh', 300, () => {
+  await mark('getSharedSecret aka ecdh', 600, () => {
     secp.getSharedSecret(priv, pub2);
   });
 
   const pub2Pre = secp.utils.precompute(windowSize, secp.Point.fromHex(pub2));
-  await mark('getSharedSecret (precomputed)', 2500, () => {
+  await mark('getSharedSecret (precomputed)', 5000, () => {
     secp.getSharedSecret(priv, pub2Pre);
   });
 
   let i = 0;
-  await mark('Point.fromHex (decompression)', 6000, () => {
+  await mark('Point.fromHex (decompression)', 10000, () => {
     const p = points[i++ % points.length];
     secp.Point.fromHex(p);
   });
@@ -82,8 +82,8 @@ run(async (windowSize) => {
   const spri = '0000000000000000000000000000000000000000000000000000000000000003';
   const spub = secp.Point.fromPrivateKey(spri);
   const ssig = await secp.schnorr.sign(smsg, spri);
-  await mark('schnorr.sign', 350, () => secp.schnorr.sign(smsg, spri));
-  await mark('schnorr.verify', 500, () => secp.schnorr.verify(ssig, smsg, spub));
+  await mark('schnorr.sign', 500, () => secp.schnorr.sign(smsg, spri));
+  await mark('schnorr.verify', 1000, () => secp.schnorr.verify(ssig, smsg, spub));
 
   console.log();
   logMem();
