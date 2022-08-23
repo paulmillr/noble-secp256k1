@@ -1198,7 +1198,7 @@ async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<Si
 
 /**
  * Signs message hash (not message: you need to hash it by yourself).
- * Synchronous version of sign(): see its documentation.
+ * Synchronous version of `sign()`: see its documentation.
  * @param opts `recovered, canonical, der, extraEntropy`
  */
 function signSync(msgHash: Hex, privKey: PrivKey, opts: OptsRecov): [U8A, number];
@@ -1216,21 +1216,19 @@ function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
 }
 export { sign, signSync };
 
-type VOpts = {
-  strict?: boolean;
-};
+type VOpts = { strict?: boolean };
 const vopts: VOpts = { strict: true };
 
 /**
  * Verifies a signature against message hash and public key.
- * Rejects high-s signatures by default. Use strict opt to override.
- * https://www.secg.org/sec1-v2.pdf, section 4.1.4.
+ * Rejects non-canonical / high-s signatures by default: to override,
+ * specify option `{strict: false}`. Implements section 4.1.4 from https://www.secg.org/sec1-v2.pdf:
  *
  * ```
  * verify(r, s, h, P) where
- *   u1 = hs^-1 mod n
- *   u2 = rs^-1 mod n
- *   R = u1⋅G - u2⋅P
+ *   U1 = hs^-1 mod n
+ *   U2 = rs^-1 mod n
+ *   R = U1⋅G - U2⋅P
  *   mod(R.x, n) == r
  * ```
  */
@@ -1266,9 +1264,9 @@ export function verify(signature: Sig, msgHash: Hex, publicKey: PubKey, opts = v
   return v === r;
 }
 
-// Schnorr-specific code as per BIP0340.
-
-function finalizeSchnorrChallenge(ch: Uint8Array): bigint {
+// Schnorr signatures are superior to ECDSA from above.
+// Below is Schnorr-specific code as per BIP0340.
+function schnorrChallengeFinalize(ch: Uint8Array): bigint {
   return mod(bytesToNumber(ch), CURVE.n);
 }
 
@@ -1314,11 +1312,11 @@ class InternalSchnorrSignature {
   private d: bigint;
   private rand: Uint8Array;
 
-  private getScalar(k0: bigint) {
-    const P = Point.fromPrivateKey(k0);
-    const px = P.toRawX();
-    const d = hasEvenY(P) ? k0 : CURVE.n - k0;
-    return { point: P, x: px, scalar: d };
+  private getScalar(priv: bigint) {
+    const point = Point.fromPrivateKey(priv);
+    const x = point.toRawX();
+    const scalar = hasEvenY(point) ? priv : CURVE.n - priv;
+    return { point, x, scalar };
   }
 
   constructor(message: Hex, privateKey: PrivKey, auxRand: Hex = utils.randomBytes()) {
@@ -1353,7 +1351,7 @@ class InternalSchnorrSignature {
     const tag = utils.taggedHash;
     const t = this.initNonce(d, await tag(TAGS.aux, rand));
     const { R, rx, k } = this.finalizeNonce(await tag(TAGS.nonce, t, px, m));
-    const e = finalizeSchnorrChallenge(await tag(TAGS.challenge, rx, px, m));
+    const e = schnorrChallengeFinalize(await tag(TAGS.challenge, rx, px, m));
     const sig = this.finalizeSig(R, k, e, d);
     if (!(await schnorrVerify(sig, m, px))) this.error();
     return sig;
@@ -1363,7 +1361,7 @@ class InternalSchnorrSignature {
     const tag = utils.taggedHashSync;
     const t = this.initNonce(d, tag(TAGS.aux, rand));
     const { R, rx, k } = this.finalizeNonce(tag(TAGS.nonce, t, px, m));
-    const e = finalizeSchnorrChallenge(tag(TAGS.challenge, rx, px, m));
+    const e = schnorrChallengeFinalize(tag(TAGS.challenge, rx, px, m));
     const sig = this.finalizeSig(R, k, e, d);
     if (!schnorrVerifySync(sig, m, px)) this.error();
     return sig;
@@ -1417,7 +1415,7 @@ function finalizeSchnorrVerify(r: bigint, P: Point, s: bigint, e: bigint): boole
 async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean> {
   try {
     const { r, s, m, P } = initSchnorrVerify(signature, message, publicKey);
-    const e = finalizeSchnorrChallenge(
+    const e = schnorrChallengeFinalize(
       await utils.taggedHash(TAGS.challenge, numTo32b(r), P.toRawX(), m)
     );
     return finalizeSchnorrVerify(r, P, s, e);
@@ -1432,7 +1430,7 @@ async function schnorrVerify(signature: Hex, message: Hex, publicKey: Hex): Prom
 function schnorrVerifySync(signature: Hex, message: Hex, publicKey: Hex): boolean {
   try {
     const { r, s, m, P } = initSchnorrVerify(signature, message, publicKey);
-    const e = finalizeSchnorrChallenge(
+    const e = schnorrChallengeFinalize(
       utils.taggedHashSync(TAGS.challenge, numTo32b(r), P.toRawX(), m)
     );
     return finalizeSchnorrVerify(r, P, s, e);
