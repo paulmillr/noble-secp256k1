@@ -15,11 +15,8 @@ const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
 // prettier-ignore
 const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
 
-secp.utils.sha256Sync = (...messages: Uint8Array[]): Uint8Array => {
-  const sha256 = createHash('sha256');
-  messages.forEach(m => sha256.update(m));
-  return sha256.digest();
-}
+secp.utils.sha256Sync = (...msgs) =>
+  createHash('sha256').update(secp.utils.concatBytes(...msgs)).digest();
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;

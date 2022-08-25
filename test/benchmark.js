@@ -8,12 +8,12 @@ const points = require('fs')
   .split('\n')
   .filter((a) => a)
   .slice(0, 1000);
+const { concatBytes } = secp.utils;
 
-secp.utils.hmacSha256Sync = (key, ...msgs) => {
-  const h = hmac.create(sha256, key);
-  msgs.forEach(msg => h.update(msg))
-  return h.digest();
-};
+secp.utils.sha256Sync = (...msgs) =>
+  sha256.create().update(concatBytes(...msgs)).digest(),
+secp.utils.hmacSha256Sync = (key, ...msgs) =>
+  hmac.create(sha256, key).update(concatBytes(...msgs)).digest();
 
 // run([4, 8, 16], async (windowSize) => {
 run(async (windowSize) => {
@@ -36,10 +36,6 @@ run(async (windowSize) => {
   await mark('getPublicKey(utils.randomPrivateKey())', 5000, () => {
     secp.getPublicKey(secp.utils.randomPrivateKey());
   });
-
-  // await mark('generatePrivateKey()', 2500000, () => {
-  //   secp.utils.randomPrivateKey();
-  // })
 
   const priv = 'f6fc7fd5acaf8603709160d203253d5cd17daa307483877ad811ec8411df56d2';
   const pub = secp.getPublicKey(priv, false);
@@ -84,7 +80,6 @@ run(async (windowSize) => {
   const ssig = await secp.schnorr.sign(smsg, spri);
   await mark('schnorr.sign', 500, () => secp.schnorr.sign(smsg, spri));
   await mark('schnorr.verify', 1000, () => secp.schnorr.verify(ssig, smsg, spub));
-
   console.log();
   logMem();
 });

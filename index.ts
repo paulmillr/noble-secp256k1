@@ -899,6 +899,11 @@ function truncateHash(hash: Uint8Array): bigint {
 type RecoveredSig = { sig: Signature; recovery: number };
 type U8A = Uint8Array;
 
+type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
+type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
+let _sha256Sync: Sha256FnSync;
+let _hmacSha256Sync: HmacFnSync;
+
 // Minimal HMAC-DRBG (NIST 800-90) for signatures
 // Used only for RFC6979, does not fully implement DRBG spec.
 class HmacDrbg {
@@ -915,9 +920,9 @@ class HmacDrbg {
     return utils.hmacSha256(this.k, ...values);
   }
   private hmacSync(...values: Uint8Array[]) {
-    if (typeof utils.hmacSha256Sync !== 'function')
+    if (typeof _hmacSha256Sync !== 'function')
       throw new ShaError('utils.hmacSha256Sync is undefined, you need to set it');
-    const res = utils.hmacSha256Sync!(this.k, ...values);
+    const res = _hmacSha256Sync!(this.k, ...values);
     if (res instanceof Promise)
       throw new ShaError('To use sync sign(), ensure utils.hmacSha256 is sync');
     return res;
@@ -1452,9 +1457,6 @@ export const schnorr = {
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
-type Sha256FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
-type HmacFnSync = undefined | ((key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array);
-
 // Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
 const crypto: { node?: any; web?: any } = {
@@ -1577,6 +1579,7 @@ export const utils = {
     }
   },
 
+  // See Object.defineProp below
   sha256Sync: undefined as Sha256FnSync,
   hmacSha256Sync: undefined as HmacFnSync,
 
@@ -1592,16 +1595,16 @@ export const utils = {
   },
 
   taggedHashSync: (tag: string, ...messages: Uint8Array[]): Uint8Array => {
-    if (typeof utils.sha256Sync !== 'function')
-      throw new ShaError('utils.sha256Sync is undefined, you need to set it');
+    if (typeof _sha256Sync !== 'function')
+      throw new ShaError('sha256Sync is undefined, you need to set it');
     let tagP = TAGGED_HASH_PREFIXES[tag];
     if (tagP === undefined) {
-      const tagH = utils.sha256Sync(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
+      const tagH = _sha256Sync(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
       tagP = concatBytes(tagH, tagH);
       TAGGED_HASH_PREFIXES[tag] = tagP;
     }
 
-    return utils.sha256Sync(tagP, ...messages);
+    return _sha256Sync(tagP, ...messages);
   },
 
   /**
@@ -1619,3 +1622,27 @@ export const utils = {
     return cached;
   },
 };
+
+// Legacy code
+Object.defineProperties(utils, {
+  sha256Sync: {
+    configurable: false,
+    get() {
+      return _sha256Sync;
+    },
+    set(val) {
+      if (!_sha256Sync) _sha256Sync = val;
+    },
+  },
+  hmacSha256Sync: {
+    configurable: false,
+    get() {
+      return _hmacSha256Sync;
+    },
+    set(val) {
+      if (!_hmacSha256Sync) _hmacSha256Sync = val;
+    },
+  },
+});
+
+Object.freeze(utils);
