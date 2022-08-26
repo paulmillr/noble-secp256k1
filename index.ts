@@ -1623,7 +1623,7 @@ export const utils = {
   },
 };
 
-// Legacy code
+// Make sure sync hash could only be set once.
 Object.defineProperties(utils, {
   sha256Sync: {
     configurable: false,
@@ -1644,5 +1644,3 @@ Object.defineProperties(utils, {
     },
   },
 });
-
-Object.freeze(utils);
