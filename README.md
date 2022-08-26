@@ -57,7 +57,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 
 - `deno run --import-map=imports.json app.ts`
 - app.ts: `import * as secp from "https://deno.land/x/secp256k1/mod.ts";`
-- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}`
+- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.153.0/node/crypto.ts"}}`
 
 ## API
 
