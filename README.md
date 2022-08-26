@@ -32,6 +32,7 @@ Use NPM in node.js / browser, or include single file from
 import * as secp from '@noble/secp256k1';
 // If you're using single file, use global variable instead: `window.nobleSecp256k1`
 
+// Supports both async and sync methods, see docs
 (async () => {
   // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
@@ -45,11 +46,7 @@ import * as secp from '@noble/secp256k1';
   const rpub = secp.schnorr.getPublicKey(privKey);
   const rsignature = await secp.schnorr.sign(message, privKey);
   const risValid = await secp.schnorr.verify(rsignature, message, rpub);
-
-  // Default output is Uint8Array. If you need hex string as an output:
-  console.log(secp.utils.bytesToHex(pubKey));
 })();
-// Supports both async and sync methods, see docs
 ```
 
 To use the module with [Deno](https://deno.land),
@@ -259,7 +256,12 @@ function schnorrVerify(
 
 #### Utilities
 
-secp256k1 exposes a few internal utilities for improved developer experience:
+secp256k1 exposes a few internal utilities for improved developer experience.
+
+```js
+// Default output is Uint8Array. If you need hex string as an output:
+console.log(secp.utils.bytesToHex(pubKey));
+```
 
 ```typescript
 const utils: {
@@ -282,6 +284,7 @@ const utils: {
   mod: (number: number | bigint, modulo = CURVE.P): bigint;
   // Modular inversion
   invert(number: bigint, modulo?: bigint): bigint;
+
   sha256: (message: Uint8Array) => Promise<Uint8Array>;
   hmacSha256: (key: Uint8Array, ...messages: Uint8Array[]) => Promise<Uint8Array>;
 
