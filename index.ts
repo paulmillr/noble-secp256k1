@@ -391,6 +391,11 @@ export class Point {
     pointPrecomputes.delete(this);
   }
 
+  // Checks for y % 2 == 0
+  _hasEvenY() {
+    return this.y % _2n === _0n;
+  }
+
   /**
    * Supports compressed Schnorr (32-byte) and ECDSA (33-byte) points
    * @param bytes 32/33 bytes
@@ -484,7 +489,7 @@ export class Point {
   toHex(isCompressed = false): string {
     const x = numTo32bStr(this.x);
     if (isCompressed) {
-      const prefix = this.y & _1n ? '03' : '02';
+      const prefix = this._hasEvenY() ? '02' : '03';
       return `${prefix}${x}`;
     } else {
       return `04${x}${numTo32bStr(this.y)}`;
@@ -628,9 +633,10 @@ export class Signature {
     if (!isWithinCurveOrder(s)) throw new Error('Invalid Signature: s must be 0 < s < n');
   }
 
-  // Always false for canonical signatures.
-  // We don't provide `hasHighR` for now even though some folks use it
-  // https://github.com/bitcoin/bitcoin/pull/13666
+  // Default signatures are always low-s, to prevent malleability.
+  // sign(canonical: true) always produces low-s sigs.
+  // verify(strict: true) always fails for high-s.
+  // We don't provide `hasHighR` https://github.com/bitcoin/bitcoin/pull/13666
   hasHighS(): boolean {
     const HALF = CURVE.n >> _1n;
     return this.s > HALF;
@@ -920,17 +926,13 @@ class HmacDrbg {
     return utils.hmacSha256(this.k, ...values);
   }
   private hmacSync(...values: Uint8Array[]) {
-    if (typeof _hmacSha256Sync !== 'function')
-      throw new ShaError('utils.hmacSha256Sync is undefined, you need to set it');
-    const res = _hmacSha256Sync!(this.k, ...values);
-    if (res instanceof Promise)
-      throw new ShaError('To use sync sign(), ensure utils.hmacSha256 is sync');
-    return res;
+    return _hmacSha256Sync!(this.k, ...values);
+  }
+  private checkSync() {
+    if (typeof _hmacSha256Sync !== 'function') throw new ShaError('hmacSha256Sync needs to be set');
   }
   incr() {
-    if (this.counter >= 1000) {
-      throw new Error('Tried 1,000 k values for sign(), all were invalid');
-    }
+    if (this.counter >= 1000) throw new Error('Tried 1,000 k values for sign(), all were invalid');
     this.counter += 1;
   }
 
@@ -943,6 +945,7 @@ class HmacDrbg {
     this.v = await this.hmac(this.v);
   }
   reseedSync(seed = new Uint8Array()) {
+    this.checkSync();
     this.k = this.hmacSync(this.v, Uint8Array.from([0x00]), seed);
     this.v = this.hmacSync(this.v);
     if (seed.length === 0) return;
@@ -956,6 +959,7 @@ class HmacDrbg {
     return this.v;
   }
   generateSync(): Uint8Array {
+    this.checkSync();
     this.incr();
     this.v = this.hmacSync(this.v);
     return this.v;
@@ -1275,10 +1279,6 @@ function schnorrChallengeFinalize(ch: Uint8Array): bigint {
   return mod(bytesToNumber(ch), CURVE.n);
 }
 
-function hasEvenY(point: Point): boolean {
-  return (point.y & _1n) === _0n;
-}
-
 class SchnorrSignature {
   constructor(readonly r: bigint, readonly s: bigint) {
     this.assertValidity();
@@ -1320,7 +1320,7 @@ class InternalSchnorrSignature {
   private getScalar(priv: bigint) {
     const point = Point.fromPrivateKey(priv);
     const x = point.toRawX();
-    const scalar = hasEvenY(point) ? priv : CURVE.n - priv;
+    const scalar = point._hasEvenY() ? priv : CURVE.n - priv;
     return { point, x, scalar };
   }
 
@@ -1410,7 +1410,7 @@ function finalizeSchnorrVerify(r: bigint, P: Point, s: bigint, e: bigint): boole
   // R = s⋅G - e⋅P
   // -eP == (n-e)P
   const R = Point.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
-  if (!R || !hasEvenY(R) || R.x !== r) return false;
+  if (!R || !R._hasEvenY() || R.x !== r) return false;
   return true;
 }
 
