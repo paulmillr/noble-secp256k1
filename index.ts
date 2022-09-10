@@ -438,6 +438,7 @@ export class Point {
     const bytes = ensureBytes(hex);
     const len = bytes.length;
     const header = bytes[0];
+    // this.assertValidity() is done inside of those two functions
     if (len === 32 || (len === 33 && (header === 0x02 || header === 0x03))) {
       return this.fromCompressedHex(bytes);
     }
