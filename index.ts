@@ -1115,7 +1115,7 @@ export function getSharedSecret(
 }
 
 type Entropy = Hex | true;
-type OptsOther = { canonical?: boolean; der?: boolean; extraEntropy?: Entropy; lowR?: boolean };
+type OptsOther = { canonical?: boolean; der?: boolean; extraEntropy?: Entropy };
 type OptsRecov = { recovered: true } & OptsOther;
 type OptsNoRecov = { recovered?: false } & OptsOther;
 type Opts = { recovered?: boolean } & OptsOther;
