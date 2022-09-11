@@ -368,7 +368,7 @@ Benchmarks measured with Apple M2 on MacOS 12 with node.js 18.8.
     getSharedSecret (precomputed) x 7,357 ops/sec @ 135μs/op
     Point.fromHex (decompression) x 13,725 ops/sec @ 72μs/op
     schnorr.sign x 770 ops/sec @ 1ms/op
-    schnorr.verify x 1,063 ops/sec @ 940μs/op
+    schnorr.verify x 1,093 ops/sec @ 914μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 
