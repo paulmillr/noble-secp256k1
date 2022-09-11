@@ -392,7 +392,7 @@ export class Point {
   }
 
   // Checks for y % 2 == 0
-  _hasEvenY() {
+  hasEvenY() {
     return this.y % _2n === _0n;
   }
 
@@ -490,7 +490,7 @@ export class Point {
   toHex(isCompressed = false): string {
     const x = numTo32bStr(this.x);
     if (isCompressed) {
-      const prefix = this._hasEvenY() ? '02' : '03';
+      const prefix = this.hasEvenY() ? '02' : '03';
       return `${prefix}${x}`;
     } else {
       return `04${x}${numTo32bStr(this.y)}`;
@@ -604,7 +604,7 @@ export class Signature {
 
   // pair (32 bytes of r, 32 bytes of s)
   static fromCompact(hex: Hex) {
-    const arr = isUint8a(hex);
+    const arr = hex instanceof Uint8Array;
     const name = 'Signature.fromCompact';
     if (typeof hex !== 'string' && !arr)
       throw new TypeError(`${name}: Expected string or Uint8Array`);
@@ -616,7 +616,7 @@ export class Signature {
   // DER encoded ECDSA signature
   // https://bitcoin.stackexchange.com/questions/57644/what-are-the-parts-of-a-bitcoin-transaction-input-script
   static fromDER(hex: Hex) {
-    const arr = isUint8a(hex);
+    const arr = hex instanceof Uint8Array;
     if (typeof hex !== 'string' && !arr)
       throw new TypeError(`Signature.fromDER: Expected string or Uint8Array`);
     const { r, s } = parseDERSignature(arr ? hex : hexToBytes(hex));
@@ -681,7 +681,7 @@ export class Signature {
 // Concatenates several Uint8Arrays into one.
 // TODO: check if we're copying data instead of moving it and if that's ok
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
-  if (!arrays.every(isUint8a)) throw new Error('Uint8Array list expected');
+  if (!arrays.every((b) => b instanceof Uint8Array)) throw new Error('Uint8Array list expected');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -696,11 +696,6 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 // Convert between types
 // ---------------------
 
-// We can't do `instanceof Uint8Array` because it's unreliable between Web Workers etc
-function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
-  return bytes instanceof Uint8Array;
-}
-
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
   if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
@@ -712,13 +707,17 @@ function bytesToHex(uint8a: Uint8Array): string {
   return hex;
 }
 
-function numTo32bStr(num: number | bigint): string {
-  if (num > _2n ** BigInt(256)) throw new Error('Expected number < 2^256');
+const POW_2_256 = BigInt('0x10000000000000000000000000000000000000000000000000000000000000000');
+function numTo32bStr(num: bigint): string {
+  if (typeof num !== 'bigint') throw new Error('Expected bigint');
+  if (!(_0n <= num && num < POW_2_256)) throw new Error('Expected number < 2^256');
   return num.toString(16).padStart(64, '0');
 }
 
 function numTo32b(num: bigint): Uint8Array {
-  return hexToBytes(numTo32bStr(num));
+  const b = hexToBytes(numTo32bStr(num));
+  if (b.length !== 32) throw new Error('Error: expected 32 bytes');
+  return b;
 }
 
 function numberToHexUnpadded(num: number | bigint): string {
@@ -868,15 +867,18 @@ function invertBatch(nums: bigint[], p: bigint = CURVE.P): bigint[] {
 }
 
 const divNearest = (a: bigint, b: bigint) => (a + b / _2n) / b;
-const POW_2_128 = _2n ** BigInt(128);
+const ENDO = {
+  a1: BigInt('0x3086d221a7d46bcde86c90e49284eb15'),
+  b1: -_1n * BigInt('0xe4437ed6010e88286f547fa90abfe4c3'),
+  a2: BigInt('0x114ca50f7a8e2f3f657c1108d9d44cfd8'),
+  b2: BigInt('0x3086d221a7d46bcde86c90e49284eb15'), // === a1
+  POW_2_128: BigInt('0x100000000000000000000000000000000'),
+};
 // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
 // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
 function splitScalarEndo(k: bigint) {
   const { n } = CURVE;
-  const a1 = BigInt('0x3086d221a7d46bcde86c90e49284eb15');
-  const b1 = -_1n * BigInt('0xe4437ed6010e88286f547fa90abfe4c3');
-  const a2 = BigInt('0x114ca50f7a8e2f3f657c1108d9d44cfd8');
-  const b2 = a1;
+  const { a1, b1, a2, b2, POW_2_128 } = ENDO;
   const c1 = divNearest(b2 * k, n);
   const c2 = divNearest(-b1 * k, n);
   let k1 = mod(k - c1 * a1 - c2 * a2, n);
@@ -1012,7 +1014,7 @@ function normalizePrivateKey(key: PrivKey): bigint {
   } else if (typeof key === 'string') {
     if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
     num = hexToNumber(key);
-  } else if (isUint8a(key)) {
+  } else if (key instanceof Uint8Array) {
     if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
     num = bytesToNumber(key);
   } else {
@@ -1082,7 +1084,7 @@ export function recoverPublicKey(
  * Quick and dirty check for item being public key. Does not validate hex, or being on-curve.
  */
 function isPub(item: PrivKey | PubKey): boolean {
-  const arr = isUint8a(item);
+  const arr = item instanceof Uint8Array;
   const str = typeof item === 'string';
   const len = (arr || str) && (item as Hex).length;
   if (arr) return len === 33 || len === 65;
@@ -1130,9 +1132,7 @@ function bits2octets(bytes: Uint8Array): Uint8Array {
   return int2octets(z2 < _0n ? z1 : z2);
 }
 function int2octets(num: bigint): Uint8Array {
-  if (typeof num !== 'bigint') throw new Error('Expected bigint');
-  const hex = numTo32bStr(num); // prohibits >32 bytes
-  return hexToBytes(hex);
+  return numTo32b(num); // prohibits >32 bytes
 }
 
 // Steps A, D of RFC6979 3.2
@@ -1311,19 +1311,13 @@ function schnorrGetPublicKey(privateKey: PrivKey): Uint8Array {
 }
 
 // We are abstracting the signature creation process into the class
-// because we need to provide two identical methods: async & sync.
+// because we need to provide two identical methods: async & sync. Usage:
+//     new InternalSchnorrSignature(msg, privKey, auxRand).calc()
 class InternalSchnorrSignature {
   private m: Uint8Array;
   private px: Uint8Array;
   private d: bigint;
   private rand: Uint8Array;
-
-  private getScalar(priv: bigint) {
-    const point = Point.fromPrivateKey(priv);
-    const x = point.toRawX();
-    const scalar = point._hasEvenY() ? priv : CURVE.n - priv;
-    return { point, x, scalar };
-  }
 
   constructor(message: Hex, privateKey: PrivKey, auxRand: Hex = utils.randomBytes()) {
     if (message == null) throw new TypeError(`sign: Expected valid message, not "${message}"`);
@@ -1334,6 +1328,12 @@ class InternalSchnorrSignature {
     this.d = scalar;
     this.rand = ensureBytes(auxRand);
     if (this.rand.length !== 32) throw new TypeError('sign: Expected 32 bytes of aux randomness');
+  }
+
+  private getScalar(priv: bigint) {
+    const point = Point.fromPrivateKey(priv);
+    const scalar = point.hasEvenY() ? priv : CURVE.n - priv;
+    return { point, scalar, x: point.toRawX() };
   }
 
   private initNonce(d: bigint, t0h: Uint8Array): Uint8Array {
@@ -1411,7 +1411,7 @@ function finalizeSchnorrVerify(r: bigint, P: Point, s: bigint, e: bigint): boole
   // R = s⋅G - e⋅P
   // -eP == (n-e)P
   const R = Point.BASE.multiplyAndAddUnsafe(P, normalizePrivateKey(s), mod(-e, CURVE.n));
-  if (!R || !R._hasEvenY() || R.x !== r) return false;
+  if (!R || !R.hasEvenY() || R.x !== r) return false;
   return true;
 }
 
@@ -1474,6 +1474,12 @@ const TAGS = {
 const TAGGED_HASH_PREFIXES: { [tag: string]: Uint8Array } = {};
 
 export const utils = {
+  bytesToHex,
+  hexToBytes,
+  concatBytes,
+  mod,
+  invert,
+
   isValidPrivateKey(privateKey: PrivKey) {
     try {
       normalizePrivateKey(privateKey);
@@ -1482,31 +1488,8 @@ export const utils = {
       return false;
     }
   },
-
-  privateAdd: (privateKey: PrivKey, tweak: Hex): Uint8Array => {
-    const p = normalizePrivateKey(privateKey);
-    const t = normalizePrivateKey(tweak);
-    return numTo32b(mod(p + t, CURVE.n));
-  },
-
-  privateNegate: (privateKey: PrivKey): Uint8Array => {
-    const p = normalizePrivateKey(privateKey);
-    return numTo32b(CURVE.n - p);
-  },
-
-  pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
-    const P = Point.fromHex(p);
-    const t = normalizePrivateKey(tweak);
-    const Q = Point.BASE.multiplyAndAddUnsafe(P, t, _1n);
-    if (!Q) throw new Error('Tweaked point at infinity');
-    return Q.toRawBytes(isCompressed);
-  },
-
-  pointMultiply: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
-    const P = Point.fromHex(p);
-    const t = bytesToNumber(ensureBytes(tweak));
-    return P.multiply(t).toRawBytes(isCompressed);
-  },
+  _bigintTo32Bytes: numTo32b,
+  _normalizePrivateKey: normalizePrivateKey,
 
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
@@ -1540,12 +1523,6 @@ export const utils = {
   randomPrivateKey: (): Uint8Array => {
     return utils.hashToPrivateKey(utils.randomBytes(40));
   },
-
-  bytesToHex,
-  hexToBytes,
-  concatBytes,
-  mod,
-  invert,
 
   sha256: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
     if (crypto.web) {

@@ -16,7 +16,9 @@ const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
 const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
 
 secp.utils.sha256Sync = (...msgs) =>
-  createHash('sha256').update(secp.utils.concatBytes(...msgs)).digest();
+  createHash('sha256')
+    .update(secp.utils.concatBytes(...msgs))
+    .digest();
 
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
@@ -290,11 +292,15 @@ describe('secp256k1', () => {
     });
     it('should verify random signatures', async () =>
       fc.assert(
-        fc.asyncProperty(FC_BIGINT, fc.hexaString({minLength: 64, maxLength: 64}), async (privKey, msg) => {
-          const pub = secp.getPublicKey(privKey);
-          const sig = await secp.sign(msg, privKey);
-          expect(secp.verify(sig, msg, pub)).toBeTruthy();
-        })
+        fc.asyncProperty(
+          FC_BIGINT,
+          fc.hexaString({ minLength: 64, maxLength: 64 }),
+          async (privKey, msg) => {
+            const pub = secp.getPublicKey(privKey);
+            const sig = await secp.sign(msg, privKey);
+            expect(secp.verify(sig, msg, pub)).toBeTruthy();
+          }
+        )
       ));
     it('should not verify signature with invalid r/s', () => {
       const msg = new Uint8Array([
@@ -455,41 +461,72 @@ describe('secp256k1', () => {
         expect(secp.utils.isValidPrivateKey(d)).toBe(expected);
       }
     });
+    const normal = secp.utils._normalizePrivateKey;
+    type Hex = string | Uint8Array;
+    type PrivKey = Hex | bigint | number;
+    const tweakUtils = {
+      privateAdd: (privateKey: PrivKey, tweak: Hex): Uint8Array => {
+        const p = normal(privateKey);
+        const t = normal(tweak);
+        return secp.utils._bigintTo32Bytes(secp.utils.mod(p + t, secp.CURVE.n));
+      },
+
+      privateNegate: (privateKey: PrivKey): Uint8Array => {
+        const p = normal(privateKey);
+        return secp.utils._bigintTo32Bytes(secp.CURVE.n - p);
+      },
+
+      pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
+        const P = secp.Point.fromHex(p);
+        const t = normal(tweak);
+        const Q = secp.Point.BASE.multiplyAndAddUnsafe(P, t, 1n);
+        if (!Q) throw new Error('Tweaked point at infinity');
+        return Q.toRawBytes(isCompressed);
+      },
+
+      pointMultiply: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
+        const P = secp.Point.fromHex(p);
+        const h = typeof tweak === 'string' ? tweak : secp.utils.bytesToHex(tweak);
+        const t = BigInt(`0x${h}`);
+        return P.multiply(t).toRawBytes(isCompressed);
+      },
+    };
+
     it('privateAdd()', () => {
       for (const vector of privates.valid.add) {
         const { a, b, expected } = vector;
-        expect(secp.utils.bytesToHex(secp.utils.privateAdd(a, b))).toBe(expected);
+        expect(secp.utils.bytesToHex(tweakUtils.privateAdd(a, b))).toBe(expected);
       }
     });
     it('privateNegate()', () => {
       for (const vector of privates.valid.negate) {
         const { a, expected } = vector;
-        expect(secp.utils.bytesToHex(secp.utils.privateNegate(a))).toBe(expected);
+        expect(secp.utils.bytesToHex(tweakUtils.privateNegate(a))).toBe(expected);
       }
     });
     it('pointAddScalar()', () => {
       for (const vector of points.valid.pointAddScalar) {
         const { description, P, d, expected } = vector;
         const compressed = !!expected && expected.length === 66; // compressed === 33 bytes
-        expect(secp.utils.bytesToHex(secp.utils.pointAddScalar(P, d, compressed))).toBe(expected);
+        expect(secp.utils.bytesToHex(tweakUtils.pointAddScalar(P, d, compressed))).toBe(expected);
       }
     });
     it('pointAddScalar() invalid', () => {
       for (const vector of points.invalid.pointAddScalar) {
         const { P, d, exception } = vector;
-        expect(() => secp.utils.pointAddScalar(P, d)).toThrowError(RegExp(`${exception}`));
+        expect(() => tweakUtils.pointAddScalar(P, d)).toThrowError(RegExp(`${exception}`));
       }
     });
     it('pointMultiply()', () => {
       for (const vector of points.valid.pointMultiply) {
         const { P, d, expected } = vector;
-        expect(secp.utils.bytesToHex(secp.utils.pointMultiply(P, d, true))).toBe(expected);
+        expect(secp.utils.bytesToHex(tweakUtils.pointMultiply(P, d, true))).toBe(expected);
       }
     });
     it('pointMultiply() invalid', () => {
       for (const vector of points.invalid.pointMultiply) {
         const { P, d, exception } = vector;
-        expect(() => secp.utils.pointMultiply(P, d)).toThrowError(RegExp(`${exception}`));
+        expect(() => tweakUtils.pointMultiply(P, d)).toThrowError(RegExp(`${exception}`));
       }
     });
   });
