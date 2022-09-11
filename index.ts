@@ -1083,7 +1083,7 @@ export function recoverPublicKey(
 /**
  * Quick and dirty check for item being public key. Does not validate hex, or being on-curve.
  */
-function isPub(item: PrivKey | PubKey): boolean {
+function isProbPub(item: PrivKey | PubKey): boolean {
   const arr = item instanceof Uint8Array;
   const str = typeof item === 'string';
   const len = (arr || str) && (item as Hex).length;
@@ -1107,8 +1107,8 @@ export function getSharedSecret(
   publicB: PubKey,
   isCompressed = false
 ): Uint8Array {
-  if (isPub(privateA)) throw new TypeError('getSharedSecret: first arg must be private key');
-  if (!isPub(publicB)) throw new TypeError('getSharedSecret: second arg must be public key');
+  if (isProbPub(privateA)) throw new TypeError('getSharedSecret: first arg must be private key');
+  if (!isProbPub(publicB)) throw new TypeError('getSharedSecret: second arg must be public key');
   const b = normalizePublicKey(publicB);
   b.assertValidity();
   return b.multiply(normalizePrivateKey(privateA)).toRawBytes(isCompressed);
