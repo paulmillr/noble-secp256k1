@@ -1,13 +1,15 @@
 {
-  "name": "@noble/secp256k1",
-  "version": "1.7.0",
+  "name": "test-secp256k1",
+  "version": "1.7.1",
   "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA & Schnorr signatures",
   "files": [
-    "lib"
+    "lib",
+    "build"
   ],
   "main": "lib/index.js",
   "module": "lib/esm/index.js",
   "types": "lib/index.d.ts",
+  "unpkg": "build/noble-secp256k1.js",
   "scripts": {
     "build": "tsc && tsc -p tsconfig.esm.json",
     "build:release": "rollup -c rollup.config.js",
@@ -19,9 +21,9 @@
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/paulmillr/noble-secp256k1.git"
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "license": "MIT",
   "browser": {
