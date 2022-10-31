@@ -8,8 +8,9 @@
   "main": "lib/index.js",
   "module": "lib/esm/index.js",
   "types": "lib/index.d.ts",
+  "browser": "lib/browser/index.js",
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.esm.json",
+    "build": "tsc && tsc -p tsconfig.esm.json && rollup -c rollup.browser.js",
     "build:release": "rollup -c rollup.config.js",
     "lint": "prettier --print-width 100 --single-quote --check index.ts",
     "format": "prettier --print-width 100 --single-quote --write index.ts",
@@ -24,9 +25,6 @@
     "url": "https://github.com/paulmillr/noble-secp256k1.git"
   },
   "license": "MIT",
-  "browser": {
-    "crypto": false
-  },
   "devDependencies": {
     "@noble/hashes": "1.1.2",
     "@rollup/plugin-commonjs": "22.0.0",
@@ -64,6 +62,7 @@
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
+      "browser": "./lib/browser/index.js",
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
     }
