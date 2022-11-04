@@ -1478,7 +1478,10 @@ export const utils = {
   invert,
   crypto: {
     node: nodeCrypto,
-    web: typeof self === 'object' && 'crypto' in self  && 'subtle' in self.crypto ? self.crypto : undefined,
+    web:
+      typeof self === 'object' && 'crypto' in self && 'subtle' in self.crypto
+        ? self.crypto
+        : undefined,
   },
 
   isValidPrivateKey(privateKey: PrivKey) {
