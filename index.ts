@@ -1461,10 +1461,6 @@ Point.BASE._setWindowSize(8);
 
 // Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
-const crypto: { node?: any; web?: any } = {
-  node: nodeCrypto,
-  web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
-};
 
 const TAGS = {
   challenge: 'BIP0340/challenge',
@@ -1480,6 +1476,10 @@ export const utils = {
   concatBytes,
   mod,
   invert,
+  crypto: {
+    node: nodeCrypto,
+    web: typeof self === 'object' && 'crypto' in self  && 'subtle' in self.crypto ? self.crypto : undefined,
+  },
 
   isValidPrivateKey(privateKey: PrivKey) {
     try {
@@ -1509,10 +1509,10 @@ export const utils = {
   },
 
   randomBytes: (bytesLength: number = 32): Uint8Array => {
-    if (crypto.web) {
-      return crypto.web.getRandomValues(new Uint8Array(bytesLength));
-    } else if (crypto.node) {
-      const { randomBytes } = crypto.node;
+    if (utils.crypto.web) {
+      return utils.crypto.web.getRandomValues(new Uint8Array(bytesLength));
+    } else if (utils.crypto.node) {
+      const { randomBytes } = utils.crypto.node;
       return Uint8Array.from(randomBytes(bytesLength));
     } else {
       throw new Error("The environment doesn't have randomBytes function");
@@ -1526,11 +1526,11 @@ export const utils = {
   },
 
   sha256: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
-    if (crypto.web) {
-      const buffer = await crypto.web.subtle.digest('SHA-256', concatBytes(...messages));
+    if (utils.crypto.web) {
+      const buffer = await utils.crypto.web.subtle.digest('SHA-256', concatBytes(...messages));
       return new Uint8Array(buffer);
-    } else if (crypto.node) {
-      const { createHash } = crypto.node;
+    } else if (utils.crypto.node) {
+      const { createHash } = utils.crypto.node;
       const hash = createHash('sha256');
       messages.forEach((m) => hash.update(m));
       return Uint8Array.from(hash.digest());
@@ -1540,16 +1540,16 @@ export const utils = {
   },
 
   hmacSha256: async (key: Uint8Array, ...messages: Uint8Array[]): Promise<Uint8Array> => {
-    if (crypto.web) {
+    if (utils.crypto.web) {
       // prettier-ignore
-      const ckey = await crypto.web.subtle.importKey(
+      const ckey = await utils.crypto.web.subtle.importKey(
         'raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']
       );
       const message = concatBytes(...messages);
-      const buffer = await crypto.web.subtle.sign('HMAC', ckey, message);
+      const buffer = await utils.crypto.web.subtle.sign('HMAC', ckey, message);
       return new Uint8Array(buffer);
-    } else if (crypto.node) {
-      const { createHmac } = crypto.node;
+    } else if (utils.crypto.node) {
+      const { createHmac } = utils.crypto.node;
       const hash = createHmac('sha256', key);
       messages.forEach((m) => hash.update(m));
       return Uint8Array.from(hash.digest());

@@ -4,3 +4,5 @@ coverage/
 /lib/**/*.js
 /lib/**/*.ts
 /lib/**/*.d.ts.map
+.idea
+yarn.lock
