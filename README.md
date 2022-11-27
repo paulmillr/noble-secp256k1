@@ -359,16 +359,16 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 Benchmarks measured with Apple M2 on MacOS 12 with node.js 18.8.
 
-    getPublicKey(utils.randomPrivateKey()) x 7,035 ops/sec @ 142μs/op
-    sign x 5,452 ops/sec @ 183μs/op
-    signSync (@noble/hashes) x 5,082 ops/sec @ 196μs/op
-    verify x 1,042 ops/sec @ 959μs/op
-    recoverPublicKey x 955 ops/sec @ 1ms/op
-    getSharedSecret aka ecdh x 624 ops/sec @ 1ms/op
-    getSharedSecret (precomputed) x 7,357 ops/sec @ 135μs/op
-    Point.fromHex (decompression) x 13,725 ops/sec @ 72μs/op
-    schnorr.sign x 770 ops/sec @ 1ms/op
-    schnorr.verify x 1,093 ops/sec @ 914μs/op
+    getPublicKey(utils.randomPrivateKey()) x 7,093 ops/sec @ 140μs/op
+    sign x 5,615 ops/sec @ 178μs/op
+    signSync (@noble/hashes) x 5,209 ops/sec @ 191μs/op
+    verify x 1,114 ops/sec @ 896μs/op
+    recoverPublicKey x 1,018 ops/sec @ 982μs/op
+    getSharedSecret aka ecdh x 665 ops/sec @ 1ms/op
+    getSharedSecret (precomputed) x 7,426 ops/sec @ 134μs/op
+    Point.fromHex (decompression) x 14,582 ops/sec @ 68μs/op
+    schnorr.sign x 805 ops/sec @ 1ms/op
+    schnorr.verify x 1,129 ops/sec @ 885μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 

@@ -561,3 +561,10 @@ describe('secp256k1', () => {
     });
   });
 });
+
+describe('JacobianPoint', () => {
+  const JZERO = secp.utils._JacobianPoint.ZERO;
+  const AZERO = secp.utils._JacobianPoint.fromAffine(secp.Point.ZERO);
+  expect(AZERO.equals(JZERO)).toBeTruthy();
+  expect(AZERO.toAffine().equals(JZERO.toAffine())).toBeTruthy();
+});

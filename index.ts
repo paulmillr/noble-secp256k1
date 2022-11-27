@@ -88,6 +88,8 @@ class JacobianPoint {
     if (!(p instanceof Point)) {
       throw new TypeError('JacobianPoint#fromAffine: expected Point');
     }
+    // fromAffine(x:0, y:0) would produce (x:0, y:0, z:1), but we need (x:0, y:1, z:0)
+    if (p.equals(Point.ZERO)) return JacobianPoint.ZERO;
     return new JacobianPoint(p.x, p.y, _1n);
   }
 
@@ -277,7 +279,8 @@ class JacobianPoint {
 
     // Initialize real and fake points for const-time
     let p = JacobianPoint.ZERO;
-    let f = JacobianPoint.ZERO;
+    // Should be G (base) point, since otherwise f can be infinity point in the end
+    let f = JacobianPoint.BASE;
 
     const windows = 1 + (USE_ENDOMORPHISM ? 128 / W : 256 / W); // W=8 17
     const windowSize = 2 ** (W - 1); // W=8 128
@@ -300,19 +303,26 @@ class JacobianPoint {
         n += _1n;
       }
 
+      // This code was first written with assumption that 'f' and 'p' will never be infinity point:
+      // since each addition is multiplied by 2 ** W, it cannot cancel each other. However,
+      // there is negate now: it is possible that negated element from low value
+      // would be the same as high element, which will create carry into next window.
+      // It's not obvious how this can fail, but still worth investigating later.
+
       // Check if we're onto Zero point.
       // Add random point inside current window to f.
+      const offset1 = offset;
+      const offset2 = offset + Math.abs(wbits) - 1;
+      const cond1 = window % 2 !== 0;
+      const cond2 = wbits < 0;
       if (wbits === 0) {
         // The most important part for const-time getPublicKey
-        let pr = precomputes[offset];
-        if (window % 2) pr = pr.negate();
-        f = f.add(pr);
+        f = f.add(constTimeNegate(cond1, precomputes[offset1]));
       } else {
-        let cached = precomputes[offset + Math.abs(wbits) - 1];
-        if (wbits < 0) cached = cached.negate();
-        p = p.add(cached);
+        p = p.add(constTimeNegate(cond2, precomputes[offset2]));
       }
     }
+    // JIT-compiler should not eliminate f here, since it will later be used in normalizeZ()
     return { p, f };
   }
 
@@ -334,8 +344,8 @@ class JacobianPoint {
       const { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
       let { p: k1p, f: f1p } = this.wNAF(k1, affinePoint);
       let { p: k2p, f: f2p } = this.wNAF(k2, affinePoint);
-      if (k1neg) k1p = k1p.negate();
-      if (k2neg) k2p = k2p.negate();
+      k1p = constTimeNegate(k1neg, k1p);
+      k2p = constTimeNegate(k2neg, k2p);
       k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
       point = k1p.add(k2p);
       fake = f1p.add(f2p);
@@ -351,17 +361,26 @@ class JacobianPoint {
   // Converts Jacobian point to affine (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   // (x, y, z) ∋ (x=x/z², y=y/z³)
-  toAffine(invZ: bigint = invert(this.z)): Point {
+  toAffine(invZ?: bigint): Point {
     const { x, y, z } = this;
+    const is0 = this.equals(JacobianPoint.ZERO);
+    if (invZ == null) invZ = is0 ? _8n : invert(z); // 8 was chosen arbitrarily
     const iz1 = invZ;
     const iz2 = mod(iz1 * iz1);
     const iz3 = mod(iz2 * iz1);
     const ax = mod(x * iz2);
     const ay = mod(y * iz3);
     const zz = mod(z * iz1);
+    if (is0) return Point.ZERO;
     if (zz !== _1n) throw new Error('invZ was invalid');
     return new Point(ax, ay);
   }
+}
+
+// Const-time utility for wNAF
+function constTimeNegate(condition: boolean, item: JacobianPoint) {
+  const neg = item.negate();
+  return condition ? neg : item;
 }
 
 // Stores precomputed values for points.
@@ -1600,6 +1619,8 @@ export const utils = {
     cached.multiply(_3n);
     return cached;
   },
+  // For tests
+  _JacobianPoint: JacobianPoint,
 };
 
 // Make sure sync hash could only be set once.
