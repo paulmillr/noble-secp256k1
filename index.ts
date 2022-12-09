@@ -28,9 +28,40 @@ const CURVE = Object.freeze({
   // Base point (x, y) aka generator point
   Gx: BigInt('55066263022277343669578718895168534326250603453777594175500187360389116729240'),
   Gy: BigInt('32670510020758816978083085130507043184471273380659243275938904335757337482424'),
+
   // For endomorphism, see below
   beta: BigInt('0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee'),
 });
+
+const divNearest = (a: bigint, b: bigint) => (a + b / _2n) / b;
+const endo = {
+  beta: BigInt('0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee'),
+  // Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
+  // Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
+  splitScalar(k: bigint) {
+    const { n } = CURVE;
+    const a1 = BigInt('0x3086d221a7d46bcde86c90e49284eb15');
+    const b1 = -_1n * BigInt('0xe4437ed6010e88286f547fa90abfe4c3');
+    const a2 = BigInt('0x114ca50f7a8e2f3f657c1108d9d44cfd8');
+    const b2 = a1;
+    const POW_2_128 = BigInt('0x100000000000000000000000000000000');
+
+    const c1 = divNearest(b2 * k, n);
+    const c2 = divNearest(-b1 * k, n);
+    let k1 = mod(k - c1 * a1 - c2 * a2, n);
+    let k2 = mod(-c1 * b1 - c2 * b2, n);
+    const k1neg = k1 > POW_2_128;
+    const k2neg = k2 > POW_2_128;
+    if (k1neg) k1 = n - k1;
+    if (k2neg) k2 = n - k2;
+    if (k1 > POW_2_128 || k2 > POW_2_128) {
+      throw new Error('splitScalarEndo: Endomorphism failed, k=' + k);
+    }
+    return { k1neg, k1, k2neg, k2 };
+  },
+};
+const fieldLen = 32;
+const groupLen = 32;
 
 // Cleaner js output if that's on a separate line.
 export { CURVE };
@@ -132,7 +163,7 @@ class JacobianPoint {
 
   // Fast algo for doubling 2 Jacobian Points when curve's a=0.
   // Note: cannot be reused for other curves when a != 0.
-  // From: http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
+  // From: https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
   // Cost: 2M + 5S + 6add + 3*2 + 1*3 + 1*8.
   double(): JacobianPoint {
     const { x: X1, y: Y1, z: Z1 } = this;
@@ -149,10 +180,9 @@ class JacobianPoint {
     return new JacobianPoint(X3, Y3, Z3);
   }
 
-  // Fast algo for adding 2 Jacobian Points when curve's a=0.
-  // Note: cannot be reused for other curves when a != 0.
-  // http://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-1998-cmo-2
-  // Cost: 12M + 4S + 6add + 1*2.
+  // Fast algo for adding 2 Jacobian Points.
+  // https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#addition-add-1998-cmo-2
+  // Cost: 12M + 4S + 6add + 1*2
   // Note: 2007 Bernstein-Lange (11M + 5S + 9add + 4*2) is actually 10% slower.
   add(other: JacobianPoint): JacobianPoint {
     if (!(other instanceof JacobianPoint)) throw new TypeError('JacobianPoint expected');
@@ -213,7 +243,7 @@ class JacobianPoint {
       }
       return p;
     }
-    let { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
+    let { k1neg, k1, k2neg, k2 } = endo.splitScalar(n);
     let k1p = P0;
     let k2p = P0;
     let d: JacobianPoint = this;
@@ -226,7 +256,7 @@ class JacobianPoint {
     }
     if (k1neg) k1p = k1p.negate();
     if (k2neg) k2p = k2p.negate();
-    k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
+    k2p = new JacobianPoint(mod(k2p.x * endo.beta), k2p.y, k2p.z);
     return k1p.add(k2p);
   }
 
@@ -323,6 +353,10 @@ class JacobianPoint {
       }
     }
     // JIT-compiler should not eliminate f here, since it will later be used in normalizeZ()
+    // Even if the variable is still unused, there are some checks which will
+    // throw an exception, so compiler needs to prove they won't happen, which is hard.
+    // At this point there is a way to F be infinity-point even if p is not,
+    // which makes it less const-time: around 1 bigint multiply.
     return { p, f };
   }
 
@@ -341,12 +375,12 @@ class JacobianPoint {
     // Fake point, we use it to achieve constant-time multiplication.
     let fake: JacobianPoint;
     if (USE_ENDOMORPHISM) {
-      const { k1neg, k1, k2neg, k2 } = splitScalarEndo(n);
+      const { k1neg, k1, k2neg, k2 } = endo.splitScalar(n);
       let { p: k1p, f: f1p } = this.wNAF(k1, affinePoint);
       let { p: k2p, f: f2p } = this.wNAF(k2, affinePoint);
       k1p = constTimeNegate(k1neg, k1p);
       k2p = constTimeNegate(k2neg, k2p);
-      k2p = new JacobianPoint(mod(k2p.x * CURVE.beta), k2p.y, k2p.z);
+      k2p = new JacobianPoint(mod(k2p.x * endo.beta), k2p.y, k2p.z);
       point = k1p.add(k2p);
       fake = f1p.add(f2p);
     } else {
@@ -364,7 +398,9 @@ class JacobianPoint {
   toAffine(invZ?: bigint): Point {
     const { x, y, z } = this;
     const is0 = this.equals(JacobianPoint.ZERO);
-    if (invZ == null) invZ = is0 ? _8n : invert(z); // 8 was chosen arbitrarily
+    // If invZ was 0, we return zero point. However we still want to execute
+    // all operations, so we replace invZ with a random number, 8.
+    if (invZ == null) invZ = is0 ? _8n : invert(z);
     const iz1 = invZ;
     const iz2 = mod(iz1 * iz1);
     const iz3 = mod(iz2 * iz1);
@@ -443,8 +479,8 @@ export class Point {
 
   // Schnorr doesn't support uncompressed points, so this is only for ECDSA
   private static fromUncompressedHex(bytes: Uint8Array) {
-    const x = bytesToNumber(bytes.subarray(1, 33));
-    const y = bytesToNumber(bytes.subarray(33, 65));
+    const x = bytesToNumber(bytes.subarray(1, fieldLen + 1));
+    const y = bytesToNumber(bytes.subarray(fieldLen + 1, fieldLen * 2 + 1));
     const point = new Point(x, y);
     point.assertValidity();
     return point;
@@ -698,8 +734,7 @@ export class Signature {
   }
 }
 
-// Concatenates several Uint8Arrays into one.
-// TODO: check if we're copying data instead of moving it and if that's ok
+// Copies several Uint8Arrays into one.
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (!arrays.every((b) => b instanceof Uint8Array)) throw new Error('Uint8Array list expected');
   if (arrays.length === 1) return arrays[0];
@@ -730,10 +765,9 @@ function bytesToHex(uint8a: Uint8Array): string {
 const POW_2_256 = BigInt('0x10000000000000000000000000000000000000000000000000000000000000000');
 function numTo32bStr(num: bigint): string {
   if (typeof num !== 'bigint') throw new Error('Expected bigint');
-  if (!(_0n <= num && num < POW_2_256)) throw new Error('Expected number < 2^256');
+  if (!(_0n <= num && num < POW_2_256)) throw new Error('Expected number 0 <= n < 2^256');
   return num.toString(16).padStart(64, '0');
 }
-
 function numTo32b(num: bigint): Uint8Array {
   const b = hexToBytes(numTo32bStr(num));
   if (b.length !== 32) throw new Error('Error: expected 32 bytes');
@@ -886,33 +920,6 @@ function invertBatch(nums: bigint[], p: bigint = CURVE.P): bigint[] {
   return scratch;
 }
 
-const divNearest = (a: bigint, b: bigint) => (a + b / _2n) / b;
-const ENDO = {
-  a1: BigInt('0x3086d221a7d46bcde86c90e49284eb15'),
-  b1: -_1n * BigInt('0xe4437ed6010e88286f547fa90abfe4c3'),
-  a2: BigInt('0x114ca50f7a8e2f3f657c1108d9d44cfd8'),
-  b2: BigInt('0x3086d221a7d46bcde86c90e49284eb15'), // === a1
-  POW_2_128: BigInt('0x100000000000000000000000000000000'),
-};
-// Split 256-bit K into 2 128-bit (k1, k2) for which k1 + k2 * lambda = K.
-// Used for endomorphism https://gist.github.com/paulmillr/eb670806793e84df628a7c434a873066
-function splitScalarEndo(k: bigint) {
-  const { n } = CURVE;
-  const { a1, b1, a2, b2, POW_2_128 } = ENDO;
-  const c1 = divNearest(b2 * k, n);
-  const c2 = divNearest(-b1 * k, n);
-  let k1 = mod(k - c1 * a1 - c2 * a2, n);
-  let k2 = mod(-c1 * b1 - c2 * b2, n);
-  const k1neg = k1 > POW_2_128;
-  const k2neg = k2 > POW_2_128;
-  if (k1neg) k1 = n - k1;
-  if (k2neg) k2 = n - k2;
-  if (k1 > POW_2_128 || k2 > POW_2_128) {
-    throw new Error('splitScalarEndo: Endomorphism failed, k=' + k);
-  }
-  return { k1neg, k1, k2neg, k2 };
-}
-
 // Ensures ECDSA message hashes are 32 bytes and < curve order
 function truncateHash(hash: Uint8Array): bigint {
   const { n } = CURVE;
@@ -1032,10 +1039,10 @@ function normalizePrivateKey(key: PrivKey): bigint {
   } else if (typeof key === 'number' && Number.isSafeInteger(key) && key > 0) {
     num = BigInt(key);
   } else if (typeof key === 'string') {
-    if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
+    if (key.length !== 2 * groupLen) throw new Error('Expected 32 bytes of private key');
     num = hexToNumber(key);
   } else if (key instanceof Uint8Array) {
-    if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
+    if (key.length !== groupLen) throw new Error('Expected 32 bytes of private key');
     num = bytesToNumber(key);
   } else {
     throw new TypeError('Expected valid private key');
@@ -1521,8 +1528,10 @@ export const utils = {
    */
   hashToPrivateKey: (hash: Hex): Uint8Array => {
     hash = ensureBytes(hash);
-    if (hash.length < 40 || hash.length > 1024)
-      throw new Error('Expected 40-1024 bytes of private key as per FIPS 186');
+    const minLen = fieldLen + 8;
+    if (hash.length < minLen || hash.length > 1024) {
+      throw new Error(`Expected ${minLen}-1024 bytes of private key as per FIPS 186`);
+    }
     const num = mod(bytesToNumber(hash), CURVE.n - _1n) + _1n;
     return numTo32b(num);
   },
@@ -1540,8 +1549,21 @@ export const utils = {
 
   // Takes curve order + 64 bits from CSPRNG
   // so that modulo bias is neglible, matches FIPS 186 B.1.1.
-  randomPrivateKey: (): Uint8Array => {
-    return utils.hashToPrivateKey(utils.randomBytes(40));
+  randomPrivateKey: (): Uint8Array => utils.hashToPrivateKey(utils.randomBytes(fieldLen + 8)),
+
+  /**
+   * 1. Returns cached point which you can use to pass to `getSharedSecret` or `#multiply` by it.
+   * 2. Precomputes point multiplication table. Is done by default on first `getPublicKey()` call.
+   * If you want your first getPublicKey to take 0.16ms instead of 20ms, make sure to call
+   * utils.precompute() somewhere without arguments first.
+   * @param windowSize 2, 4, 8, 16
+   * @returns cached point
+   */
+  precompute(windowSize = 8, point = Point.BASE): Point {
+    const cached = point === Point.BASE ? point : new Point(point.x, point.y);
+    cached._setWindowSize(windowSize);
+    cached.multiply(_3n);
+    return cached;
   },
 
   sha256: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
@@ -1605,20 +1627,6 @@ export const utils = {
     return _sha256Sync(tagP, ...messages);
   },
 
-  /**
-   * 1. Returns cached point which you can use to pass to `getSharedSecret` or `#multiply` by it.
-   * 2. Precomputes point multiplication table. Is done by default on first `getPublicKey()` call.
-   * If you want your first getPublicKey to take 0.16ms instead of 20ms, make sure to call
-   * utils.precompute() somewhere without arguments first.
-   * @param windowSize 2, 4, 8, 16
-   * @returns cached point
-   */
-  precompute(windowSize = 8, point = Point.BASE): Point {
-    const cached = point === Point.BASE ? point : new Point(point.x, point.y);
-    cached._setWindowSize(windowSize);
-    cached.multiply(_3n);
-    return cached;
-  },
   // For tests
   _JacobianPoint: JacobianPoint,
 };
