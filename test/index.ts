@@ -15,7 +15,7 @@ const FC_BIGINT = fc.bigInt(1n + 1n, secp.CURVE.n - 1n);
 // prettier-ignore
 const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxyxyzxyzxy', secp.CURVE.n + 2n];
 
-secp.utils.sha256Sync = (...msgs) =>
+secp.utils.sha256Sync = (...msgs: Uint8Array[]) =>
   createHash('sha256')
     .update(secp.utils.concatBytes(...msgs))
     .digest();
@@ -54,6 +54,7 @@ describe('secp256k1', () => {
   });
   it('.getPublicKey() rejects invalid keys', () => {
     for (const item of INVALID_ITEMS) {
+      console.log(item);
       expect(() => secp.getPublicKey(item as any)).toThrowError();
     }
   });
@@ -320,7 +321,7 @@ describe('secp256k1', () => {
       // @ts-ignore
       signature.s = s;
 
-      const verified = secp.verify(signature, msg, pub);
+      const verified = secp.verify(signature, msg, pub.toRawBytes());
       // Verifies, but it shouldn't, because signature S > curve order
       expect(verified).toBeFalsy();
     });
@@ -332,7 +333,7 @@ describe('secp256k1', () => {
       const s = 96900796730960181123786672629079577025401317267213807243199432755332205217369n;
       const pub = new secp.Point(x, y);
       const sig = new secp.Signature(r, s);
-      expect(secp.verify(sig, msg, pub)).toBeFalsy();
+      expect(secp.verify(sig.toDERRawBytes(), msg, pub.toRawBytes())).toBeFalsy();
     });
     it('should verify non-strict msg bb5a...', async () => {
       const msg = 'bb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023';
@@ -342,7 +343,7 @@ describe('secp256k1', () => {
       const s = 115792089237316195423570985008687907852837564279074904382605163141518161494334n;
       const pub = new secp.Point(x, y);
       const sig = new secp.Signature(r, s);
-      expect(secp.verify(sig, msg, pub, { strict: false })).toBeTruthy();
+      expect(secp.verify(sig.toDERRawBytes(), msg, pub.toRawBytes(), { strict: false })).toBeTruthy();
     });
     it('should not verify invalid deterministic signatures with RFC 6979', () => {
       for (const vector of ecdsa.invalid.verify) {
@@ -534,7 +535,7 @@ describe('secp256k1', () => {
   describe('wychenproof vectors', () => {
     it('should pass all tests', async () => {
       for (let group of wp.testGroups) {
-        const pubKey = secp.Point.fromHex(group.key.uncompressed);
+        const pubKey = secp.Point.fromHex(group.key.uncompressed).toRawBytes();
         for (let test of group.tests) {
           const m = await secp.utils.sha256(hexToBytes(test.msg));
           if (test.result === 'valid' || test.result === 'acceptable') {
