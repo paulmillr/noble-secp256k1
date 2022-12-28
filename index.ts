@@ -1,6 +1,7 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-import { secp256k1, schnorr as schnorr_secp } from 'micro-curve-definitions/lib/secp256k1';
-import * as genUtils from '@noble/curves/utils';
+import { secp256k1, schnorr as schnorr_secp } from '@noble/curves/secp256k1';
+import * as genUtils from '@noble/curves/abstract/utils';
+import { randomBytes } from '@noble/hashes/utils';
 
 /**
  * Changes required in @noble/curves to make @noble/secp256k1@1.7 test suite pass:
@@ -15,23 +16,35 @@ import * as genUtils from '@noble/curves/utils';
  * - ban non-Hex inputs to sign() / verify(): hard to check types
  */
 
-const { getPublicKey, sign: sign_secp, verify: verify_secp, getSharedSecret, Point, JacobianPoint, utils: utilsc, CURVE, Signature } = secp256k1;
-export const _JacobianPoint = JacobianPoint;
-export const utils = Object.assign({
-  sha256(data: Uint8Array) {
-    return secp256k1.CURVE.hash(data);
+const {
+  getPublicKey,
+  sign: sign_secp,
+  verify: verify_secp,
+  getSharedSecret,
+  Point,
+  utils: utilsc,
+  CURVE,
+  Signature,
+} = secp256k1;
+export const utils = Object.assign(
+  {
+    sha256(data: Uint8Array) {
+      return secp256k1.CURVE.hash(data);
+    },
+    sha256Sync: (data: Uint8Array) => {
+      return secp256k1.CURVE.hash(data);
+    },
+    precompute(a: number) {},
+    _bigintTo32Bytes: (n: bigint) => {
+      const bytes = utilsc._bigintToBytes(n);
+      genUtils.ensureBytes(bytes, 32);
+      return bytes;
+    },
   },
-  sha256Sync: (data: Uint8Array) => {
-    return secp256k1.CURVE.hash(data);
-  },
-  _JacobianPoint: JacobianPoint,
-  precompute(a: number) {},
-  _bigintTo32Bytes: (n: bigint) => {
-    const bytes = utilsc._bigintToBytes(n);
-    genUtils.ensureBytes(bytes, 32);
-    return bytes;
-  }
-}, utilsc, genUtils);
+  utilsc,
+  genUtils,
+  { randomBytes }
+);
 export { getPublicKey, getSharedSecret, Point, CURVE, Signature };
 
 type U8A = Uint8Array;
@@ -51,7 +64,7 @@ async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<Si
   if (opts.canonical === false) throw new Error('Canonical: false is not supported');
   if ('extraEntropy' in opts) secp_opts.extraEntropy = opts.extraEntropy;
   const res = sign_secp(msgHash, privKey, secp_opts);
-  const raw = (opts.der === false) ? res.toCompactRawBytes() : res.toDERRawBytes();
+  const raw = opts.der === false ? res.toCompactRawBytes() : res.toDERRawBytes();
   const rec = res.recovery!;
   return opts.recovered ? [raw, rec] : raw;
 }
@@ -60,11 +73,17 @@ type VOpts = { strict?: boolean };
 const vopts: VOpts = { strict: true };
 // type PubKey = Hex | PubKey;
 
-interface RS { r: bigint, s: bigint }
-interface XY { x: bigint, s: bigint }
+interface RS {
+  r: bigint;
+  s: bigint;
+}
+interface XY {
+  x: bigint;
+  s: bigint;
+}
 function verify(signature: Hex | RS, msgHash: Hex, publicKey: Hex, opts = vopts): boolean {
   const secp_opts: Record<any, any> = {};
-  secp_opts.lowS = (opts.strict === false) ? false : true;
+  secp_opts.lowS = opts.strict === false ? false : true;
   return verify_secp(signature as Hex, msgHash, genUtils.ensureBytes(publicKey), secp_opts);
 }
 export function recoverPublicKey(
@@ -74,9 +93,13 @@ export function recoverPublicKey(
   isCompressed = false
 ): Uint8Array {
   let sig;
-  try { sig = Signature.fromDER(signature); } catch (e) { sig = Signature.fromCompact(signature); }
+  try {
+    sig = Signature.fromDER(signature);
+  } catch (e) {
+    sig = Signature.fromCompact(signature);
+  }
   sig = sig.copyWithRecoveryBit(recovery);
-  return sig.recoverPublicKey(msgHash).toRawBytes(isCompressed)
+  return sig.recoverPublicKey(msgHash).toRawBytes(isCompressed);
 }
 export const signSync = sign;
 export { sign, verify };
@@ -85,5 +108,5 @@ export const schnorr = {
   sign: schnorr_secp.sign,
   signSync: schnorr_secp.sign,
   verify: schnorr_secp.verify,
-  verifySync: schnorr_secp.verify
+  verifySync: schnorr_secp.verify,
 };

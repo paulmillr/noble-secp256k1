@@ -6,7 +6,7 @@
     "target": "es2020",
     "lib": ["es2020"],
     "module": "commonjs",
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "outDir": "lib",
     "noImplicitAny": true,
     "removeComments": true,

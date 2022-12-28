@@ -4,7 +4,7 @@
     "target": "es2020",
     "lib": ["es2020"],
     "module": "es6",
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "outDir": "lib/esm",
     "noImplicitAny": true,
     "removeComments": true,

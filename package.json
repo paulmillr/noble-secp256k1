@@ -1,11 +1,12 @@
 {
   "name": "@noble/secp256k1",
-  "version": "1.7.0",
+  "version": "2.0.0-pre",
   "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA & Schnorr signatures",
   "files": [
     "lib"
   ],
-  "main": "lib/index.js",
+  "type": "module",
+  "main": "build/noble-secp256k1.js",
   "module": "lib/esm/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
@@ -24,11 +25,9 @@
     "url": "https://github.com/paulmillr/noble-secp256k1.git"
   },
   "license": "MIT",
-  "browser": {
-    "crypto": false
-  },
   "devDependencies": {
-    "@noble/hashes": "1.1.2",
+    "@noble/curves": "~0.5.0",
+    "@noble/hashes": "~1.1.3",
     "@rollup/plugin-commonjs": "22.0.0",
     "@rollup/plugin-node-resolve": "13.3.0",
     "@types/jest": "28.1.1",
@@ -79,9 +78,5 @@
       "type": "individual",
       "url": "https://paulmillr.com/funding/"
     }
-  ],
-  "dependencies": {
-    "@noble/curves": "^0.2.0",
-    "micro-curve-definitions": "file:../../micro-curve-definitions-0.2.1.tgz"
-  }
+  ]
 }
