@@ -37,7 +37,7 @@ import * as secp from '@noble/secp256k1';
   // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
   const privKey = secp.utils.randomPrivateKey();
-  const pubKey = secp.getPublicKey(privKey);
+  const pubKey = secp.getPublicKey(privKey, false);
   const msgHash = await secp.utils.sha256('hello world');
   const signature = await secp.sign(msgHash, privKey);
   const isValid = secp.verify(signature, msgHash, pubKey);
@@ -58,7 +58,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 
 ## API
 
-- [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
+- [`getPublicKey(privateKey, isCompressed)`](#getpublickeyprivatekey)
 - [`sign(msgHash, privateKey)`](#signmsghash-privatekey)
 - [`verify(signature, msgHash, publicKey)`](#verifysignature-msghash-publickey)
 - [`getSharedSecret(privateKeyA, publicKeyB)`](#getsharedsecretprivatekeya-publickeyb)
@@ -68,7 +68,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`schnorr.verify(signature, message, publicKey)`](#schnorrverifysignature-message-publickey)
 - [Utilities](#utilities)
 
-##### `getPublicKey(privateKey)`
+##### `getPublicKey(privateKey, isCompressed)`
 
 ```typescript
 function getPublicKey(privateKey: Uint8Array | string | bigint, isCompressed = false): Uint8Array;
@@ -187,7 +187,7 @@ Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private ke
   getSharedSecret(privKey, pub); // Now 12x faster
   ```
 
-##### `recoverPublicKey(hash, signature, recovery)`
+##### `recoverPublicKey(hash, signature, recovery, isCompressed)`
 
 ```typescript
 function recoverPublicKey(
