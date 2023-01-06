@@ -866,7 +866,10 @@ function sqrtMod(x: bigint): bigint {
   const b223 = (pow2(b220, _3n) * b3) % P;
   const t1 = (pow2(b223, _23n) * b22) % P;
   const t2 = (pow2(t1, _6n) * b2) % P;
-  return pow2(t2, _2n);
+  const rt = pow2(t2, _2n);
+  const xc = (rt * rt) % P;
+  if (xc !== x) throw new Error('Cannot find square root');
+  return rt;
 }
 
 // Inverses number over modulo
