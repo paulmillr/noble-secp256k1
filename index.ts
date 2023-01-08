@@ -533,19 +533,17 @@ export class Point {
    * ```
    */
   static fromSignature(msgHash: Hex, signature: Sig, recovery: number): Point {
-    msgHash = ensureBytes(msgHash);
-    const h = truncateHash(msgHash);
     const { r, s } = normalizeSignature(signature);
-    if (recovery !== 0 && recovery !== 1) {
-      throw new Error('Cannot recover signature: invalid recovery bit');
-    }
-    const prefix = recovery & 1 ? '03' : '02';
-    const R = Point.fromHex(prefix + numTo32bStr(r));
+    if (![0, 1, 2, 3].includes(recovery)) throw new Error('Cannot recover: invalid recovery bit');
+    const h = truncateHash(ensureBytes(msgHash));
     const { n } = CURVE;
-    const rinv = invert(r, n);
+    const radj = (recovery === 2 || recovery === 3) ? r + n : r;
+    const rinv = invert(radj, n);
     // Q = u1⋅G + u2⋅R
     const u1 = mod(-h * rinv, n);
     const u2 = mod(s * rinv, n);
+    const prefix = recovery & 1 ? '03' : '02';
+    const R = Point.fromHex(prefix + numTo32bStr(radj));
     const Q = Point.BASE.multiplyAndAddUnsafe(R, u1, u2);
     if (!Q) throw new Error('Cannot recover signature: point at infinify');
     Q.assertValidity();
@@ -1069,8 +1067,8 @@ function kmdToSig(kBytes: Uint8Array, m: bigint, d: bigint, lowS = true): Recove
   const s = mod(kinv * mod(m + d * r, n), n);
   if (s === _0n) return;
 
-  // Recovery bit adjustment
   let sig = new Signature(r, s);
+  // Recovery bit is usually 0 or 1; rarely it's 2 or 3, when q.x > n
   let recovery = (q.x === sig.r ? 0 : 2) | Number(q.y & _1n);
   if (lowS && sig.hasHighS()) {
     sig = sig.normalizeS();
@@ -1258,7 +1256,7 @@ function finalizeSig(recSig: RecoveredSig, opts: OptsNoRecov | OptsRecov): SignO
  * sign(m, d, k) where
  *   (x, y) = G × k
  *   r = x mod n
- *   s = (1/k * (m + dr) mod n
+ *   s = (m + dr)/k mod n
  * ```
  * @param opts `recovered, canonical, der, extraEntropy`
  */
@@ -1267,11 +1265,11 @@ async function sign(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): Promise
 async function sign(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): Promise<SignOutput> {
   // Steps A, D of RFC6979 3.2.
   const { seed, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
-  let sig: RecoveredSig | undefined;
   // Steps B, C, D, E, F, G
   const drbg = new HmacDrbg(hashLen, groupLen);
   await drbg.reseed(seed);
   // Step H3, repeat until k is in range [1, n-1]
+  let sig: RecoveredSig | undefined;
   while (!(sig = kmdToSig(await drbg.generate(), m, d, opts.canonical))) await drbg.reseed();
   return finalizeSig(sig, opts);
 }
@@ -1286,11 +1284,11 @@ function signSync(msgHash: Hex, privKey: PrivKey, opts?: OptsNoRecov): U8A;
 function signSync(msgHash: Hex, privKey: PrivKey, opts: Opts = {}): SignOutput {
   // Steps A, D of RFC6979 3.2.
   const { seed, m, d } = initSigArgs(msgHash, privKey, opts.extraEntropy);
-  let sig: RecoveredSig | undefined;
   // Steps B, C, D, E, F, G
   const drbg = new HmacDrbg(hashLen, groupLen);
   drbg.reseedSync(seed);
   // Step H3, repeat until k is in range [1, n-1]
+  let sig: RecoveredSig | undefined;
   while (!(sig = kmdToSig(drbg.generateSync(), m, d, opts.canonical))) drbg.reseedSync();
   return finalizeSig(sig, opts);
 }
