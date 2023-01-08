@@ -704,12 +704,11 @@ export class Signature {
   }
 
   // DER-encoded
-  toDERRawBytes(isCompressed = false) {
-    return hexToBytes(this.toDERHex(isCompressed));
+  toDERRawBytes() {
+    return hexToBytes(this.toDERHex());
   }
-  toDERHex(isCompressed = false) {
+  toDERHex() {
     const sHex = sliceDER(numberToHexUnpadded(this.s));
-    if (isCompressed) return sHex;
     const rHex = sliceDER(numberToHexUnpadded(this.r));
     const rLen = numberToHexUnpadded(rHex.length / 2);
     const sLen = numberToHexUnpadded(sHex.length / 2);
