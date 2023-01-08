@@ -537,7 +537,7 @@ export class Point {
     if (![0, 1, 2, 3].includes(recovery)) throw new Error('Cannot recover: invalid recovery bit');
     const h = truncateHash(ensureBytes(msgHash));
     const { n } = CURVE;
-    const radj = (recovery === 2 || recovery === 3) ? r + n : r;
+    const radj = recovery === 2 || recovery === 3 ? r + n : r;
     const rinv = invert(radj, n);
     // Q = u1⋅G + u2⋅R
     const u1 = mod(-h * rinv, n);
@@ -852,11 +852,13 @@ function pow2(x: bigint, power: bigint): bigint {
   return res;
 }
 
-// Used to calculate y - the square root of y².
-// Exponentiates it to very big number (P+1)/4.
-// We are unwrapping the loop because it's 2x faster.
-// (P+1n/4n).toString(2) would produce bits [223x 1, 0, 22x 1, 4x 0, 11, 00]
-// We are multiplying it bit-by-bit
+/**
+ * Allows to compute square root √y 2x faster.
+ * To calculate √y, we need to exponentiate it to a very big number:
+ * `y² = x³ + ax + b; y = y² ^ (p+1)/4`
+ * We are unwrapping the loop and multiplying it bit-by-bit.
+ * (P+1n/4n).toString(2) would produce bits [223x 1, 0, 22x 1, 4x 0, 11, 00]
+ */
 function sqrtMod(x: bigint): bigint {
   const { P } = CURVE;
   const _6n = BigInt(6);
