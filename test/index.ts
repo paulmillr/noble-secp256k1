@@ -123,9 +123,8 @@ describe('secp256k1', () => {
         if (expected) {
           expect(p.add(q).toHex(true)).toBe(expected);
         } else {
-          if (!p.equals(q.negate())) {
-            expect(() => p.add(q).toHex(true)).toThrowError();
-          }
+          if (p.equals(q.negate())) expect(p.add(q).toHex(true)).toBe(secp.Point.ZERO.toHex(true));
+          else expect(() => p.add(q).toHex(true)).toThrowError();
         }
       }
     });
