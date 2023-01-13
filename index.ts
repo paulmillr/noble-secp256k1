@@ -1,10 +1,11 @@
+const B256 = 2n ** 256n;
 export const CURVE = {
-  P: 2n ** 256n - 2n ** 32n - 977n,
-  n: 2n ** 256n - 432420386565659656852420866394968145599n,
+  P: B256 - 2n ** 32n - 977n,
+  n: B256 - 0x14551231950b75fc4402da1732fc9bebfn,
   a: 0n,
   b: 7n,
-  Gx: 55066263022277343669578718895168534326250603453777594175500187360389116729240n,
-  Gy: 32670510020758816978083085130507043184471273380659243275938904335757337482424n,
+  Gx: 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n,
+  Gy: 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n,
 };
 const fLen = 32; // field/group byte length
 const stdOpts: { lowS?: boolean; der?: boolean; extraEntropy?: any } = { lowS: true };
@@ -13,17 +14,102 @@ const isValidFE = (n: bigint) => typeof n === 'bigint' && 0n < n && n < CURVE.P;
 const isValidGE = (n: bigint) => typeof n === 'bigint' && 0n < n && n < CURVE.n;
 const weierstrass = (x: bigint) => mod(mod(x * mod(x * x)) + CURVE.a * x + CURVE.b);
 
-function assertBytes(a: any, len?: number) {
+const assertBytes = (a: any, len?: number) => {
   if (!(a instanceof Uint8Array)) throw new Error('ui8a expected');
   if (typeof len === 'number' && len > 0 && a.length !== len) throw new Error('len expected');
   return a;
-}
+};
 const ensureBytes = (a: any, len?: number) =>
   assertBytes(typeof a === 'string' ? hexToBytes(a) : a, len);
 function normalizePrivKey(privKey: Hex | bigint) {
   if (typeof privKey !== 'bigint') privKey = bytesToNumber(ensureBytes(privKey, fLen));
   if (!isValidGE(privKey)) throw new Error();
   return privKey;
+}
+const assertPrjPoint = (p: any) => {
+  if (!(p instanceof ProjP)) throw new Error();
+};
+class ProjP {
+  static readonly G = new ProjP(CURVE.Gx, CURVE.Gy, 1n);
+  static readonly I = new ProjP(0n, 1n, 0n);
+  static fromAffine(p: Point) {
+    if (!(p instanceof Point)) throw new Error();
+    return new ProjP(p.x, p.y, 1n);
+  }
+  constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint) {}
+  eql(other: ProjP): boolean {
+    assertPrjPoint(other);
+    const { x: X1, y: Y1, z: Z1 } = this;
+    const { x: X2, y: Y2, z: Z2 } = other;
+    return mod(X1 * Z2) === mod(X2 * Z1) && mod(Y1 * Z2) === mod(Y2 * Z1);
+  }
+  dbl() {
+    return this.add(this);
+  }
+  add(other: ProjP) {
+    assertPrjPoint(other);
+    const { x: X1, y: Y1, z: Z1 } = this;
+    const { x: X2, y: Y2, z: Z2 } = other;
+    let X3 = 0n, Y3 = 0n, Z3 = 0n; // prettier-ignore
+    const a = CURVE.a;
+    const b3 = mod(CURVE.b * 3n);
+    let t0 = mod(X1 * X2); // step 1
+    let t1 = mod(Y1 * Y2);
+    let t2 = mod(Z1 * Z2);
+    let t3 = mod(X1 + Y1);
+    let t4 = mod(X2 + Y2); // step 5
+    t3 = mod(t3 * t4);
+    t4 = mod(t0 + t1);
+    t3 = mod(t3 - t4);
+    t4 = mod(X1 + Z1);
+    let t5 = mod(X2 + Z2); // step 10
+    t4 = mod(t4 * t5);
+    t5 = mod(t0 + t2);
+    t4 = mod(t4 - t5);
+    t5 = mod(Y1 + Z1);
+    X3 = mod(Y2 + Z2); // step 15
+    t5 = mod(t5 * X3);
+    X3 = mod(t1 + t2);
+    t5 = mod(t5 - X3);
+    Z3 = mod(a * t4);
+    X3 = mod(b3 * t2); // step 20
+    Z3 = mod(X3 + Z3);
+    X3 = mod(t1 - Z3);
+    Z3 = mod(t1 + Z3);
+    Y3 = mod(X3 * Z3);
+    t1 = mod(t0 + t0); // step 25
+    t1 = mod(t1 + t0);
+    t2 = mod(a * t2);
+    t4 = mod(b3 * t4);
+    t1 = mod(t1 + t2);
+    t2 = mod(t0 - t2); // step 30
+    t2 = mod(a * t2);
+    t4 = mod(t4 + t2);
+    t0 = mod(t1 * t4);
+    Y3 = mod(Y3 + t0);
+    t0 = mod(t5 * t4); // step 35
+    X3 = mod(t3 * X3);
+    X3 = mod(X3 - t0);
+    t0 = mod(t3 * t1);
+    Z3 = mod(t5 * Z3);
+    Z3 = mod(Z3 + t0); // step 40
+    return new ProjP(X3, Y3, Z3);
+  }
+  mul(n: bigint) {
+    if (!isValidGE(n)) throw new Error();
+    let p = ProjP.I;
+    for (let d: ProjP = this; n > 0n; d = d.dbl(), n >>= 1n) {
+      if (n & 1n) p = p.add(d);
+    }
+    return p;
+  }
+  aff() {
+    const { x, y, z } = this;
+    if (this.eql(ProjP.I)) return Point.ZERO;
+    const iz = invert(this.z);
+    if (mod(z * iz) !== 1n) throw new Error();
+    return new Point(mod(x * iz), mod(y * iz));
+  }
 }
 export class Point {
   static BASE = new Point(CURVE.Gx, CURVE.Gy);
@@ -32,7 +118,7 @@ export class Point {
     return Point.BASE.multiply(normalizePrivKey(privKey));
   }
   constructor(readonly x: bigint, readonly y: bigint) {}
-  assertValidity() {
+  ok() {
     const { x, y } = this;
     if (!isValidFE(x) || !isValidFE(y)) throw new Error();
     if (mod(mod(y * y) - weierstrass(x)) !== 0n) throw new Error();
@@ -41,40 +127,14 @@ export class Point {
   equals(other: Point) {
     return this.x === other.x && this.y === other.y;
   }
-  double(): Point {
-    const { x: X1, y: Y1 } = this;
-    const lam = mod(3n * X1 ** 2n * invert(2n * Y1));
-    const X3 = mod(lam * lam - 2n * X1);
-    const Y3 = mod(lam * (X1 - X3) - Y1);
-    return new Point(X3, Y3);
-  }
-  // https://hyperelliptic.org/EFD/g1p/auto-shortw.html
-  add(b: Point): Point {
-    const a = this;
-    const { x: X1, y: Y1 } = a;
-    const { x: X2, y: Y2 } = b;
-    if (X1 === 0n || Y1 === 0n) return b;
-    if (X2 === 0n || Y2 === 0n) return a;
-    if (X1 === X2 && Y1 === Y2) return this.double();
-    if (X1 === X2 && Y1 === -Y2) return Point.ZERO;
-    const x2x1 = mod(X2 - X1);
-    if (x2x1 === 0n) return Point.ZERO;
-    const lam = mod((Y2 - Y1) * invert(x2x1));
-    const X3 = mod(lam * lam - X1 - X2);
-    const Y3 = mod(lam * (X1 - X3) - Y1);
-    return new Point(X3, Y3);
-  }
   negate() {
     return new Point(this.x, mod(-this.y));
   }
-  subtract(b: Point) {
-    return this.add(b.negate());
+  add(rhs: Point) {
+    return ProjP.fromAffine(this).add(ProjP.fromAffine(rhs)).aff();
   }
   multiply(n: bigint) {
-    if (!isValidGE(n)) throw new Error();
-    let p = Point.ZERO;
-    for (let d: Point = this; n > 0n; d = d.double(), n >>= 1n) if (n & 1n) p = p.add(d);
-    return p;
+    return ProjP.fromAffine(this).mul(n).aff();
   }
   static fromHex(hex: Hex) {
     hex = ensureBytes(hex);
@@ -92,7 +152,7 @@ export class Point {
     }
     if (hex.length === 65 && head === 0x04) p = new Point(x, sliceNum(tail, fLen, 2 * fLen));
     if (!p) throw new Error();
-    return p.assertValidity();
+    return p.ok();
   }
   toHex(isCompressed = false) {
     const { x, y } = this;
@@ -150,11 +210,11 @@ function bytesToHex(uint8a: Uint8Array): string {
   return hex;
 }
 function hexToNumber(hex: string): bigint {
-  if (typeof hex !== 'string') throw new TypeError();
+  if (typeof hex !== 'string') throw new Error();
   return BigInt(`0x${hex}`);
 }
 function hexToBytes(hex: string): Uint8Array {
-  if (typeof hex !== 'string') throw new TypeError();
+  if (typeof hex !== 'string') throw new Error();
   if (hex.length % 2) throw new Error();
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
@@ -170,7 +230,7 @@ const bytesToNumber = (b: Uint8Array): bigint => hexToNumber(bytesToHex(b));
 const sliceNum = (b: Uint8Array, from: number, to: number) => bytesToNumber(b.slice(from, to));
 function numToField(num: bigint): Uint8Array {
   if (typeof num !== 'bigint') throw new Error();
-  if (!(0n <= num && num < 2n ** 256n)) throw new Error();
+  if (!(0n <= num && num < B256)) throw new Error();
   return hexToBytes(num.toString(16).padStart(2 * fLen, '0'));
 }
 const numToFieldStr = (num: bigint): string => bytesToHex(numToField(num));
@@ -294,38 +354,26 @@ class HmacDrbg {
   k: Uint8Array;
   v: Uint8Array;
   counter: number;
-  constructor(public hashLen = fLen, public qByteLen = fLen) {
+  constructor() {
     // Step B, Step C: set hashLen to 8*ceil(hlen/8)
-    this.v = new Uint8Array(hashLen).fill(1);
-    this.k = new Uint8Array(hashLen).fill(0);
+    this.v = new Uint8Array(fLen).fill(1);
+    this.k = new Uint8Array(fLen).fill(0);
     this.counter = 0;
   }
-  private hmac(...values: Uint8Array[]) {
-    return hmac(this.k, ...values);
-  }
-  incr() {
-    if (this.counter >= 1000) throw new Error('Tried 1,000 k values for sign(), all were invalid');
-    this.counter += 1;
-  }
-
   async reseed(seed = new Uint8Array()) {
-    this.k = await this.hmac(this.v, Uint8Array.from([0x00]), seed);
-    this.v = await this.hmac(this.v);
+    const hk = (...vs: Uint8Array[]) => hmac(this.k, ...vs);
+    const hv = (...vs: Uint8Array[]) => hk(this.v, ...vs);
+    this.k = await hv(Uint8Array.from([0x00]), seed);
+    this.v = await hv();
     if (seed.length === 0) return;
-    this.k = await this.hmac(this.v, Uint8Array.from([0x01]), seed);
-    this.v = await this.hmac(this.v);
+    this.k = await hv(Uint8Array.from([0x01]), seed);
+    this.v = await hv();
   }
   async generate(): Promise<Uint8Array> {
-    this.incr();
-    let len = 0;
-    const out: Uint8Array[] = [];
-    while (len < this.qByteLen) {
-      this.v = await this.hmac(this.v);
-      const sl = this.v.slice();
-      out.push(sl);
-      len += this.v.length;
-    }
-    return concatBytes(...out);
+    if (this.counter >= 1000) throw new Error('Tried 1,000 k values for sign(), all were invalid');
+    this.counter += 1;
+    this.v = await hmac(this.k, this.v);
+    return this.v;
   }
 }
 
@@ -362,19 +410,21 @@ export function verify(sig: Sig, msgHash: Hex, pubKey: Hex, opts = stdOpts): boo
 
   let P: Point;
   try {
-    P = pubKey instanceof Point ? pubKey.assertValidity() : Point.fromHex(pubKey);
+    P = pubKey instanceof Point ? pubKey.ok() : Point.fromHex(pubKey);
   } catch (error) {
     return false;
   }
   const { n } = CURVE;
-  let R: Point;
+  let R: Point | undefined = undefined;
   try {
-    const sinv = invert(s, n); // R = u1⋅G + u2⋅P
-    R = Point.BASE.multiply(mod(h * sinv, n)).add(P.multiply(mod(r * sinv, n)));
+    const is = invert(s, n); // R = u1⋅G + u2⋅P
+    const u1 = mod(h * is, n);
+    const u2 = mod(r * is, n);
+    R = Point.BASE.multiply(u1).add(P.multiply(u2));
   } catch (error) {
     return false;
   }
-  if (R.equals(Point.ZERO)) return false;
+  if (!R) return false;
   const v = mod(R.x, n);
   return v === r;
 }
