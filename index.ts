@@ -28,6 +28,7 @@ const toPriv = (p: Hex | bigint): bigint => {           // normalize private key
   return ge(p) ? p : err();                             // check if bigint is in range
 };
 const isPoint = (p: any) => (p instanceof Point ? p : err()); // is 3d point
+let Gprec: Point[] | undefined = undefined;             // Precomputes for base point G
 class Point {                                           // Point in 3d xyz projective coords
   static readonly G = new Point(Gx, Gy, 1n);            // generator / base point
   static readonly I = new Point(0n, 1n, 0n);            // identity / zero point
@@ -64,6 +65,7 @@ class Point {                                           // Point in 3d xyz proje
   }
   mul(n: bigint, safe = true) {                         // multiply point by scalar n
     if (!ge(n)) err();                                  // must be 0 < n < CURVE.n
+    if (Gprec && this.eql(G)) return wNAF(n).p;         // if base point, use precomputes
     let p = I, f = G;                                   // init result point & fake point
     for (let d: Point = this; n > 0n; d = d.dbl(), n >>= 1n) { // double-and-add ladder
       if (n & 1n) p = p.add(d);                         // if bit is present, add to point
@@ -114,7 +116,7 @@ class Point {                                           // Point in 3d xyz proje
     return h2b(this.toHex(isCompressed));               // Re-use toHex(), convert hex to bytes
   }
   static fromPrivateKey(n: bigint | Hex) {              // Create point from a private key. Multiply
-    return G.mul(toPriv(n));                            // base generator point by bigint(n)
+    return G.mul(toPriv(n));                            // base point by bigint(n)
   }
 }
 const { G, I } = Point;                                 // Generator, identity points
@@ -226,12 +228,12 @@ class Signature {                                       // calculates signature
   toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
   toCompactHex() { return n2h(this.r) + n2h(this.s); }  // hex 64b compact repr
 }
-const b2i = (b: Bytes): bigint => {                     // RFC6979 methods: bytes to int
+const b2i = (b: Bytes): bigint => {                     // RFC6979 bytes to int
   isU8(b);
   const sl = b.length > fLen ? b.slice(0, fLen) : b;    // slice
   return b2n(sl);                                       // call our own method
 };
-const b2o = (bytes: Bytes): Bytes => {                  // bits to octets
+const b2o = (bytes: Bytes): Bytes => {                  // RFC6979 bits to octets
   const z1 = b2i(bytes);
   const z2 = mod(z1, N);
   return i2o(z2 < 0n ? z1 : z2);
@@ -279,8 +281,8 @@ class HmacDrbg {                                        // Minimal HMAC-DRBG (NI
     return this.v;
   }
 }
-const sign = async (msgh: Hex, priv: Hex, opts = stdo): Promise<Signature> => {
-  if (opts?.der === true || opts?.extraEntropy || opts?.recovered) err(); // RFC6979 ECDSA
+const sign = async (msgh: Hex, priv: Hex, opts = stdo): Promise<Signature> => {  // RFC6979 ECDSA
+  if (opts?.der === true || opts?.extraEntropy || opts?.recovered) err(); // signature generation
   if (opts?.lowS == null) opts.lowS = true;             // generates low-s sigs by default
   const h1 = n2b(truncH(toU8(msgh)));                   // Steps A, D of RFC6979 3.2.
   const d = toPriv(priv);                               // d = normalize(privatekey)
@@ -293,7 +295,7 @@ const sign = async (msgh: Hex, priv: Hex, opts = stdo): Promise<Signature> => {
   return sig;
 }
 
-type Sig = Hex | Signature;                             // signature verification
+type Sig = Hex | Signature;                             // ECDSA signature verification
 const verify = (sig: Sig, msgh: Hex, pub: Hex, opts = stdo): boolean => {
   if (opts?.lowS == null) opts.lowS = true;             // lowS=true default
   let sig_: Signature;             // Implements section 4.1.4 from https://www.secg.org/sec1-v2.pdf
@@ -332,7 +334,7 @@ const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compli
 const utils = {                                         // utilities
   mod, invert: inv,                                     // math utilities
   concatBytes: concat, hexToBytes: h2b, bytesToHex: b2h, bytesToNumber: b2n, numToField: n2b,
-  hashToPrivateKey, randomBytes,                        // CSPRNG etc.
+  randomBytes, hashToPrivateKey,                        // CSPRNG etc.
   randomPrivateKey: (): Bytes => hashToPrivateKey(randomBytes(fLen + 8)), // FIPS 186 B.4.1.
   isValidPrivateKey: (key: Hex) => {                    // checks if private key is valid
     try {
@@ -342,4 +344,44 @@ const utils = {                                         // utilities
     }
   },
 };
+const W = 8;                                            // Precomputes-related code. W = window size
+const precompute = () => {                              // They give 12x faster getPublicKey(),
+  const points: Point[] = [], wins = 256 / W + 1;       // 10x sign(), 2x verify(). To achieve this,
+  let p = G, b = p;                                     // app needs to spend 40ms+ to calculate
+  for (let w = 0; w < wins; w++) {                      // 65536 points related to base point G
+    b = p;                                              // Points are stored in array and used
+    points.push(b);                                     // any time Gx multiplication is done.
+    for (let i = 1; i < 2 ** (W - 1); i++) { b = b.add(p); points.push(b); }
+    p = b.dbl();                                        // Precomputes do not speed-up getSharedKey,
+  }                                                     // which multiplies user point by scalar,
+  return points;                                        // when precomputes are using base point
+}
+const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method
+  if (256 % W) err();                                   // Compared to other point mult methods,
+  let comp = Gprec;                                     // allows to store 2x less points by
+  if (!comp) err();                                     // using subtraction.
+  comp = comp!;
+  let p = I, f = G;                                     // f must be G, or could become I in the end
+  const wins = 1 + 256 / W;                             // W=8 17 windows
+  const wsize = 2 ** (W - 1);                           // W=8 128 window size
+  const mask = BigInt(2 ** W - 1);                      // W=8 will create mask 0b11111111
+  const maxNum = 2 ** W;                                // W=8 256
+  const shiftBy = BigInt(W);                            // W=8 8
+  for (let w = 0; w < wins; w++) {
+    const off = w * wsize;
+    let wbits = Number(n & mask);                       // extract W bits.
+    n >>= shiftBy;                                      // shift number by W bits.
+    if (wbits > wsize) { wbits -= maxNum; n += 1n; }    // split if bits>max: +224 => 256-32
+    const off1 = off, off2 = off + Math.abs(wbits) - 1; // offsets
+    const cond1 = w % 2 !== 0, cond2 = wbits < 0;       // conditions
+    const neg = (bool: boolean, item: Point) => bool ? item.neg() : item; // negate
+    if (wbits === 0) {
+      f = f.add(neg(cond1, comp[off1]));                // bit is 0: add garbage to fake point
+    } else {
+      p = p.add(neg(cond2, comp[off2]));                // bit is 1: add to result point
+    }
+  }
+  return { p, f }                                       // return both real and fake points for JIT
+};
+Gprec = precompute();                  // <= you can disable precomputes by commenting-out the line
 export { getPublicKey, sign, verify, getSharedSecret, CURVE, Point, Signature, utils };
