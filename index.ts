@@ -6,23 +6,23 @@ const a = 0n;                                           // a equation's param
 const b = 7n;                                           // b equation's param
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const CURVE = { P, n: N, a, b, Gx, Gy };
-const fLen = 32;                                        // field/group byte length
+const CURVE = { P, n: N, a, b, Gx, Gy };                // Variables
+const fLen = 32;                                        // field / group byte length
 const stdo: { lowS?: boolean; der?: boolean; extraEntropy?: any; recovered?: any } = { lowS: true };
-type Bytes = Uint8Array; type Hex = Bytes | string;     // accepted: bytes/hex
+type Bytes = Uint8Array; type Hex = Bytes | string;     // accepted inputs: bytes/hex
 const big = (n: any): n is bigint => typeof n === 'bigint'; // is big integer
 const str = (s: any): s is string => typeof s === 'string'; // is string
 const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element
 const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
-const u8a = (content?: any) => new Uint8Array(content); // creates Uint8Array byte arrays
+const u8a = (content?: any) => new Uint8Array(content); // creates Uint8Array
 const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
 const crv = (x: bigint) => mod(mod(x * mod(x * x)) + a * x + b); // x³ + ax + b weierstrass formula
-const err = (m = ''): never => { throw new Error(m); }; // throws error
+const err = (m = ''): never => { throw new Error(m); }; // throws error, slightly messes stack trace
 const isU8 = (a: any, len?: number): Bytes => {         // is Uint8Array (of specific length)
   if (!(a instanceof Uint8Array) || (typeof len === 'number' && len > 0 && a.length !== len)) err();
   return a;
 };
-const toU8 = (a: any, len?: number) => isU8(str(a) ? h2b(a) : a, len);
+const toU8 = (a: any, len?: number) => isU8(str(a) ? h2b(a) : a, len);  // (hex or ui8a) to ui8a
 const toPriv = (p: Hex | bigint): bigint => {           // normalize private key
   if (!big(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
   return ge(p) ? p : err();                             // check if bigint is in range
@@ -37,12 +37,12 @@ class Point {                                           // Point in 3d xyz proje
     const { x: X2, y: Y2, z: Z2 } = isPoint(other);     // isPoint() checks class equality
     return mod(X1 * Z2) === mod(X2 * Z1) && mod(Y1 * Z2) === mod(Y2 * Z1);
   }
-  neg() { return new Point(this.x, mod(-this.y), this.z); } // creates negative version of the point
+  neg() { return new Point(this.x, mod(-this.y), this.z); } // negate, flips point over y coord
   dbl() { return this.add(this); }                      // point doubling
-  add(other: Point) {                                   // addition, exception-free formula
-    const { x: X1, y: Y1, z: Z1 } = this;               // from Renes-Costello-Batina
-    const { x: X2, y: Y2, z: Z2 } = isPoint(other);
-    let X3 = 0n, Y3 = 0n, Z3 = 0n;
+  add(other: Point) {                                   // point addition: complete, exception-free
+    const { x: X1, y: Y1, z: Z1 } = this;               // formula from Renes-Costello-Batina
+    const { x: X2, y: Y2, z: Z2 } = isPoint(other);     // https://eprint.iacr.org/2015/1060, algo 1
+    let X3 = 0n, Y3 = 0n, Z3 = 0n;                      // Cost: 12M + 0S + 3*a + 3*b3 + 23add
     const b3 = mod(b * 3n);
     let t0 = mod(X1 * X2), t1 = mod(Y1 * Y2), t2 = mod(Z1 * Z2), t3 = mod(X1 + Y1); // step 1
     let t4 = mod(X2 + Y2);                              // step 5
@@ -62,20 +62,21 @@ class Point {                                           // Point in 3d xyz proje
     Z3 = mod(Z3 + t0);                                  // step 40
     return new Point(X3, Y3, Z3);
   }
-  mul(n: bigint) {                                      // multiplies point by scalar n
-    if (!ge(n)) err();                                  // n must be 0 < n < CURVE.n
-    let p = I; let f = G;                         // init identity / zero point & fake point
+  mul(n: bigint, safe = true) {                         // multiply point by scalar n
+    if (!ge(n)) err();                                  // must be 0 < n < CURVE.n
+    let p = I, f = G;                                   // init result point & fake point
     for (let d: Point = this; n > 0n; d = d.dbl(), n >>= 1n) { // double-and-add ladder
-      if (n & 1n) p = p.add(d); else; f = f.add(d);     // add to fake point when bit is not present
+      if (n & 1n) p = p.add(d);                         // if bit is present, add to point
+      else if (safe) f = f.add(d);                      // if not, add to fake for timing safety
     }
     return p;
   }
-  mulAddQ(R: Point, u1: bigint, u2: bigint) {
-    return this.mul(u1).add(R.mul(u2)).ok();            // Q = u1⋅G + u2⋅R
-  }
+  mulAddQUns(R: Point, u1: bigint, u2: bigint) {        // Q = u1⋅G + u2⋅R: double scalar mult.
+    return this.mul(u1).add(R.mul(u2, false)).ok();     // Unsafe: do NOT use for anything related
+  }                                                     // to private keys. Doesn't use Shamir trick
   aff(): { x: bigint; y: bigint } {                     // converts point to 2d xy affine point
     const { x, y, z } = this;
-    if (this.eql(I)) return { x: 0n, y: 0n };     // fast-path for zero point
+    if (this.eql(I)) return { x: 0n, y: 0n };           // fast-path for zero point
     if (z === 1n) return { x, y };                      // if z is 1, pass affine coordinates as-is
     const iz = inv(z);                                  // z^-1: invert z
     if (mod(z * iz) !== 1n) err();                      // (z * z^-1) must be 1, otherwise bad math
@@ -92,7 +93,7 @@ class Point {                                           // Point in 3d xyz proje
     hex = toU8(hex);                                    // converts hex string to Uint8Array
     let p: Point | undefined = undefined;
     const head = hex[0], tail = hex.subarray(1);        // first byte is prefix, rest is data
-    const x = slcNum(tail, 0, fLen), len = hex.length;// next 32 bytes are x coordinate
+    const x = slcNum(tail, 0, fLen), len = hex.length;  // next 32 bytes are x coordinate
     if (len === 33 && [2, 3].includes(head)) {          // Compressed points: 33b, start
       if (!fe(x)) err();                                // with byte 0x02 or 0x03. Check if 0<x<P
       let y = sqrt(crv(x));                             // x³ + ax + b is right side of equation
@@ -118,46 +119,45 @@ class Point {                                           // Point in 3d xyz proje
 }
 const { G, I } = Point;                                 // Generator, identity points
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const inv = (number: bigint, md = P): bigint => {       // modular inversion, euclidean gcd algo
-  if (number === 0n || md <= 0n) err(`n=${number} mod=${md}`); // can be invalid
-  let a = mod(number, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
-  while (a !== 0n) {
-    const q = b / a, r = b % a;
+const inv = (num: bigint, md = P): bigint => {          // modular inversion
+  if (num === 0n || md <= 0n) err(`n=${num} mod=${md}`);// can be invalid
+  let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+  while (a !== 0n) {                                    // uses euclidean gcd algorithm
+    const q = b / a, r = b % a;                         // not constant-time
     const m = x - u * q, n = y - v * q;
     b = a, a = r, x = u, y = v, u = m, v = n;
   }
   return b === 1n ? mod(x, md) : err('invert does not exist'); // b is gcd at this point
 };
-const pow = (num: bigint, p: bigint, md = P): bigint => { // modular exponentiation num^p
-  if (md <= 0n || p < 0n) err();                        // exponentiation by squaring
+const pow = (num: bigint, e: bigint, md = P): bigint => { // modular exponentiation num^e
+  if (md <= 0n || e < 0n) err();                        // exponentiation by squaring
   if (md === 1n) return 0n;                             // the ladder can leak exponent bits
   let res = 1n;                                         // and is vulnerable to timing attacks
-  for (; p > 0n; p >>= 1n) {
-    if (p & 1n) res = (res * num) % md;
+  for (; e > 0n; e >>= 1n) {
+    if (e & 1n) res = (res * num) % md;
     num = (num * num) % md;
   }
   return res;
 };
-const sqrt = (n: bigint) => {                           // √(y) = y^((p+1)/4) for fields P = 3 mod 4
+const sqrt = (n: bigint) => {                           // √(n) = n^((p+1)/4) for fields P = 3 mod 4
   const r = pow(n, (P + 1n) / 4n, P);                   // So, a special, fast case. Paper: "Square
   return mod(r * r) === n ? r : err();                  // Roots from 1;24,51,10 to Dan Shanks"
 }
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
 const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
-                                                        // hex to number
-const h2n = (hex: string): bigint => (str(hex) ? BigInt(`0x${hex}`) : err());
+const h2n = (hex: string): bigint => (str(hex) ? BigInt(`0x${hex}`) : err());  // hex to number
 const h2b = (hex: string): Bytes => {                   // hex to bytes
   const l = hex.length;                                 // error if not string,
   if (!str(hex) || l % 2) err();                        // or has odd length like 3, 5.
-  const array = u8a(l / 2);                             // create result array
-  for (let i = 0; i < array.length; i++) {
+  const arr = u8a(l / 2);                               // create result array
+  for (let i = 0; i < arr.length; i++) {
     const j = i * 2;
-    const hexByte = hex.slice(j, j + 2);                // substr seems slower
-    const byte = Number.parseInt(hexByte, 16);          // parse every string part, convert to num
-    if (Number.isNaN(byte) || byte < 0) err();          // error if NaN or < 0
-    array[i] = byte;
+    const h = hex.slice(j, j + 2);                      // hexByte. slice is faster than substr
+    const b = Number.parseInt(h, 16);                   // byte, created from string part
+    if (Number.isNaN(b) || b < 0) err();                // byte must be valid 0 <= byte < 256
+    arr[i] = b;
   }
-  return array;
+  return arr;
 };
 const b2n = (b: Bytes): bigint => h2n(b2h(b));          // bytes to number
 const slcNum = (b: Bytes, from: number, to: number) => b2n(b.slice(from, to)); // slice bytes
@@ -190,14 +190,10 @@ const getPublicKey = (privKey: Hex | bigint, isCompressed = false) => { // calcu
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // key from private
 };
 class Signature {                                       // calculates signature
-  constructor(readonly r: bigint, readonly s: bigint, readonly rec?: number) {
-    this.ok();
-  }
-  ok(): Signature {                                     // validates signature
-    return ge(this.r) && ge(this.s) ? this : err();     // 0 < r < CURVE.n; 0 < s < CURVE.n
-  }
+  constructor(readonly r: bigint, readonly s: bigint, readonly rec?: number) { this.ok(); }
+  ok(): Signature { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
   static fromCompact(hex: Hex) {                        // create signature from 64b compact repr
-    hex = toU8(hex, 64);                                // compact repr is (32-byte r)+(32-byte s)
+    hex = toU8(hex, 64);                                // compact repr is (32b r)||(32b s)
     return new Signature(slcNum(hex, 0, fLen), slcNum(hex, fLen, 2 * fLen));
   }
   static fromKMD(kBytes: Bytes, m: bigint, d: bigint, lowS?: boolean): Signature | undefined {
@@ -225,7 +221,7 @@ class Signature {                                       // calculates signature
     if (radj >= P) err();
     const ir = inv(radj, N);
     const R = Point.fromHex(`${(rec! & 1) === 0 ? '02' : '03'}${n2h(radj)}`);
-    return G.mulAddQ(R, mod(-h * ir, N), mod(s * ir, N)); // Q = u1⋅G + u2⋅R
+    return G.mulAddQUns(R, mod(-h * ir, N), mod(s * ir, N)); // Q = u1⋅G + u2⋅R
   }
   toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
   toCompactHex() { return n2h(this.r) + n2h(this.s); }  // hex 64b compact repr
@@ -317,7 +313,7 @@ const verify = (sig: Sig, msgh: Hex, pub: Hex, opts = stdo): boolean => {
     const is = inv(s, N);                               // s^-1
     const u1 = mod(h * is, N);                          // u1 = hs^-1 mod n
     const u2 = mod(r * is, N);                          // u2 = rs^-1 mod n
-    R = G.mulAddQ(P, u1, u2).ok().aff();                // R = u1⋅G + u2⋅P
+    R = G.mulAddQUns(P, u1, u2).aff();                  // R = u1⋅G + u2⋅P
   } catch (error) { return false; }
   if (!R) return false;                                 // stop if R is identity / zero point
   const v = mod(R.x, N);

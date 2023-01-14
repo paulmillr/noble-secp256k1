@@ -7,8 +7,6 @@ const points = require('fs')
   .filter((a) => a)
   .slice(0, 1000);
 run(async () => {
-  logMem();
-  console.log();
   await mark('getPublicKey(utils.randomPrivateKey())', 500, () => {
     secp.getPublicKey(secp.utils.randomPrivateKey(), true);
   });
@@ -24,6 +22,4 @@ run(async () => {
   let i = 0;
   let len = points.length;
   await mark('Point.fromHex (decompression)', 10000, () => secp.Point.fromHex(points[i++ % len]));
-  console.log();
-  logMem();
 });
