@@ -11,8 +11,8 @@
   "scripts": {
     "build": "tsc && tsc -p tsconfig.esm.json",
     "build:release": "rollup -c rollup.config.js",
-    "lint": "prettier --print-width 100 --single-quote --check index.ts",
-    "format": "prettier --print-width 100 --single-quote --write index.ts",
+    "lint": "prettier --print-width 100 --single-quote --check test/index.ts",
+    "format": "prettier --print-width 100 --single-quote --write test/index.ts",
     "test": "jest",
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js",

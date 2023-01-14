@@ -39,17 +39,19 @@ describe('secp256k1', () => {
       .filter((line) => line)
       .map((line) => line.split(':'));
     for (let [priv, x, y] of data) {
-      const point = secp.Point.fromPrivateKey(BigInt(priv));
-      expect(toBEHex(point.x)).toBe(x);
-      expect(toBEHex(point.y)).toBe(y);
+      const { x: x1, y: y1 } = secp.Point.fromPrivateKey(BigInt(priv)).aff();
+      expect(toBEHex(x1)).toBe(x);
+      expect(toBEHex(y1)).toBe(y);
 
-      const point2 = secp.Point.fromHex(secp.getPublicKey(toBEHex(BigInt(priv))));
-      expect(toBEHex(point2.x)).toBe(x);
-      expect(toBEHex(point2.y)).toBe(y);
+      const { x: x2, y: y2 } = secp.Point.fromHex(secp.getPublicKey(toBEHex(BigInt(priv)))).aff();
+      expect(toBEHex(x2)).toBe(x);
+      expect(toBEHex(y2)).toBe(y);
 
-      const point3 = secp.Point.fromHex(secp.getPublicKey(hexToBytes(toBEHex(BigInt(priv)))));
-      expect(toBEHex(point3.x)).toBe(x);
-      expect(toBEHex(point3.y)).toBe(y);
+      const { x: x3, y: y3 } = secp.Point.fromHex(
+        secp.getPublicKey(hexToBytes(toBEHex(BigInt(priv))))
+      ).aff();
+      expect(toBEHex(x3)).toBe(x);
+      expect(toBEHex(y3)).toBe(y);
     }
   });
   it('.getPublicKey() rejects invalid keys', () => {
@@ -123,8 +125,8 @@ describe('secp256k1', () => {
         if (expected) {
           expect(p.add(q).toHex(true)).toBe(expected);
         } else {
-          if (p.equals(q.negate())) {
-            expect(p.add(q).toHex(true)).toBe(secp.Point.ZERO.toHex(true));
+          if (p.eql(q.neg())) {
+            expect(p.add(q).toHex(true)).toBe(secp.Point.I.toHex(true));
           } else {
             expect(() => p.add(q).toHex(true)).toThrowError();
           }
@@ -137,10 +139,10 @@ describe('secp256k1', () => {
         const { P, d, expected } = vector;
         const p = secp.Point.fromHex(P);
         if (expected) {
-          expect(p.multiply(hexToNumber(d)).toHex(true)).toBe(expected);
+          expect(p.mul(hexToNumber(d)).toHex(true)).toBe(expected);
         } else {
           expect(() => {
-            p.multiply(hexToNumber(d)).toHex(true);
+            p.mul(hexToNumber(d)).toHex(true);
           }).toThrowError();
         }
       }
@@ -150,7 +152,7 @@ describe('secp256k1', () => {
         if (hexToNumber(d) < secp.CURVE.n) {
           expect(() => {
             const p = secp.Point.fromHex(P);
-            p.multiply(hexToNumber(d)).toHex(true);
+            p.mul(hexToNumber(d)).toHex(true);
           }).toThrowError();
         }
       }
@@ -490,9 +492,9 @@ describe('secp256k1', () => {
       pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
         const P = secp.Point.fromHex(p);
         const t = normal(tweak);
-        const Q = P.add(secp.Point.BASE.multiply(t));
+        const Q = P.add(secp.Point.G.mul(t));
         // const Q = secp.Point.BASE.multiplyAndAddUnsafe(P, t, 1n);
-        if (!Q || Q.equals(secp.Point.ZERO)) throw new Error('Tweaked point at infinity');
+        if (!Q || Q.eql(secp.Point.I)) throw new Error('Tweaked point at infinity');
         return Q.toRawBytes(isCompressed);
       },
 
@@ -500,12 +502,12 @@ describe('secp256k1', () => {
         const P = secp.Point.fromHex(p);
         const h = typeof tweak === 'string' ? tweak : secp.utils.bytesToHex(tweak);
         const t = BigInt(`0x${h}`);
-        return P.multiply(t).toRawBytes(isCompressed);
+        return P.mul(t).toRawBytes(isCompressed);
       },
     };
 
     it('privateAdd()', () => {
-            // @ts-ignore
+      // @ts-ignore
       for (const vector of privates.valid.add) {
         const { a, b, expected } = vector;
         expect(secp.utils.bytesToHex(tweakUtils.privateAdd(a, b))).toBe(expected);
