@@ -64,6 +64,7 @@ class Point {                                           // Point in 3d xyz proje
     return new Point(X3, Y3, Z3);
   }
   mul(n: bigint, safe = true) {                         // multiply point by scalar n
+    if (!safe && n === 0n) return I;                    // In unsafe mode, allow zero
     if (!ge(n)) err();                                  // must be 0 < n < CURVE.n
     if (Gprec && this.eql(G)) return wNAF(n).p;         // if base point, use precomputes
     let p = I, f = G;                                   // init result point & fake point
@@ -74,7 +75,7 @@ class Point {                                           // Point in 3d xyz proje
     return p;
   }
   mulAddQUns(R: Point, u1: bigint, u2: bigint) {        // Q = u1⋅G + u2⋅R: double scalar mult.
-    return this.mul(u1).add(R.mul(u2, false)).ok();     // Unsafe: do NOT use for anything related
+    return this.mul(u1, false).add(R.mul(u2, false)).ok(); // Unsafe: do NOT use for stuff related
   }                                                     // to private keys. Doesn't use Shamir trick
   aff(): { x: bigint; y: bigint } {                     // converts point to 2d xy affine point
     const { x, y, z } = this;
@@ -223,7 +224,9 @@ class Signature {                                       // calculates signature
     if (radj >= P) err();
     const ir = inv(radj, N);
     const R = Point.fromHex(`${(rec! & 1) === 0 ? '02' : '03'}${n2h(radj)}`);
-    return G.mulAddQUns(R, mod(-h * ir, N), mod(s * ir, N)); // Q = u1⋅G + u2⋅R
+    const u1 = mod(-h * ir, N);
+    const u2 = mod(s * ir, N);
+    return G.mulAddQUns(R, u1, u2); // Q = u1⋅G + u2⋅R
   }
   toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
   toCompactHex() { return n2h(this.r) + n2h(this.s); }  // hex 64b compact repr

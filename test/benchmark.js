@@ -19,6 +19,7 @@ run(async () => {
   await mark('sign', 4000, async () => secp.sign(msg, priv));
   await mark('verify', 500, () => secp.verify(signature, msg, pub));
   await mark('getSharedSecret', 500, () => secp.getSharedSecret(priv, pub2));
+  await mark('recoverPublicKey', 500, () => signature.recoverPublicKey(msg));
   let i = 0;
   let len = points.length;
   await mark('Point.fromHex (decompression)', 10000, () => secp.Point.fromHex(points[i++ % len]));

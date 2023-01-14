@@ -1,6 +1,7 @@
 import * as fc from 'fast-check';
 import * as secp from '..';
 import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
 // import { createHash } from 'crypto';
 import * as sysPath from 'path';
 import * as ecdsa from './vectors/ecdsa.json';
@@ -23,6 +24,47 @@ const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyz
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
 const hexToBytes = secp.utils.hexToBytes;
+
+// const { Signature } = secp;
+const { bytesToNumber: b2n, hexToBytes: h2b } = secp.utils;
+const DER = { // asn.1 DER encoding utils
+  Err: class DERErr extends Error { constructor(m = '') { super(m); } },
+  _parseInt(data: Uint8Array): { d: bigint; l: Uint8Array } {
+    const { Err: E } = DER;
+    if (data.length < 2 || data[0] !== 0x02) throw new E('Invalid signature integer tag');
+    const len = data[1];
+    const res = data.subarray(2, len + 2);
+    if (!len || res.length !== len) throw new E('Invalid signature integer: wrong length');
+    if (res[0] === 0x00 && res[1] <= 0x7f)
+      throw new E('Invalid signature integer: trailing length');
+    // ^ Weird condition: not about length, but about first bytes of number.
+    return { d: b2n(res), l: data.subarray(len + 2) };                    // d is data, l is left
+  },
+  toSig(hex: string) { // parse DER signature
+    const { Err: E } = DER;
+    const data = typeof(hex) === 'string' ? secp.utils.hexToBytes(hex) : hex;
+    let l = data.length;
+    if (l < 2 || data[0] != 0x30) throw new E('Invalid signature tag');
+    if (data[1] !== l - 2) throw new E('Invalid signature: incorrect length');
+    const { d: r, l: sBytes } = DER._parseInt(data.subarray(2));
+    const { d: s, l: rBytesLeft } = DER._parseInt(sBytes);
+    if (rBytesLeft.length) throw new E('Invalid signature: left bytes after parsing');
+    return new secp.Signature(r, s);
+  },
+  fromSig(sig: secp.Signature): Uint8Array {
+    return h2b(DER.hexFromSig(sig))
+  },
+  hexFromSig(sig: secp.Signature): string {
+    const slice = (s: string): string => Number.parseInt(s[0], 16) >= 8 ? '00' + s : s; // slice DER
+    const h = (num: number | bigint) => {
+      const hex = num.toString(16); return hex.length & 1 ? `0${hex}` : hex;
+    };
+    const s = slice(h(sig.s)), r = slice(h(sig.r));
+    const shl = s.length / 2, rhl = r.length / 2;
+    const sl = h(shl), rl = h(rhl);
+    return `30${h(rhl + shl + 4)}02${rl}${r}02${sl}${s}`;
+  },
+};
 
 function hexToNumber(hex: string): bigint {
   if (typeof hex !== 'string') {
@@ -390,43 +432,45 @@ describe('secp256k1', () => {
   //   }
   // });
 
-  // describe('.recoverPublicKey()', () => {
-  //   it('should recover public key from recovery bit', async () => {
-  //     const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
-  //     const privateKey = 123456789n;
-  //     const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
-  //     const [signature, recovery] = await secp.sign(message, privateKey, { recovered: true });
-  //     const recoveredPubkey = secp.recoverPublicKey(message, signature, recovery);
-  //     expect(recoveredPubkey).not.toBe(null);
-  //     expect(hex(recoveredPubkey!)).toBe(publicKey);
-  //     expect(secp.verify(signature, message, publicKey)).toBe(true);
-  //   });
-  //   it('should not recover zero points', () => {
-  //     const msgHash = '6b8d2c81b11b2d699528dde488dbdf2f94293d0d33c32e347f255fa4a6c1f0a9';
-  //     const sig =
-  //       '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817986b8d2c81b11b2d699528dde488dbdf2f94293d0d33c32e347f255fa4a6c1f0a9';
-  //     const recovery = 0;
-  //     expect(() => secp.recoverPublicKey(msgHash, sig, recovery)).toThrowError();
-  //   });
-  //   it('should handle all-zeros msghash', async () => {
-  //     const privKey = secp.utils.randomPrivateKey();
-  //     const pub = secp.getPublicKey(privKey);
-  //     const zeros = '0000000000000000000000000000000000000000000000000000000000000000';
-  //     const [sig, rec] = await secp.sign(zeros, privKey, { recovered: true });
-  //     const recoveredKey = secp.recoverPublicKey(zeros, sig, rec);
-  //     expect(recoveredKey).toEqual(pub);
-  //   });
-  //   it('should handle RFC 6979 vectors', async () => {
-  //     for (const vector of ecdsa.valid) {
-  //       if (secp.utils.mod(hexToNumber(vector.m), secp.CURVE.n) === 0n) continue;
-  //       let [usig, rec] = await secp.sign(vector.m, vector.d, { der: false, recovered: true });
-  //       let sig = hex(usig);
-  //       const vpub = secp.getPublicKey(vector.d);
-  //       const recovered = secp.recoverPublicKey(vector.m, sig, rec)!;
-  //       expect(hex(recovered)).toBe(hex(vpub));
-  //     }
-  //   });
-  // });
+  describe('.recoverPublicKey()', () => {
+    it('should recover public key from recovery bit', async () => {
+      const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
+      const privateKey = secp.utils.numToField(123456789n);
+      const publicKey = secp.Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
+      const sig = await secp.sign(message, privateKey);
+      const recoveredPubkey = sig.recoverPublicKey(message);
+      expect(recoveredPubkey).not.toBe(null);
+      expect(recoveredPubkey.toHex()).toBe(publicKey);
+      expect(secp.verify(sig, message, publicKey)).toBe(true);
+    });
+    it('should not recover zero points', () => {
+      const msgHash = '6b8d2c81b11b2d699528dde488dbdf2f94293d0d33c32e347f255fa4a6c1f0a9';
+      const sig =
+        '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817986b8d2c81b11b2d699528dde488dbdf2f94293d0d33c32e347f255fa4a6c1f0a9';
+      const recovery = 0;
+      const sigi = secp.Signature.fromCompact(sig);
+      const sigir = new secp.Signature(sigi.r, sigi.s, recovery);
+      expect(() => sigir.recoverPublicKey(msgHash)).toThrowError();
+    });
+    it('should handle all-zeros msghash', async () => {
+      const privKey = secp.utils.randomPrivateKey();
+      const pub = secp.getPublicKey(privKey);
+      const zeros = '0000000000000000000000000000000000000000000000000000000000000000';
+      const sig = await secp.sign(zeros, privKey);
+      const recoveredKey = sig.recoverPublicKey(zeros);
+      expect(recoveredKey.toRawBytes()).toEqual(pub);
+    });
+    it('should handle RFC 6979 vectors', async () => {
+      for (const vector of ecdsa.valid) {
+        if (secp.utils.mod(hexToNumber(vector.m), secp.CURVE.n) === 0n) continue;
+        let sig = await secp.sign(vector.m, vector.d);
+        // let sig = hex(usig);
+        const vpub = secp.getPublicKey(vector.d);
+        const recovered = sig.recoverPublicKey(vector.m)!;
+        expect(recovered.toHex()).toBe(hex(vpub));
+      }
+    });
+  });
 
   describe('.getSharedSecret()', () => {
     // TODO: Real implementation.
@@ -547,35 +591,39 @@ describe('secp256k1', () => {
     });
   });
 
-  // describe('wychenproof vectors', () => {
-  //   it('should pass all tests', async () => {
-  //     for (let group of wp.testGroups) {
-  //       const pubKey = secp.Point.fromHex(group.key.uncompressed);
-  //       for (let test of group.tests) {
-  //         const m = await secp.utils.sha256(hexToBytes(test.msg));
-  //         if (test.result === 'valid' || test.result === 'acceptable') {
-  //           const verified = secp.verify(test.sig, m, pubKey);
-  //           if (secp.Signature.fromDER(test.sig).hasHighS()) {
-  //             expect(verified).toBeFalsy();
-  //           } else {
-  //             expect(verified).toBeTruthy();
-  //           }
-  //         } else if (test.result === 'invalid') {
-  //           let failed = false;
-  //           try {
-  //             const verified = secp.verify(test.sig, m, pubKey);
-  //             if (!verified) failed = true;
-  //           } catch (error) {
-  //             failed = true;
-  //           }
-  //           expect(failed).toBeTruthy();
-  //         } else {
-  //           expect(false).toBeTruthy();
-  //         }
-  //       }
-  //     }
-  //   });
-  // });
+  describe('wychenproof vectors', () => {
+    const sha256 = (m: Uint8Array) => Uint8Array.from(createHash('sha256').update(m).digest())
+    it('should pass all tests', async () => {
+      for (let group of wp.testGroups) {
+        const pubKey = secp.Point.fromHex(group.key.uncompressed);
+        for (let test of group.tests) {
+          const m = sha256(hexToBytes(test.msg));
+          if (test.result === 'valid' || test.result === 'acceptable') {
+            const parsed = DER.toSig(test.sig);
+            const verified = secp.verify(parsed, m, group.key.uncompressed);
+            if (parsed.s > (secp.CURVE.n >> 1n)) {
+              expect(verified).toBeFalsy();
+            } else {
+              console.log('verified', test);
+
+              expect(verified).toBeTruthy();
+            }
+          } else if (test.result === 'invalid') {
+            let failed = false;
+            try {
+              const verified = secp.verify(test.sig, m, group.key.uncompressed);
+              if (!verified) failed = true;
+            } catch (error) {
+              failed = true;
+            }
+            expect(failed).toBeTruthy();
+          } else {
+            expect(false).toBeTruthy();
+          }
+        }
+      }
+    });
+  });
 });
 
 // describe('JacobianPoint', () => {
