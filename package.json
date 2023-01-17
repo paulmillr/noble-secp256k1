@@ -16,7 +16,8 @@
     "test": "jest",
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js",
-    "min": "terser --ecma 2020 -m -c < lib/esm/index.js"
+    "min": "terser --ecma 2020 -m -c < lib/esm/index.js",
+    "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts`LOC\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",

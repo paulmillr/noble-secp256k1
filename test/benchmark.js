@@ -7,6 +7,7 @@ const points = require('fs')
   .filter((a) => a)
   .slice(0, 1000);
 run(async () => {
+  secp.getPublicKey(secp.utils.randomPrivateKey(), true); // warmup
   await mark('getPublicKey(utils.randomPrivateKey())', 5000, () => {
     secp.getPublicKey(secp.utils.randomPrivateKey(), true);
   });
