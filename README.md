@@ -73,9 +73,15 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 function getPublicKey(privateKey: Uint8Array | string | bigint, isCompressed = true): Uint8Array;
 ```
 
-Creates public key for the corresponding private key. The default is full 33-byte key.
-Set second argument to `false` if you need full (65-byte) key. Use `PPoint.fromPrivateKey(privateKey)`
-if you need `PPoint` instead of `Uint8Array`
+```js
+const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
+getPublicKey(privKey);
+getPublicKey(privKey, false);
+```
+
+Creates 33-byte compact public key for the corresponding private key. Set optional `isCompressed` to `false`
+if you need full 65-byte key. Use `PPoint.fromPrivateKey(privateKey)`
+if you need `PPoint` instead of `Uint8Array`:
 
 ##### `sign(msgHash, privateKey)`
 
@@ -89,7 +95,17 @@ function sign(
 
 Generates low-s deterministic ECDSA signature as per RFC6979.
 
-- `msgHash: Uint8Array | string` - 32-byte message hash which would be signed
+```js
+const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
+const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
+const sig = await sign(msgHash, privKey);
+// Signatures with improved security
+const sigE = await sign(msgHash, privKey, { extraEntropy: true });
+// Malleable signatures, but compatible with openssl
+const sigM = await sign(msgHash, privKey, { lowS: false });
+```
+
+- `msgHash: Uint8Array | string` - 32-byte message hash (not the message itself) which would be signed
 - `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
 - `options?: Options` - _optional_ object related to signature value and format with following keys:
   - `lowS: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
@@ -102,15 +118,6 @@ Generates low-s deterministic ECDSA signature as per RFC6979.
       would still be valid, but may break some test vectors if you're cross-testing against other libs
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
-
-```ts
-(async () => {
-  // Signatures with improved security
-  const signatureE = await secp.sign(msgHash, privKey, { extraEntropy: true });
-  // Malleable signatures, but compatible with openssl
-  const signatureM = await secp.sign(msgHash, privKey, { lowS: false });
-})();
-```
 
 ```typescript
 function signSync(
@@ -126,7 +133,7 @@ function signSync(
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.utils.concatBytes(...msgs))
-secp.signSync(msgHash, privateKey); // Can be used now
+secp.signSync(msgHash, privKey); // Can be used now
 ```
 
 ##### `verify(signature, msgHash, publicKey)`
@@ -140,6 +147,14 @@ function verify(
 ): boolean;
 ```
 
+```js
+const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
+const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
+const pub = getPublicKey(privKey);
+const sig = await sign(msgHash, privKey);
+const isValid = verify(sig, msgHash, pub);
+```
+
 - `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
 - `msgHash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
@@ -147,16 +162,20 @@ function verify(
   - `lowS: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
     `true` (default) makes signatures compatible with libsecp256k1,
     `false` makes signatures compatible with openssl
-- Returns `boolean`: `true` if `signature == hash`; otherwise `false`
+- Returns `boolean`: `true` if `signature` is valid for `hash` and `publicKey`; otherwise `false`
 
 ##### `getSharedSecret(privateKeyA, publicKeyB)`
 
 ```typescript
 function getSharedSecret(
-  privateKeyA: Uint8Array | string | bigint,
-  publicKeyB: Uint8Array | string | Point,
-  isCompressed = true
+  privateKeyA: Uint8Array | string, publicKeyB: Uint8Array | string, isCompressed = true
 ): Uint8Array;
+```
+
+```js
+const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
+const alicesPubkey = getPublicKey(utils.randomPrivateKey());
+getSharedSecret(privKey, alicesPubkey);
 ```
 
 Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private key and a different public key.
@@ -168,6 +187,13 @@ Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private ke
 
 ```typescript
 signature.recoverPublicKey(msgHash: Uint8Array | string): Uint8Array | undefined;
+```
+
+```js
+const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
+const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
+const sig = await sign(msgHash, privKey);
+sig.recoverPublicKey(msgHash);
 ```
 
 `Signature` instance method, recovers public key from message hash.
@@ -232,8 +258,8 @@ secp256k1.PPoint {
   ): Point | undefined {
   toRawBytes(isCompressed = false): Uint8Array;
   toHex(isCompressed = false): string;
-  equals(other: Point): boolean;
-  negate(): Point;
+  eql(other: Point): boolean;
+  neg(): Point;
   add(other: Point): Point;
   subtract(other: Point): Point;
   // Constant-time scalar multiplication.
@@ -244,8 +270,6 @@ secp256k1.Signature {
   // R, S 32-byte each
   static fromCompact(hex: Uint8Array | string);
   ok(): void;
-  toDERRawBytes(): Uint8Array;
-  toDERHex(): string;
   toCompactRawBytes(): Uint8Array;
   toCompactHex(): string;
 }
@@ -319,14 +343,14 @@ Some functionality present in v1, such as schnorr and DER, was removed: use [**n
 - `sign()`: now returns `Signature` instance with `{ r, s, rec }` properties. It could still be passed to `verify` as-is.
     - `canonical` has been renamed to `lowS`. The default value is the same as before: `lowS: true`
     - `recovered` has been removed. Recovery bit is always returned in the `Signature` instance
-    - `der` has been removed. DER encoding is no longer supported. Use compact format (32-byte r + 32-byte s), `Signature` instance methods `toCompactRawBytes` / `toCompactHex()`: `(await sign(msgHash, priv)).toCompactRawBytes()`
+    - `der` has been removed. DER encoding is no longer supported. Use compact format (32-byte r + 32-byte s), `Signature` instance methods `toCompactRawBytes` / `toCompactHex()`: `(await sign(msgHash, priv)).toCompactRawBytes()`. Use curves if you still need der
 - `verify()`: `strict` option has been renamed to `lowS`, default value is still the same
 - `recoverPublicKey(msgHash, sig, recovery)` has been changed to `sig.recoverPublicKey(msgHash)`
 - `Point` has been changed to `PPoint`; which now works in 3d xyz projective coordinates instead of
-  2d xy affine. Its methods have been renamed: `multiply` to `mul`, `subtract` to `sub` etc.
-- Schnorr signature scheme has been removed
-- asn.1 DER encoding has been removed
-- Errors are sometimes thrown with empty messages and longer stack traces
+  2d xy affine. Its methods have been renamed: `multiply` to `mul`, `subtract` to `sub` etc. Use curves if you still need affine point
+- Schnorr signature scheme has been removed. Use curves if you need it
+- asn.1 DER encoding has been removed. Use curves if you need it
+- Errors are sometimes thrown with empty messages and longer stack traces. Use curves if you need formatted errors
 - Support for environments that can't parse bigint literals has been removed
 
 ## License
