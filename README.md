@@ -4,7 +4,7 @@
 an elliptic curve that could be used for asymmetric encryption,
 ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979.
 
-[**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
+Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 **2023 update:** version 2 has been released. It features 4x less code and improved security.
 Some features have been removed. Use [**noble-curves**](https://github.com/paulmillr/noble-curves)
@@ -87,13 +87,18 @@ if you need `PPoint` instead of `Uint8Array`:
 
 ```typescript
 function sign(
-  msgHash: Uint8Array | string,
-  privateKey: Uint8Array | string,
-  opts?: { lowS: boolean, extraEntropy: boolean | Hex }
+  msgHash: Uint8Array | string, // 32-byte message hash (not the message itself)
+  privateKey: Uint8Array | string, // private key that will sign it
+  opts?: { lowS: boolean, extraEntropy: boolean | Hex } // optional object with params
 ): Promise<Signature>;
+function signSync(
+  msgHash: Uint8Array | string, // 32-byte message hash (not the message itself)
+  privateKey: Uint8Array | string, // private key that will sign it
+  opts?: { lowS: boolean, extraEntropy: boolean | Hex } // optional object with params
+): Signature;
 ```
 
-Generates low-s deterministic ECDSA signature as per RFC6979.
+Generates low-s deterministic-k ECDSA signature as per RFC6979.
 
 ```js
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
@@ -105,27 +110,18 @@ const sigE = await sign(msgHash, privKey, { extraEntropy: true });
 const sigM = await sign(msgHash, privKey, { lowS: false });
 ```
 
-- `msgHash: Uint8Array | string` - 32-byte message hash (not the message itself) which would be signed
-- `privateKey: Uint8Array | string | bigint` - private key which will sign the hash
-- `options?: Options` - _optional_ object related to signature value and format with following keys:
-  - `lowS: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
-    `true` (default) makes signatures compatible with libsecp256k1,
-    `false` makes signatures compatible with openssl
-  - `extraEntropy: Uint8Array | string | true` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy. **Strongly recommended** to pass `true` to improve security:
-    - It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
-    - If the entropy generator is broken, signatures would be the same as they are without the option
-    - Signatures with extra entropy would have different `r` / `s`, which means they
-      would still be valid, but may break some test vectors if you're cross-testing against other libs
+Options:
+
+- `lowS: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
+  `true` (default) makes signatures compatible with libsecp256k1,
+  `false` makes signatures compatible with openssl
+- `extraEntropy: Uint8Array | string | boolean = false` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy. **Strongly recommended** to pass `true` to improve security:
+  - It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
+  - If the entropy generator is broken, signatures would be the same as they are without the option
+  - Signatures with extra entropy would have different `r` / `s`, which means they
+    would still be valid, but may break some test vectors if you're cross-testing against other libs
 
 The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
-
-```typescript
-function signSync(
-  msgHash: Uint8Array | string,
-  privateKey: Uint8Array | string,
-  opts?: { lowS: boolean, extraEntropy: boolean | Hex }
-): Signature;
-```
 
 `signSync` counterpart could also be used, you need to set `utils.hmacSha256Sync` to a function with signature `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`. Example with `noble-hashes` package:
 
@@ -140,11 +136,12 @@ secp.signSync(msgHash, privKey); // Can be used now
 
 ```typescript
 function verify(
-  signature: Uint8Array | string | Signature,
-  msgHash: Uint8Array | string,
-  publicKey: Uint8Array | string | Point,
-  opts?: { lowS: boolean }
-): boolean;
+  signature: Uint8Array | string | Signature, // Signature is returned by sign()
+  msgHash: Uint8Array | string, // message hash (not the message) that must be verified
+  publicKey: Uint8Array | string | Point, // public (not private) key
+  opts?: { lowS: boolean } // if a signature.s must be in the lower-half of CURVE.n. Used in BTC, ETH
+                           // lowS: false should only be used if you need openSSL-compatible signatures
+): boolean; // `true` if `signature` is valid for `hash` and `publicKey`; otherwise `false`
 ```
 
 ```js
@@ -155,21 +152,14 @@ const sig = await sign(msgHash, privKey);
 const isValid = verify(sig, msgHash, pub);
 ```
 
-- `signature: Uint8Array | string | { r: bigint, s: bigint }` - object returned by the `sign` function
-- `msgHash: Uint8Array | string` - message hash that needs to be verified
-- `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
-- `options?: Options` - _optional_ object related to signature value and format
-  - `lowS: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
-    `true` (default) makes signatures compatible with libsecp256k1,
-    `false` makes signatures compatible with openssl
-- Returns `boolean`: `true` if `signature` is valid for `hash` and `publicKey`; otherwise `false`
-
 ##### `getSharedSecret(privateKeyA, publicKeyB)`
 
 ```typescript
-function getSharedSecret(
-  privateKeyA: Uint8Array | string, publicKeyB: Uint8Array | string, isCompressed = true
-): Uint8Array;
+function getSharedSecret( // Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between
+  privateKeyA: Uint8Array | string, // Alices's private key
+  publicKeyB: Uint8Array | string, // Bob's public key
+  isCompressed = true // optional arg; `true` default returns 33 byte keys, `false` can return 65-byte
+): Uint8Array; // Use Point.fromHex(publicKeyB).mul(privateKeyA) if you need Point instance
 ```
 
 ```js
@@ -177,11 +167,6 @@ const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f
 const alicesPubkey = getPublicKey(utils.randomPrivateKey());
 getSharedSecret(privKey, alicesPubkey);
 ```
-
-Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between a private key and a different public key.
-
-- To get Point instance, use `Point.fromHex(publicKeyB).multiply(privateKeyA)`
-- `isCompressed = true` determines whether to return compact (33-byte), or full (65-byte) key
 
 ##### `Signature.recoverPublicKey(hash)`
 
@@ -245,25 +230,18 @@ secp256k1.PPoint.G // new secp256k1.Point(Gx, Gy) where
 // Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240n
 // Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
 
-// Elliptic curve point in Affine (x, y) coordinates.
+// Elliptic curve point in Projective (x, y, z) coordinates.
 secp256k1.PPoint {
   constructor(x: bigint, y: bigint, z?: bigint);
   // Supports compressed and non-compressed hex
   static fromHex(hex: Uint8Array | string);
   static fromPrivateKey(privateKey: Uint8Array | string | number | bigint);
-  static fromSignature(
-    msgHash: Hex,
-    signature: Signature,
-    recovery: number | bigint
-  ): Point | undefined {
   toRawBytes(isCompressed = false): Uint8Array;
   toHex(isCompressed = false): string;
   eql(other: Point): boolean;
   neg(): Point;
   add(other: Point): Point;
-  subtract(other: Point): Point;
-  // Constant-time scalar multiplication.
-  multiply(scalar: bigint | Uint8Array): Point;
+  mul(scalar: bigint): Point; // Constant-time scalar multiplication.
 }
 secp256k1.Signature {
   constructor(r: bigint, s: bigint);
@@ -279,7 +257,7 @@ secp256k1.Signature {
 
 Noble is production-ready.
 
-1. The library has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_noble-lib.pdf). See [changes since audit](https://github.com/paulmillr/noble-secp256k1/compare/1.2.0..main).
+1. The library, as per version 1.2.0, has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_noble-lib.pdf). See [changes since audit](https://github.com/paulmillr/noble-secp256k1/compare/1.2.0..main).
    - The audit has been [crowdfunded](https://gitcoin.co/grants/2451/audit-of-noble-secp256k1-cryptographic-library) by community with help of [Umbra.cash](https://umbra.cash).
 2. The library has also been fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz). You can run the fuzzer by yourself to check it.
 
@@ -289,18 +267,14 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 ## Speed
 
-Benchmarks measured with Apple M2 on MacOS 12 with node.js 18.8.
+Benchmarks measured with Apple M2 on MacOS 12 with node.js 18.10.
 
-    getPublicKey(utils.randomPrivateKey()) x 7,093 ops/sec @ 140μs/op
-    sign x 5,615 ops/sec @ 178μs/op
-    signSync (@noble/hashes) x 5,209 ops/sec @ 191μs/op
-    verify x 1,114 ops/sec @ 896μs/op
-    recoverPublicKey x 1,018 ops/sec @ 982μs/op
-    getSharedSecret aka ecdh x 665 ops/sec @ 1ms/op
-    getSharedSecret (precomputed) x 7,426 ops/sec @ 134μs/op
-    Point.fromHex (decompression) x 14,582 ops/sec @ 68μs/op
-    schnorr.sign x 805 ops/sec @ 1ms/op
-    schnorr.verify x 1,129 ops/sec @ 885μs/op
+    getPublicKey(utils.randomPrivateKey()) x 5,030 ops/sec @ 198μs/op
+    sign x 4,046 ops/sec @ 247μs/op
+    verify x 479 ops/sec @ 2ms/op
+    getSharedSecret x 405 ops/sec @ 2ms/op
+    recoverPublicKey x 487 ops/sec @ 2ms/op
+    Point.fromHex (decompression) x 7,642 ops/sec @ 130μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 
@@ -348,8 +322,7 @@ Some functionality present in v1, such as schnorr and DER, was removed: use [**n
 - `recoverPublicKey(msgHash, sig, recovery)` has been changed to `sig.recoverPublicKey(msgHash)`
 - `Point` has been changed to `PPoint`; which now works in 3d xyz projective coordinates instead of
   2d xy affine. Its methods have been renamed: `multiply` to `mul`, `subtract` to `sub` etc. Use curves if you still need affine point
-- Schnorr signature scheme has been removed. Use curves if you need it
-- asn.1 DER encoding has been removed. Use curves if you need it
+- schnorr signatures, asn.1 DER, custom precomputes have been removed. Use noble-curves if you need them
 - Errors are sometimes thrown with empty messages and longer stack traces. Use curves if you need formatted errors
 - Support for environments that can't parse bigint literals has been removed
 
