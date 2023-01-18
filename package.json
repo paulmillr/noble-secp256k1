@@ -1,7 +1,7 @@
 {
   "name": "@noble/secp256k1",
-  "version": "1.7.1",
-  "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA & Schnorr signatures",
+  "version": "2.0.0-pre",
+  "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA signatures",
   "files": [
     "lib"
   ],
@@ -54,12 +54,10 @@
     "signature",
     "ecc",
     "rfc6979",
-    "schnorr",
     "sig",
     "bip0340",
     "bip340",
     "ecdsa",
-    "endomorphism",
     "cryptography",
     "security",
     "noble"

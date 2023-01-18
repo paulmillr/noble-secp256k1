@@ -24,7 +24,7 @@ const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyz
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
 const hexToBytes = secp.utils.hexToBytes;
-const Point = secp.JPoint;
+const Point = secp.PPoint;
 
 // const { Signature } = secp;
 const { bytesToNumber: b2n, hexToBytes: h2b } = secp.utils;
@@ -328,7 +328,7 @@ describe('secp256k1', () => {
       const PRIV_KEY = secp.utils.numToField(0x2n);
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
-      expect(publicKey.length).toBe(65);
+      expect(publicKey.length).toBe(33);
       expect(secp.verify(signature, MSG, publicKey)).toBe(true);
     });
     it('should not verify signature with wrong public key', async () => {
@@ -337,7 +337,7 @@ describe('secp256k1', () => {
       const WRONG_PRIV_KEY = secp.utils.numToField(0x22n);
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = Point.fromPrivateKey(WRONG_PRIV_KEY).toHex();
-      expect(publicKey.length).toBe(130);
+      expect(publicKey.length).toBe(66);
       expect(secp.verify(signature, MSG, publicKey)).toBe(false);
     });
     it('should not verify signature with wrong hash', async () => {
@@ -346,7 +346,7 @@ describe('secp256k1', () => {
       const WRONG_MSG = '11'.repeat(32);
       const signature = await secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
-      expect(publicKey.length).toBe(65);
+      expect(publicKey.length).toBe(33);
       expect(secp.verify(signature, WRONG_MSG, publicKey)).toBe(false);
     });
     it('should verify random signatures', async () =>
@@ -452,7 +452,7 @@ describe('secp256k1', () => {
       const sig = await secp.sign(message, privateKey);
       const recoveredPubkey = sig.recoverPublicKey(message);
       expect(recoveredPubkey).not.toBe(null);
-      expect(recoveredPubkey.toHex()).toBe(publicKey);
+      expect(recoveredPubkey.toHex(false)).toBe(publicKey);
       expect(secp.verify(sig, message, publicKey)).toBe(true);
     });
     it('should not recover zero points', () => {

@@ -23,5 +23,5 @@ run(async () => {
   await mark('recoverPublicKey', 500, () => signature.recoverPublicKey(msg));
   let i = 0;
   let len = points.length;
-  await mark('Point.fromHex (decompression)', 10000, () => secp.Point.fromHex(points[i++ % len]));
+  await mark('Point.fromHex (decompression)', 10000, () => secp.PPoint.fromHex(points[i++ % len]));
 });
