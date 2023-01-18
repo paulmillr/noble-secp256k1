@@ -64,10 +64,10 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`sign(msgHash, privateKey)`](#signmsghash-privatekey)
 - [`verify(signature, msgHash, publicKey)`](#verifysignature-msghash-publickey)
 - [`getSharedSecret(privateKeyA, publicKeyB)`](#getsharedsecretprivatekeya-publickeyb)
-- [`signature.recoverPublicKey(msgHash)`](#recoverpublickeyhash-signature-recovery)
+- [`signature.recoverPublicKey(msgHash)`](#signaturerecoverpublickeyhash)
 - [Utilities](#utilities)
 
-##### `getPublicKey(privateKey)`
+#### `getPublicKey(privateKey)`
 
 ```typescript
 function getPublicKey(
@@ -85,7 +85,7 @@ getPublicKey(privKey, false);
 // Use `PPoint.fromPrivateKey(privateKey)` if you need `PPoint` instead of `Uint8Array`
 ```
 
-##### `sign(msgHash, privateKey)`
+#### `sign(msgHash, privateKey)`
 
 ```typescript
 function sign(
@@ -112,7 +112,7 @@ const sig = await sign(msgHash, privKey);
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 // should be `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`
-secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.utils.concatBytes(...msgs))
+secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp.utils.concatBytes(...msgs))
 secp.signSync(msgHash, privKey); // Can be used now
 
 // Malleable signatures, incompatible with BTC/ETH, but compatible with openssl
@@ -129,7 +129,7 @@ const sigM = await sign(msgHash, privKey, { lowS: false });
 const sigE = await sign(msgHash, privKey, { extraEntropy: true });
 ```
 
-##### `verify(signature, msgHash, publicKey)`
+#### `verify(signature, msgHash, publicKey)`
 
 ```typescript
 function verify(
@@ -151,7 +151,7 @@ const sig = await sign(msgHash, privKey);
 const isValid = verify(sig, msgHash, pub);
 ```
 
-##### `getSharedSecret(privateKeyA, publicKeyB)`
+#### `getSharedSecret(privateKeyA, publicKeyB)`
 
 ```typescript
 function getSharedSecret(
@@ -169,7 +169,7 @@ const alicesPubkey = getPublicKey(utils.randomPrivateKey());
 getSharedSecret(privKey, alicesPubkey);
 ```
 
-##### `Signature.recoverPublicKey(hash)`
+#### `Signature.recoverPublicKey(hash)`
 
 ```typescript
 signature.recoverPublicKey(
@@ -188,7 +188,7 @@ sig.recoverPublicKey(msgHash);
 
 #### Utilities
 
-secp256k1 exposes a few internal utilities for improved developer experience.
+The package exposes a few internal utilities for improved developer experience.
 
 ```typescript
 secp.utils {
