@@ -70,18 +70,18 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 ##### `getPublicKey(privateKey)`
 
 ```typescript
-function getPublicKey(privateKey: Uint8Array | string | bigint, isCompressed = true): Uint8Array;
+function getPublicKey( // Creates 33-byte compact public key for the private key.
+  privateKey: Uint8Array | string | bigint,
+  isCompressed = true // Optional argument: default `true` produces 33-byte compressed
+): Uint8Array;
 ```
 
 ```js
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
 getPublicKey(privKey);
 getPublicKey(privKey, false);
+// Use `PPoint.fromPrivateKey(privateKey)` if you need `PPoint` instead of `Uint8Array`
 ```
-
-Creates 33-byte compact public key for the corresponding private key. Set optional `isCompressed` to `false`
-if you need full 65-byte key. Use `PPoint.fromPrivateKey(privateKey)`
-if you need `PPoint` instead of `Uint8Array`:
 
 ##### `sign(msgHash, privateKey)`
 
@@ -104,30 +104,24 @@ Generates low-s deterministic-k ECDSA signature as per RFC6979.
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
 const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
 const sig = await sign(msgHash, privKey);
-// Signatures with improved security
-const sigE = await sign(msgHash, privKey, { extraEntropy: true });
-// Malleable signatures, but compatible with openssl
+// Malleable signatures, incompatible with BTC/ETH, but compatible with openssl
+// `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) because of malleability
 const sigM = await sign(msgHash, privKey, { lowS: false });
-```
 
-Options:
+// Signatures with improved security: adds additional entropy `k` for deterministic signature,
+// follows section 3.6 of RFC6979. When `true`, it would be filled with 32b from CSPRNG.
+// **Strongly recommended** to pass `true` to improve security:
+// - No disadvantage: if an entropy generator is broken, sigs would be the same as they are without the option
+// - It would help a lot in case there is an error somewhere in `k` gen. Exposing `k` could leak private keys
+// - Sigs with extra entropy would have different `r` / `s`, which means they
+//   would still be valid, but may break some test vectors if you're cross-testing against other libs
+const sigE = await sign(msgHash, privKey, { extraEntropy: true });
 
-- `lowS: boolean = true` - whether a signature `s` should be no more than 1/2 prime order.
-  `true` (default) makes signatures compatible with libsecp256k1,
-  `false` makes signatures compatible with openssl
-- `extraEntropy: Uint8Array | string | boolean = false` - additional entropy `k'` for deterministic signature, follows section 3.6 of RFC6979. When `true`, it would automatically be filled with 32 bytes of cryptographically secure entropy. **Strongly recommended** to pass `true` to improve security:
-  - It would help a lot in case there is an error somewhere in `k` generation. Exposing `k` could leak private keys
-  - If the entropy generator is broken, signatures would be the same as they are without the option
-  - Signatures with extra entropy would have different `r` / `s`, which means they
-    would still be valid, but may break some test vectors if you're cross-testing against other libs
-
-The function is asynchronous because we're utilizing built-in HMAC API to not rely on dependencies.
-
-`signSync` counterpart could also be used, you need to set `utils.hmacSha256Sync` to a function with signature `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`. Example with `noble-hashes` package:
-
-```ts
+// ^ The function is async because we're utilizing built-in HMAC API to not rely on dependencies.
+// signSync is disabled by default. To enable it, pass a hmac calculator function
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
+// should be `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`
 secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.utils.concatBytes(...msgs))
 secp.signSync(msgHash, privKey); // Can be used now
 ```
