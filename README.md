@@ -70,11 +70,13 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 ##### `getPublicKey(privateKey)`
 
 ```typescript
-function getPublicKey( // Creates 33-byte compact public key for the private key.
+function getPublicKey(
   privateKey: Uint8Array | string | bigint,
   isCompressed = true // Optional argument: default `true` produces 33-byte compressed
 ): Uint8Array;
 ```
+
+Creates 33-byte compact public key for the private key.
 
 ```js
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
@@ -104,6 +106,15 @@ Generates low-s deterministic-k ECDSA signature as per RFC6979.
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
 const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
 const sig = await sign(msgHash, privKey);
+
+// ^ The function is async because we're utilizing built-in HMAC API to not rely on dependencies.
+// signSync is disabled by default. To enable it, pass a hmac calculator function
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
+// should be `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`
+secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.utils.concatBytes(...msgs))
+secp.signSync(msgHash, privKey); // Can be used now
+
 // Malleable signatures, incompatible with BTC/ETH, but compatible with openssl
 // `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) because of malleability
 const sigM = await sign(msgHash, privKey, { lowS: false });
@@ -116,14 +127,6 @@ const sigM = await sign(msgHash, privKey, { lowS: false });
 // - Sigs with extra entropy would have different `r` / `s`, which means they
 //   would still be valid, but may break some test vectors if you're cross-testing against other libs
 const sigE = await sign(msgHash, privKey, { extraEntropy: true });
-
-// ^ The function is async because we're utilizing built-in HMAC API to not rely on dependencies.
-// signSync is disabled by default. To enable it, pass a hmac calculator function
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha256';
-// should be `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`
-secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.utils.concatBytes(...msgs))
-secp.signSync(msgHash, privKey); // Can be used now
 ```
 
 ##### `verify(signature, msgHash, publicKey)`
@@ -138,6 +141,8 @@ function verify(
 ): boolean; // `true` if `signature` is valid for `hash` and `publicKey`; otherwise `false`
 ```
 
+Verifies signatures against message and public key.
+
 ```js
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
 const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
@@ -149,12 +154,14 @@ const isValid = verify(sig, msgHash, pub);
 ##### `getSharedSecret(privateKeyA, publicKeyB)`
 
 ```typescript
-function getSharedSecret( // Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between
+function getSharedSecret(
   privateKeyA: Uint8Array | string, // Alices's private key
   publicKeyB: Uint8Array | string, // Bob's public key
   isCompressed = true // optional arg; `true` default returns 33 byte keys, `false` can return 65-byte
 ): Uint8Array; // Use Point.fromHex(publicKeyB).mul(privateKeyA) if you need Point instance
 ```
+
+Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between key A and different key B.
 
 ```js
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
