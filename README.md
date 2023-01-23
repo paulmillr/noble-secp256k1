@@ -6,11 +6,11 @@ ECDH key agreement protocol and signature schemes. Supports deterministic **ECDS
 
 Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
-**2023 update:** version 2 has been released. It features 4x less code and improved security.
-Some features have been removed. Use [**noble-curves**](https://github.com/paulmillr/noble-curves)
-if you need big, audited & optimized library. Use **noble-secp256k1** if you need
-stable, frozen, minimal feature set and smaller attack surface.
-Check out [Upgrading](#upgrading) section.
+**2023 update:** version 2 has been released, check out [Upgrading](#upgrading) section.
+It features 4x less code and improved security. Some features have been removed.
+Use [**noble-curves**](https://github.com/paulmillr/noble-curves)
+now if you need big, audited & optimized library with additional features.
+Use **noble-secp256k1** if you need stable, frozen, minimal feature set and smaller attack surface.
 
 ### This library belongs to _noble_ crypto
 
@@ -293,7 +293,6 @@ Some functionality present in v1, such as schnorr and DER, was removed: use [**n
 - `Point` has been changed to `PPoint`; which now works in 3d xyz projective coordinates instead of
   2d xy affine. Its methods have been renamed: `multiply` to `mul`, `subtract` to `sub` etc. Use curves if you still need affine point
 - schnorr signatures, asn.1 DER, custom precomputes have been removed. Use noble-curves if you need them
-- Errors are sometimes thrown with empty messages and longer stack traces. Use curves if you need formatted errors
 - Support for environments that can't parse bigint literals has been removed
 
 ## License
