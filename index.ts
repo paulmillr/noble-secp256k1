@@ -435,4 +435,4 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
 export const PPoint = Point;
 export const utils = ut;
-export { getPublicKey, signAsync as sign, signSync, verify, getSharedSecret, CURVE, Signature };
+export { getPublicKey, signAsync, signSync as sign, verify, getSharedSecret, CURVE, Signature };

@@ -26,7 +26,6 @@ const hex = secp.utils.bytesToHex;
 const hexToBytes = secp.utils.hexToBytes;
 const Point = secp.PPoint;
 
-// const { Signature } = secp;
 const { bytesToNumber: b2n, hexToBytes: h2b } = secp.utils;
 const DER = {
   // asn.1 DER encoding utils
@@ -251,7 +250,7 @@ describe('secp256k1', () => {
   describe('.sign()', () => {
     it('should create deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.valid) {
-        let usig = await secp.sign(vector.m, vector.d);
+        let usig = await secp.signAsync(vector.m, vector.d);
         let sig = usig.toCompactHex();
         const vsig = vector.signature;
         expect(sig.slice(0, 64)).toBe(vsig.slice(0, 64));
@@ -262,16 +261,16 @@ describe('secp256k1', () => {
     it('should not create invalid deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.invalid.sign) {
         expect(() => {
-          return secp.sign(vector.m, vector.d);
+          return secp.signAsync(vector.m, vector.d);
         }).rejects.toThrowError();
       }
     });
 
     it('edge cases', () => {
       // @ts-ignore
-      expect(async () => await secp.sign()).rejects.toThrowError();
+      expect(async () => await secp.signAsync()).rejects.toThrowError();
       // @ts-ignore
-      expect(async () => await secp.sign('')).rejects.toThrowError();
+      expect(async () => await secp.signAsync('')).rejects.toThrowError();
     });
 
     it('should create correct DER encoding against libsecp256k1', async () => {
@@ -293,7 +292,7 @@ describe('secp256k1', () => {
         '0101010101010101010101010101010101010101010101010101010101010101'
       );
       for (let [msg, exp] of CASES) {
-        const res = await secp.sign(msg, privKey, { extraEntropy: undefined });
+        const res = await secp.signAsync(msg, privKey, { extraEntropy: undefined });
         const derRes = DER.hexFromSig(res);
         expect(derRes).toBe(exp);
         const derRes2 = DER.toSig(derRes);
@@ -309,7 +308,7 @@ describe('secp256k1', () => {
 
       for (const e of ecdsa.extraEntropy) {
         const sign = async (extraEntropy?: string) => {
-          const s = await secp.sign(e.m, e.d, { extraEntropy });
+          const s = await secp.signAsync(e.m, e.d, { extraEntropy });
           return s.toCompactHex();
         };
         expect(await sign()).toBe(e.signature);
@@ -326,7 +325,7 @@ describe('secp256k1', () => {
     it('should verify signature', async () => {
       const MSG = '01'.repeat(32);
       const PRIV_KEY = secp.utils.numToField(0x2n);
-      const signature = await secp.sign(MSG, PRIV_KEY);
+      const signature = await secp.signAsync(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
       expect(publicKey.length).toBe(33);
       expect(secp.verify(signature, MSG, publicKey)).toBe(true);
@@ -335,7 +334,7 @@ describe('secp256k1', () => {
       const MSG = '01'.repeat(32);
       const PRIV_KEY = secp.utils.numToField(0x2n);
       const WRONG_PRIV_KEY = secp.utils.numToField(0x22n);
-      const signature = await secp.sign(MSG, PRIV_KEY);
+      const signature = await secp.signAsync(MSG, PRIV_KEY);
       const publicKey = Point.fromPrivateKey(WRONG_PRIV_KEY).toHex();
       expect(publicKey.length).toBe(66);
       expect(secp.verify(signature, MSG, publicKey)).toBe(false);
@@ -344,7 +343,7 @@ describe('secp256k1', () => {
       const MSG = '01'.repeat(32);
       const PRIV_KEY = secp.utils.numToField(0x2n);
       const WRONG_MSG = '11'.repeat(32);
-      const signature = await secp.sign(MSG, PRIV_KEY);
+      const signature = await secp.signAsync(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
       expect(publicKey.length).toBe(33);
       expect(secp.verify(signature, WRONG_MSG, publicKey)).toBe(false);
@@ -357,7 +356,7 @@ describe('secp256k1', () => {
           async (privKey, msg) => {
             const pk = secp.utils.numToField(privKey);
             const pub = secp.getPublicKey(pk);
-            const sig = await secp.sign(msg, pk);
+            const sig = await secp.signAsync(msg, pk);
             expect(secp.verify(sig, msg, pub)).toBeTruthy();
           }
         )
@@ -449,7 +448,7 @@ describe('secp256k1', () => {
       const message = '00000000000000000000000000000000000000000000000000000000deadbeef';
       const privateKey = secp.utils.numToField(123456789n);
       const publicKey = Point.fromHex(secp.getPublicKey(privateKey)).toHex(false);
-      const sig = await secp.sign(message, privateKey);
+      const sig = await secp.signAsync(message, privateKey);
       const recoveredPubkey = sig.recoverPublicKey(message);
       expect(recoveredPubkey).not.toBe(null);
       expect(recoveredPubkey.toHex(false)).toBe(publicKey);
@@ -468,14 +467,14 @@ describe('secp256k1', () => {
       const privKey = secp.utils.randomPrivateKey();
       const pub = secp.getPublicKey(privKey);
       const zeros = '0000000000000000000000000000000000000000000000000000000000000000';
-      const sig = await secp.sign(zeros, privKey);
+      const sig = await secp.signAsync(zeros, privKey);
       const recoveredKey = sig.recoverPublicKey(zeros);
       expect(recoveredKey.toRawBytes()).toEqual(pub);
     });
     it('should handle RFC 6979 vectors', async () => {
       for (const vector of ecdsa.valid) {
         if (secp.utils.mod(hexToNumber(vector.m), secp.CURVE.n) === 0n) continue;
-        let sig = await secp.sign(vector.m, vector.d);
+        let sig = await secp.signAsync(vector.m, vector.d);
         // let sig = hex(usig);
         const vpub = secp.getPublicKey(vector.d);
         const recovered = sig.recoverPublicKey(vector.m)!;

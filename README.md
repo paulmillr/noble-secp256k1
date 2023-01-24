@@ -46,7 +46,7 @@ import * as secp from '@noble/secp256k1';
   const pubKey = secp.getPublicKey(privKey);
   // sha256 of 'hello world'
   const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
-  const signature = await secp.sign(msgHash, privKey);
+  const signature = await secp.signAsync(msgHash, privKey);
   const isValid = secp.verify(signature, msgHash, pubKey);
 })();
 ```
@@ -88,24 +88,24 @@ getPublicKey(privKey, false);
 #### `sign(msgHash, privateKey)`
 
 ```typescript
-function sign(
+function signAsync(  // Available by default
   msgHash: Uint8Array | string, // 32-byte message hash (not the message itself)
   privateKey: Uint8Array | string, // private key that will sign it
   opts?: { lowS: boolean, extraEntropy: boolean | Hex } // optional object with params
 ): Promise<Signature>;
-function signSync(
+function sign(       // Not available by default: need to set utils.hmacSha256 first
   msgHash: Uint8Array | string, // 32-byte message hash (not the message itself)
   privateKey: Uint8Array | string, // private key that will sign it
   opts?: { lowS: boolean, extraEntropy: boolean | Hex } // optional object with params
 ): Signature;
 ```
 
-Generates low-s deterministic-k ECDSA signature as per RFC6979.
+Generates low-s deterministic-k RFC6979 ECDSA signature. Use with `extraEntropy: true` to improve security.
 
 ```js
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
 const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
-const sig = await sign(msgHash, privKey);
+const sig = await signAsync(msgHash, privKey);
 
 // ^ The function is async because we're utilizing built-in HMAC API to not rely on dependencies.
 // signSync is disabled by default. To enable it, pass a hmac calculator function
@@ -113,11 +113,11 @@ import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 // should be `key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array`
 secp.utils.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp.utils.concatBytes(...msgs))
-secp.signSync(msgHash, privKey); // Can be used now
+secp.sign(msgHash, privKey); // Can be used now
 
 // Malleable signatures, incompatible with BTC/ETH, but compatible with openssl
 // `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) because of malleability
-const sigM = await sign(msgHash, privKey, { lowS: false });
+const sigM = sign(msgHash, privKey, { lowS: false });
 
 // Signatures with improved security: adds additional entropy `k` for deterministic signature,
 // follows section 3.6 of RFC6979. When `true`, it would be filled with 32b from CSPRNG.
@@ -126,7 +126,7 @@ const sigM = await sign(msgHash, privKey, { lowS: false });
 // - It would help a lot in case there is an error somewhere in `k` gen. Exposing `k` could leak private keys
 // - Sigs with extra entropy would have different `r` / `s`, which means they
 //   would still be valid, but may break some test vectors if you're cross-testing against other libs
-const sigE = await sign(msgHash, privKey, { extraEntropy: true });
+const sigE = sign(msgHash, privKey, { extraEntropy: true });
 ```
 
 #### `verify(signature, msgHash, publicKey)`
@@ -147,7 +147,7 @@ Verifies signatures against message and public key.
 const privKey = 'a1b770e7a3ba3b751b8f03d8b0712f0b428aa5a81d69efc8c522579f763ba5f4';
 const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
 const pub = getPublicKey(privKey);
-const sig = await sign(msgHash, privKey);
+const sig = await signAsync(msgHash, privKey);
 const isValid = verify(sig, msgHash, pub);
 ```
 
