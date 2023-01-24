@@ -223,12 +223,12 @@ type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 const stdo: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
 const vstdo = { lowS: true };                           // standard opts for verify()
-type PSA = [Bytes, bigint, bigint, boolean];            // return type of prepSig()
-const prepSig = (msgh: Hex, priv: Hex, opts = stdo): PSA => { // prepare for RFC6979 sig generation
+type BC = { seed: Bytes, k2sig : (kb: Bytes) => Signature | undefined };
+const prepSig = (msgh: Hex, priv: Hex, opts = stdo): BC => { // prepare for RFC6979 sig generation
   if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
     err('sign() legacy options not supported');
-  let low = opts?.lowS;                                 // generates low-s sigs by default
-  if (low == null) low = true;                          // RFC6979 3.2: we skip step A, because
+  let { lowS } = opts;                                  // generates low-s sigs by default
+  if (lowS == null) lowS = true;                        // RFC6979 3.2: we skip step A, because
   const h1i = bits2int_modN(toU8(msgh));
   const h1o = i2o(h1i);
   const d = toPriv(priv);                               // validate private key, convert to bigint
@@ -241,75 +241,94 @@ const prepSig = (msgh: Hex, priv: Hex, opts = stdo): PSA => { // prepare for RFC
     seed.push(e);
   }
   const m = h1i;                                        // convert msg to bigint
-  return [concatB(...seed), m, d, low];
+  const k2sig = (kBytes: Bytes): Signature | undefined => {
+    const k = bits2int(kBytes);                         // Transforms k into Signature
+    if (!ge(k)) return;                                 // Check 0 < k < CURVE.n
+    const ik = inv(k, N);                               // k^-1 mod n, NOT mod P
+    const q = G.mul(k).aff();                           // q = Gk
+    const r = mod(q.x, N);                              // r = q.x mod n
+    if (r === 0n) return;                               // r=0 invalid
+    const s = mod(ik * mod(m + mod(d * r, N), N), N);   // s = k^-1(m + rd) mod n
+    if (s === 0n) return;                               // s=0 invalid
+    let normS = s;
+    let rec = (q.x === r ? 0 : 2) | Number(q.y & 1n);   // recovery bit
+    if (lowS && moreThanHalfN(s)) {                     // if lowS was passed, ensure s is always
+      normS = mod(-s, N);                               // in the bottom half of CURVE.n
+      rec ^= 1;
+    }
+    return new Signature(r, normS, rec);                // use normS, not s
+  };
+  return { seed: concatB(...seed), k2sig }
 };
-const kmd2sig = (kBytes: Bytes, m: bigint, d: bigint, lowS?: boolean): Signature | undefined => {
-  const k = bits2int(kBytes);                           // Utility method for RFC6979 k generation
-  if (!ge(k)) return;                                   // Check 0 < k < CURVE.n
-  const ik = inv(k, N);                                 // k^-1 mod n, NOT mod P
-  const q = G.mul(k).aff();                             // q = Gk
-  const r = mod(q.x, N);                                // r = q.x mod n
-  if (r === 0n) return;                                 // r=0 invalid
-  const s = mod(ik * mod(m + mod(d * r, N), N), N);     // s = k^-1(m + rd) mod n
-  if (s === 0n) return;                                 // s=0 invalid
-  let normS = s;
-  let rec = (q.x === r ? 0 : 2) | Number(q.y & 1n);     // recovery bit
-  if (lowS && moreThanHalfN(s)) {                       // if lowS was passed, ensure s is always
-    normS = mod(-s, N);                                 // in the bottom half of CURVE.n
-    rec ^= 1;
+type Pred<T> = (v: Uint8Array) => T | undefined;
+function hmacDrbg<T>(asynchronous: true): (seed: Bytes, predicate: Pred<T>) => Promise<T>;
+function hmacDrbg<T>(asynchronous: false): (seed: Bytes, predicate: Pred<T>) => T;
+function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
+  let v = u8n(fLen);  // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
+  let k = u8n(fLen);  // Steps B, C of RFC6979 3.2: set hashLen, in our case always same
+  let i = 0;                  // Iterations counter, will throw when over 1000
+  const reset = () => { v.fill(1); k.fill(0); i = 0; };
+  const _e = 'drbg: tried 1000 values';
+  if (asynchronous) {         // asynchronous=true
+    const h = (...b: Bytes[]) => ut.hmacSha256(k, v, ...b); // hmac(k)(v, ...values)
+    const reseed = async (seed = u8n()) => {              // HMAC-DRBG reseed() function. Steps D-G
+      k = await h(u8fr([0x00]), seed);                    // k = hmac(K || V || 0x00 || seed)
+      v = await h();                                      // v = hmac(K || V)
+      if (seed.length === 0) return;
+      k = await h(u8fr([0x01]), seed);                    // k = hmac(K || V || 0x01 || seed)
+      v = await h();                                      // v = hmac(K || V)
+    };
+    const gen = async () => {                             // HMAC-DRBG generate() function
+      if (i++ >= 1000) err(_e);
+      v = await h();                                      // v = hmac(K || V)
+      return v;
+    };
+    return async (seed: Bytes, pred: Pred<T>): Promise<T> => { // Even though it feels safe to reuse
+      reset(); // the returned fn, don't, it's: 1. slower (JIT). 2. unsafe (async race conditions)
+      await reseed(seed); // Steps D-G
+      let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+      while (!(res = pred(await gen()))) await reseed();
+      reset();
+      return res!;
+    };
+  } else {
+    const h = (...b: Bytes[]) => {                        // Same, but synchronous
+      const f = _hmacSync;
+      if (!f) err('utils.hmacSha256 not set');
+      return f!(k, v, ...b);                              // hmac(k)(v, ...values)
+    };
+    const reseed = (seed = u8n()) => {                    // HMAC-DRBG reseed() function. Steps D-G
+      k = h(u8fr([0x00]), seed);                          // k = hmac(k || v || 0x00 || seed)
+      v = h();                                            // v = hmac(k || v)
+      if (seed.length === 0) return;
+      k = h(u8fr([0x01]), seed);                          // k = hmac(k || v || 0x01 || seed)
+      v = h();                                            // v = hmac(k || v)
+    };
+    const gen = () => {                                   // HMAC-DRBG generate() function
+      if (i++ >= 1000) err(_e);
+      v = h();                                            // v = hmac(k || v)
+      return v;
+    };
+    return (seed: Bytes, pred: Pred<T>): T => {
+      reset();
+      reseed(seed); // Steps D-G
+      let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+      while (!(res = pred(gen()))) reseed();
+      reset();
+      return res!;
+    };
   }
-  return new Signature(r, normS, rec);                  // use normS, not s
 };
-const hmacDrbgA = async (seed: Bytes, m: bigint, d: bigint, lowS: boolean) => { // HMAC-DRBG async
-  let v = u8n(fLen).fill(1);  // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
-  let k = u8n(fLen).fill(0);  // Steps B, C of RFC6979 3.2: set hashLen, in our case always same
-  let i = 0;                  // Iterations counter, will throw when over 1000
-  const h = (...b: Bytes[]) => ut.hmacSha256(k, v, ...b); // hmac(k)(v, ...values)
-  const reseed = async (seed = u8n()) => {              // HMAC-DRBG reseed() function. Steps D-G
-    k = await h(u8fr([0x00]), seed);                    // k = hmac(K || V || 0x00 || seed)
-    v = await h();                                      // v = hmac(K || V)
-    if (seed.length === 0) return;
-    k = await h(u8fr([0x01]), seed);                    // k = hmac(K || V || 0x01 || seed)
-    v = await h();                                      // v = hmac(K || V)
-  };
-  const gen = async () => {                             // HMAC-DRBG generate() function
-    if (i++ >= 1000) err();
-    v = await h();                                      // v = hmac(K || V)
-    return v;
-  };
-  await reseed(seed);                                   // Steps D-G
-  let sig: Signature | undefined = undefined;           // Step H: grind until k is in [1..n-1]
-  while (!(sig = kmd2sig(await gen(), m, d, lowS))) await reseed();
-  return sig;
-};
-const hmacDrbgS = (seed: Bytes, m: bigint, d: bigint, lowS: boolean) => { // HMAC-DRBG sync
-  let v = u8n(fLen).fill(1);  // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
-  let k = u8n(fLen).fill(0);  // Steps B and C of RFC6979 3.2: set hashLen, in our case always same
-  let i = 0;                  // Iterations counter, will throw when over 1000
-  if (!_hmacSync) err('utils.hmacSha256 not set');
-  const h = (...b: Bytes[]) => _hmacSync!(k, v, ...b);  // hmac(k)(v, ...values)
-  const reseed = (seed = u8n()) => {                    // HMAC-DRBG reseed() function. Steps D-G
-    k = h(u8fr([0x00]), seed);                          // k = hmac(k || v || 0x00 || seed)
-    v = h();                                            // v = hmac(k || v)
-    if (seed.length === 0) return;
-    k = h(u8fr([0x01]), seed);                          // k = hmac(k || v || 0x01 || seed)
-    v = h();                                            // v = hmac(k || v)
-  };
-  const gen = () => {                                   // HMAC-DRBG generate() function
-    if (i++ >= 1000) err();
-    v = h();                                            // v = hmac(k || v)
-    return v;
-  };
-  reseed(seed);
-  let sig: Signature | undefined = undefined;           // Steps D-G
-  while (!(sig = kmd2sig(gen(), m, d, lowS))) reseed(); // Step H: grind until k is in [1..n-1]
-  return sig;
-};
+// ECDSA sig generation via secg.org/sec1-v2.pdf 4.1.2. hmacDrbg()
 const signAsync = async (msgh: Hex, priv: Hex, opts = stdo): Promise<Signature> => {
-  return hmacDrbgA(...prepSig(msgh, priv, opts)); // ECDSA sig generation secg.org/sec1-v2.pdf 4.1.2
+  const { seed, k2sig } = prepSig(msgh, priv, opts);
+  const genUntil = hmacDrbg<Signature>(true);
+  return genUntil(seed, k2sig);
 };
 const signSync = (msgh: Hex, priv: Hex, opts = stdo): Signature => {
-  return hmacDrbgS(...prepSig(msgh, priv, opts)); // Synchronous version of sign()
+  const { seed, k2sig } = prepSig(msgh, priv, opts);
+  const genUntil = hmacDrbg<Signature>(false);
+  return genUntil(seed, k2sig);
 };
 const isInst = (sig: any): sig is Signature => sig instanceof Signature
 const verify = (sig: Hex | Signature, msgh: Hex, pub: Hex, opts = vstdo): boolean => {
