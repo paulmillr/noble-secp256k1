@@ -124,7 +124,7 @@ class Point {                                           // Point in 3d xyz proje
     return G.mul(toPriv(n));                            // base point by bigint(n)
   }
 }
-const { BASE: G, ZERO: I } = Point;                                 // Generator, identity points
+const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const inv = (num: bigint, md = P): bigint => {          // modular inversion
   if (num === 0n || md <= 0n) err(`no inverse n=${num} mod=${md}`); // negative exponent not supported
@@ -150,7 +150,7 @@ const sqrt = (n: bigint) => {                           // √n = n^((p+1)/4) fo
   const r = pow(n, (P + 1n) / 4n, P);                   // So, a special, fast case. Paper: "Square
   return mod(r * r) === n ? r : err('sqrt invalid');    // Roots from 1;24,51,10 to Dan Shanks"
 };
-const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
+const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0');
 const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
 const h2n = (hex: string): bigint => (str(hex) ? BigInt(`0x${hex||'0'}`) : err());  // hex to number
 const h2b = (hex: string): Bytes => {                   // hex to bytes
@@ -191,8 +191,7 @@ class Signature {                                       // calculates signature
   }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
-    if (rec == null || ![0, 1, 2, 3].includes(rec))     //
-      err('recovery id invalid');                       //
+    if (![0, 1, 2, 3].includes(rec!)) err('recovery id invalid'); // check recovery id
     const h = bits2int_modN(toU8(msgh, 32));            // Truncate hash
     const radj = rec === 2 || rec === 3 ? r + N : r;    // If rec was 2 or 3, q.x is bigger than n
     if (radj >= P) err('q.x invalid');                  // ensure q.x is still a field element

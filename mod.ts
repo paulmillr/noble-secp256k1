@@ -1,11 +1,11 @@
 // prettier-ignore
 import {
-  CURVE, Point, Signature,
-  getPublicKey, sign, signSync, verify, recoverPublicKey, getSharedSecret,
-  schnorr, utils,
+  CURVE, ProjectivePoint, Signature,
+  getPublicKey, sign, signAsync, verify, getSharedSecret,
+  utils,
 } from './index.ts';
-import { HmacSha256 } from 'https://deno.land/std@0.153.0/hash/sha256.ts';
-import { crypto } from 'https://deno.land/std@0.153.0/crypto/mod.ts';
+import { HmacSha256 } from 'https://deno.land/std@0.175.0/hash/sha256.ts';
+import { crypto } from 'https://deno.land/std@0.175.0/crypto/mod.ts';
 
 utils.sha256 = async (...msgs: Uint8Array[]): Promise<Uint8Array> => {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', utils.concatBytes(...msgs)));
@@ -26,7 +26,7 @@ utils.hmacSha256Sync = (key: Uint8Array, ...messages: Uint8Array[]) => hmac(key,
 
 // prettier-ignore
 export {
-  CURVE, Point, Signature,
-  getPublicKey, sign, signSync, verify, recoverPublicKey, getSharedSecret,
-  schnorr, utils,
+  CURVE, ProjectivePoint, Signature,
+  getPublicKey, sign, signAsync, verify, getSharedSecret,
+  utils,
 };
