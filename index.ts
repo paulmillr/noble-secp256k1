@@ -152,7 +152,7 @@ const sqrt = (n: bigint) => {                           // √n = n^((p+1)/4) fo
 };
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
 const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
-const h2n = (hex: string): bigint => (str(hex) ? BigInt(`0x${hex}`) : err());  // hex to number
+const h2n = (hex: string): bigint => (str(hex) ? BigInt(`0x${hex||'0'}`) : err());  // hex to number
 const h2b = (hex: string): Bytes => {                   // hex to bytes
   const l = hex.length;                                 // error if not string,
   if (!str(hex) || l % 2) err('hex invalid');           // or has odd length like 3, 5.
