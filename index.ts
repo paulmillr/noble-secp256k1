@@ -13,9 +13,9 @@ const crv = (x: bigint) => mod(mod(x * mod(x*x)) + _a * x + _b); // x³ + ax + b
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n: any): n is bigint => typeof n === 'bigint'; // is big integer
 const str = (s: any): s is string => typeof s === 'string'; // is string
-const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element
+const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element (invertible)
 const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
-const au8 = (a: any, l?: number): Bytes =>               // is Uint8Array (of specific length)
+const au8 = (a: any, l?: number): Bytes =>              // is Uint8Array (of specific length)
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
@@ -29,19 +29,19 @@ let Gpows: Point[] | undefined = undefined;             // precomputes for base 
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {                                           // Point in 3d xyz projective coords
-  static readonly G = new Point(Gx, Gy, 1n);            // generator / base point.
-  static readonly I = new Point(0n, 1n, 0n);            // identity / zero point
-  constructor(readonly x: bigint, readonly y: bigint, readonly z = 1n) {} // z is optional
-  eql(other: Point): boolean {                          // equality check
-    const { x: X1, y: Y1, z: Z1 } = this;
-    const { x: X2, y: Y2, z: Z2 } = isPoint(other);     // isPoint() checks class equality
+  static readonly BASE = new Point(Gx, Gy, 1n);            // generator / base point.
+  static readonly ZERO = new Point(0n, 1n, 0n);            // identity / zero point
+  constructor(readonly px: bigint, readonly py: bigint, readonly pz = 1n) {} // z is optional
+  equals(other: Point): boolean {                          // equality check
+    const { px: X1, py: Y1, pz: Z1 } = this;
+    const { px: X2, py: Y2, pz: Z2 } = isPoint(other);     // isPoint() checks class equality
     return mod(X1 * Z2) === mod(X2 * Z1) && mod(Y1 * Z2) === mod(Y2 * Z1);
   }
-  neg() { return new Point(this.x, mod(-this.y), this.z); } // negate, flips point over y coord
+  neg() { return new Point(this.px, mod(-this.py), this.pz); } // negate, flips point over y coord
   dbl() { return this.add(this); }                      // point doubling
   add(other: Point) {                                   // point addition: complete, exception-free
-    const { x: X1, y: Y1, z: Z1 } = this;               // formula from Renes-Costello-Batina
-    const { x: X2, y: Y2, z: Z2 } = isPoint(other);     // https://eprint.iacr.org/2015/1060, algo 1
+    const { px: X1, py: Y1, pz: Z1 } = this;            // formula from Renes-Costello-Batina
+    const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // https://eprint.iacr.org/2015/1060, algo 1
     const { a, b } = CURVE;
     let X3 = 0n, Y3 = 0n, Z3 = 0n;                      // Cost: 12M + 0S + 3*a + 3*b3 + 23add
     const b3 = mod(b * 3n);
@@ -66,7 +66,7 @@ class Point {                                           // Point in 3d xyz proje
   mul(n: bigint, safe = true) {                         // Multiply point by scalar n;
     if (!safe && n === 0n) return I;                    // in unsafe mode, allow zero
     if (!ge(n)) err('invalid scalar');                  // must be 0 < n < CURVE.n
-    if (this.eql(G)) return wNAF(n).p;                  // Use precomputes for base point
+    if (this.equals(G)) return wNAF(n).p;               // Use precomputes for base point
     let p = I, f = G;                                   // init result point & fake point
     for (let d: Point = this; n > 0n; d = d.dbl(), n >>= 1n) { // double-and-add ladder
       if (n & 1n) p = p.add(d);                         // if bit is present, add to point
@@ -78,8 +78,8 @@ class Point {                                           // Point in 3d xyz proje
     return this.mul(u1, false).add(R.mul(u2, false)).ok(); // Unsafe: do NOT use for stuff related
   }                                                     // to private keys. Doesn't use Shamir trick
   aff(): AffinePoint {                                  // Converts point to 2d xy affine point
-    const { x, y, z } = this;                           // (x, y, z) ∋ (x=x/z, y=y/z)
-    if (this.eql(I)) return { x: 0n, y: 0n };           // fast-path for zero point
+    const { px: x, py: y, pz: z } = this;               // (x, y, z) ∋ (x=x/z, y=y/z)
+    if (this.equals(I)) return { x: 0n, y: 0n };        // fast-path for zero point
     if (z === 1n) return { x, y };                      // if z is 1, pass affine coordinates as-is
     const iz = inv(z);                                  // z^-1: invert z
     if (mod(z * iz) !== 1n) err('invalid inverse');     // (z * z^-1) must be 1, otherwise bad math
@@ -91,6 +91,11 @@ class Point {                                           // Point in 3d xyz proje
     return mod(y * y) === crv(x) ?                      // y² = x³ + ax + b, must be equal
       this : err('Point invalid: not on curve');
   }
+  multiply(n: bigint) { return this.mul(n); }           // Aliases for compatibilty
+  toAffine() { return this.aff(); }
+  assertValidity() { return this.ok(); }
+  get x() { return this.aff().x; }
+  get y() { return this.aff().y; }
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // converts hex string to Uint8Array
     let p: Point | undefined = undefined;
@@ -119,7 +124,7 @@ class Point {                                           // Point in 3d xyz proje
     return G.mul(toPriv(n));                            // base point by bigint(n)
   }
 }
-const { G, I } = Point;                                 // Generator, identity points
+const { BASE: G, ZERO: I } = Point;                                 // Generator, identity points
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const inv = (num: bigint, md = P): bigint => {          // modular inversion
   if (num === 0n || md <= 0n) err(`no inverse n=${num} mod=${md}`); // negative exponent not supported
@@ -141,7 +146,7 @@ const pow = (num: bigint, e: bigint, md = P): bigint => { // modular exponentiat
   }
   return res;
 };
-const sqrt = (n: bigint) => {                           // √(n) = n^((p+1)/4) for fields P = 3 mod 4
+const sqrt = (n: bigint) => {                           // √n = n^((p+1)/4) for fields p = 3 mod 4
   const r = pow(n, (P + 1n) / 4n, P);                   // So, a special, fast case. Paper: "Square
   return mod(r * r) === n ? r : err('sqrt invalid');    // Roots from 1;24,51,10 to Dan Shanks"
 };
@@ -186,8 +191,8 @@ class Signature {                                       // calculates signature
   }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
-    if (rec == null || ![0, 1, 2, 3].includes(rec))     // It is also possible to just grind through
-      err('recovery id invalid');                       // all 4 recovery ids and deduce correct one
+    if (rec == null || ![0, 1, 2, 3].includes(rec))     //
+      err('recovery id invalid');                       //
     const h = bits2int_modN(toU8(msgh, 32));            // Truncate hash
     const radj = rec === 2 || rec === 3 ? r + N : r;    // If rec was 2 or 3, q.x is bigger than n
     if (radj >= P) err('q.x invalid');                  // ensure q.x is still a field element
@@ -201,17 +206,13 @@ class Signature {                                       // calculates signature
   toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
   toCompactHex() { return n2h(this.r) + n2h(this.s); }  // hex 64b compact repr
 }
-// RFC6979: ensure ECDSA msg is X bytes and < N. RFC suggests optional truncating via bits2octets.
-// FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits, which matches bits2int.
-// bits2int can produce res>N, we can do mod(res, N) since the bitLen is the same.
-// int2octets can't be used; pads small msgs with 0: unacceptatble for trunc as per RFC vectors
-const bits2int = (bytes: Uint8Array): bigint => {
-  const delta = bytes.length * 8 - 256;                 // truncate to nBitLength leftmost bits
-  const num = b2n(bytes);                               // check for == u8 done here
-  return delta > 0 ? num >> BigInt(delta) : num;
+const bits2int = (bytes: Uint8Array): bigint => {       // RFC6979: ensure ECDSA msg is X bytes.
+  const delta = bytes.length * 8 - 256; // RFC suggests optional truncating via bits2octets
+  const num = b2n(bytes); // FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits, which
+  return delta > 0 ? num >> BigInt(delta) : num; // matches bits2int. bits2int can produce res>N.
 };
-const bits2int_modN = (bytes: Uint8Array): bigint => {
-  return mod(bits2int(bytes), N); // can't use bytesToNumberBE here
+const bits2int_modN = (bytes: Uint8Array): bigint => { // int2octets can't be used; pads small msgs
+  return mod(bits2int(bytes), N);                      // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const self: Record<string, any> | undefined;    // Typescript global symbol available in
@@ -330,17 +331,17 @@ const signSync = (msgh: Hex, priv: Hex, opts = stdo): Signature => {
   const genUntil = hmacDrbg<Signature>(false);
   return genUntil(seed, k2sig);
 };
-const isInst = (sig: any): sig is Signature => sig instanceof Signature
-const verify = (sig: Hex | Signature, msgh: Hex, pub: Hex, opts = vstdo): boolean => {
+type SigLike = { r: bigint, s: bigint };
+const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = vstdo): boolean => {
   let { lowS } = opts;                                  // ECDSA signature verification
   if (lowS == null) lowS = true;                        // Default lowS=true
   if ('strict' in opts) err('verify() legacy options not supported'); // legacy param
   let sig_: Signature, h: bigint, P: Point;             // secg.org/sec1-v2.pdf 4.1.4
-  const inst = isInst(sig);                             // Previous ver supported DER sigs. We throw
-  if (!inst && (toU8(sig).length !== 2 * fLen))         // error when DER is suspected now.
+  const rs = sig && typeof sig === 'object' && 'r' in sig; // Previous ver supported DER sigs. We
+  if (!rs && (toU8(sig).length !== 2 * fLen))           // throw error when DER is suspected now.
     err('signature must be 64 bytes');
   try {
-    sig_ = inst ? sig.ok() : Signature.fromCompact(sig);
+    sig_ = rs ? new Signature(sig.r, sig.s).ok() : Signature.fromCompact(sig);
     h = bits2int_modN(toU8(msgh, fLen));                // Truncate hash
     P = pub instanceof Point ? pub.ok() : Point.fromHex(pub); // Validate public key
   } catch (e) { return false; }                         // Check sig for validity in both cases
@@ -433,6 +434,6 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export const PPoint = Point;
+export const ProjectivePoint = Point;
 export const utils = ut;
 export { getPublicKey, signAsync, signSync as sign, verify, getSharedSecret, CURVE, Signature };

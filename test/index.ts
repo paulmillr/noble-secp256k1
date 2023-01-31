@@ -24,7 +24,7 @@ const INVALID_ITEMS = ['deadbeef', Math.pow(2, 53), [1], 'xyzxyzxyxyzxyzxyxyzxyz
 const toBEHex = (n: number | bigint) => n.toString(16).padStart(64, '0');
 const hex = secp.utils.bytesToHex;
 const hexToBytes = secp.utils.hexToBytes;
-const Point = secp.PPoint;
+const Point = secp.ProjectivePoint;
 
 const { bytesToNumber: b2n, hexToBytes: h2b } = secp.utils;
 const DER = {
@@ -45,33 +45,31 @@ const DER = {
     // ^ Weird condition: not about length, but about first bytes of number.
     return { d: b2n(res), l: data.subarray(len + 2) }; // d is data, l is left
   },
-  toSig(hex: string) {
+  toSig(hex: string | Uint8Array): { r: bigint; s: bigint } {
     // parse DER signature
     const { Err: E } = DER;
-    const data = typeof hex === 'string' ? secp.utils.hexToBytes(hex) : hex;
+    const data = typeof hex === 'string' ? h2b(hex) : hex;
+    if (!(data instanceof Uint8Array)) throw new Error('ui8a expected');
     let l = data.length;
     if (l < 2 || data[0] != 0x30) throw new E('Invalid signature tag');
     if (data[1] !== l - 2) throw new E('Invalid signature: incorrect length');
     const { d: r, l: sBytes } = DER._parseInt(data.subarray(2));
     const { d: s, l: rBytesLeft } = DER._parseInt(sBytes);
     if (rBytesLeft.length) throw new E('Invalid signature: left bytes after parsing');
-    return new secp.Signature(r, s);
+    return { r, s };
   },
-  fromSig(sig: secp.Signature): Uint8Array {
-    return h2b(DER.hexFromSig(sig));
-  },
-  hexFromSig(sig: secp.Signature): string {
+  hexFromSig(sig: { r: bigint; s: bigint }): string {
     const slice = (s: string): string => (Number.parseInt(s[0], 16) >= 8 ? '00' + s : s); // slice DER
     const h = (num: number | bigint) => {
       const hex = num.toString(16);
       return hex.length & 1 ? `0${hex}` : hex;
     };
-    const s = slice(h(sig.s)),
-      r = slice(h(sig.r));
-    const shl = s.length / 2,
-      rhl = r.length / 2;
-    const sl = h(shl),
-      rl = h(rhl);
+    const s = slice(h(sig.s));
+    const r = slice(h(sig.r));
+    const shl = s.length / 2;
+    const rhl = r.length / 2;
+    const sl = h(shl);
+    const rl = h(rhl);
     return `30${h(rhl + shl + 4)}02${rl}${r}02${sl}${s}`;
   },
 };
@@ -177,8 +175,8 @@ describe('secp256k1', () => {
         if (expected) {
           expect(p.add(q).toHex(true)).toBe(expected);
         } else {
-          if (p.eql(q.neg())) {
-            expect(p.add(q).toHex(true)).toBe(Point.I.toHex(true));
+          if (p.equals(q.neg())) {
+            expect(p.add(q).toHex(true)).toBe(Point.ZERO.toHex(true));
           } else {
             expect(() => p.add(q).toHex(true)).toThrowError();
           }
@@ -210,7 +208,7 @@ describe('secp256k1', () => {
       }
       for (const num of [0n, 0, -1n, -1, 1.1]) {
         // @ts-ignore
-        expect(() => Point.G.multiply(num)).toThrowError();
+        expect(() => Point.BASE.multiply(num)).toThrowError();
       }
     });
 
@@ -547,9 +545,9 @@ describe('secp256k1', () => {
       pointAddScalar: (p: Hex, tweak: Hex, isCompressed?: boolean): Uint8Array => {
         const P = Point.fromHex(p);
         const t = normal(tweak);
-        const Q = P.add(Point.G.mul(t));
-        // const Q = Point.G.multiplyAndAddUnsafe(P, t, 1n);
-        if (!Q || Q.eql(Point.I)) throw new Error('Tweaked point at infinity');
+        const Q = P.add(Point.BASE.mul(t));
+        // const Q = Point.BASE.multiplyAndAddUnsafe(P, t, 1n);
+        if (!Q || Q.equals(Point.ZERO)) throw new Error('Tweaked point at infinity');
         return Q.toRawBytes(isCompressed);
       },
 
@@ -636,7 +634,7 @@ describe('secp256k1', () => {
 });
 
 // describe('JacobianPoint', () => {
-//   const JZERO = Point.I;
+//   const JZERO = Point.ZERO;
 //   const AZERO = { x: 0n, y: 0n };
 //   expect(AZERO.equals(JZERO)).toBeTruthy();
 //   expect(AZERO.toAffine().equals(JZERO.toAffine())).toBeTruthy();
