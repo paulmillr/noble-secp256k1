@@ -1,3 +1,4 @@
+globalThis.crypto || (globalThis.crypto = require('node:crypto').webcrypto)
 const { run, mark, logMem } = require('micro-bmark');
 const secp = require('..');
 const { join } = require('path');

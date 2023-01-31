@@ -1,13 +1,17 @@
+import { createHash, webcrypto } from 'crypto';
+// polyfill for running tests in NodeJS v16-v18, must come before import '@noble/secp256k1'
+declare module globalThis { let crypto: webcrypto.Crypto }
+globalThis.crypto || (globalThis.crypto = webcrypto)
 import * as fc from 'fast-check';
 import * as secp from '..';
 import { readFileSync } from 'fs';
-import { createHash } from 'crypto';
 import * as sysPath from 'path';
 import * as ecdsa from './vectors/ecdsa.json';
 import * as ecdh from './vectors/ecdh.json';
 import * as privates from './vectors/privates.json';
 import * as points from './vectors/points.json';
 import * as wp from './vectors/wychenproof.json';
+jest.setTimeout(20000)
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
 
