@@ -3,9 +3,7 @@
 [Fastest](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for ECDSA/Schnorr signature schemes and ECDH key agreement protocol.
 
-Conforms to [RFC6979](https://datatracker.ietf.org/doc/rfc6979/) for deterministic ECDSA and to [BIP0340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki).
-
-[**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
+Conforms to [RFC6979](https://datatracker.ietf.org/doc/rfc6979/) for deterministic ECDSA and to [BIP0340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki). [**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ crypto
 
