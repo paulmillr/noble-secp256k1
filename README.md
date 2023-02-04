@@ -8,9 +8,9 @@ Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning 
 
 **2023 update:** version 2 has been released, check out [Upgrading](#upgrading) section.
 It features 4x less code and improved security. Some features have been removed.
-Use [**noble-curves**](https://github.com/paulmillr/noble-curves)
-now if you need big, audited & optimized library with additional features.
-Use **noble-secp256k1** if you need stable, frozen, minimal feature set and smaller attack surface.
+
+1. Use [**noble-curves**](https://github.com/paulmillr/noble-curves) now if you need audited & optimized library with features like Schnorr & DER.
+2. Use **noble-secp256k1** if you need a tiny 9KB stable library with minimal feature set and smaller attack surface.
 
 ### This library belongs to _noble_ crypto
 
@@ -284,15 +284,14 @@ Some functionality present in v1, such as schnorr and DER, was removed: use [**n
 
 - `getPublicKey()` and `getSharedSecret()` now produce compressed 33-byte signatures by default. If you
   need the old 65-byte behavior, set `isCompressed` option as `false`: `getPublicKey(priv, false)`, `getSharedSecret(a, b, false)`
-- `sign()`: now returns `Signature` instance with `{ r, s, rec }` properties. It could still be passed to `verify` as-is.
+- `sign()`: now returns `Signature` instance with `{ r, s, recovery }` properties. It could still be passed to `verify` as-is.
     - `canonical` has been renamed to `lowS`. The default value is the same as before: `lowS: true`
     - `recovered` has been removed. Recovery bit is always returned in the `Signature` instance
     - `der` has been removed. DER encoding is no longer supported. Use compact format (32-byte r + 32-byte s), `Signature` instance methods `toCompactRawBytes` / `toCompactHex()`: `(await sign(msgHash, priv)).toCompactRawBytes()`. Use curves if you still need der
 - `verify()`: `strict` option has been renamed to `lowS`, default value is still the same
 - `recoverPublicKey(msgHash, sig, recovery)` has been changed to `sig.recoverPublicKey(msgHash)`
-- `Point` has been changed to `PPoint`; which now works in 3d xyz projective coordinates instead of
-  2d xy affine. Its methods have been renamed: `multiply` to `mul`, `subtract` to `sub` etc. Use curves if you still need affine point
-- schnorr signatures, asn.1 DER, custom precomputes have been removed. Use noble-curves if you need them
+- `Point` is now `ProjectivePoint`, working in 3d xyz projective coordinates instead of 2d xy affine
+- Removed schnorr signatures, asn.1 DER, custom precomputes. Use noble-curves if you need them
 - Support for environments that can't parse bigint literals has been removed
 
 ## License

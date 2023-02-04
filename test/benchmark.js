@@ -16,12 +16,12 @@ run(async () => {
   const priv2 = '2e63f49054e1e44ccc2e6ef6ce387936efb16158f89cc302a2426e0b7fd66f66';
   const pub2 = secp.getPublicKey(priv2, true);
   const msg = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-  const signature = await secp.sign(msg, priv);
-  await mark('sign', 4000, async () => secp.sign(msg, priv));
+  const signature = await secp.signAsync(msg, priv);
+  await mark('sign', 4000, async () => secp.signAsync(msg, priv));
   await mark('verify', 500, () => secp.verify(signature, msg, pub));
   await mark('getSharedSecret', 500, () => secp.getSharedSecret(priv, pub2));
   await mark('recoverPublicKey', 500, () => signature.recoverPublicKey(msg));
   let i = 0;
   let len = points.length;
-  await mark('Point.fromHex (decompression)', 10000, () => secp.PPoint.fromHex(points[i++ % len]));
+  await mark('Point.fromHex (decompression)', 10000, () => secp.ProjectivePoint.fromHex(points[i++ % len]));
 });

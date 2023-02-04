@@ -29,12 +29,12 @@ let Gpows: Point[] | undefined = undefined;             // precomputes for base 
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {                                           // Point in 3d xyz projective coords
-  static readonly BASE = new Point(Gx, Gy, 1n);            // generator / base point.
-  static readonly ZERO = new Point(0n, 1n, 0n);            // identity / zero point
+  static readonly BASE = new Point(Gx, Gy, 1n);         // generator / base point.
+  static readonly ZERO = new Point(0n, 1n, 0n);         // identity / zero point
   constructor(readonly px: bigint, readonly py: bigint, readonly pz = 1n) {} // z is optional
-  equals(other: Point): boolean {                          // equality check
+  equals(other: Point): boolean {                       // equality check
     const { px: X1, py: Y1, pz: Z1 } = this;
-    const { px: X2, py: Y2, pz: Z2 } = isPoint(other);     // isPoint() checks class equality
+    const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // isPoint() checks class equality
     return mod(X1 * Z2) === mod(X2 * Z1) && mod(Y1 * Z2) === mod(Y2 * Z1);
   }
   neg() { return new Point(this.px, mod(-this.py), this.pz); } // negate, flips point over y coord
@@ -94,8 +94,8 @@ class Point {                                           // Point in 3d xyz proje
   multiply(n: bigint) { return this.mul(n); }           // Aliases for compatibilty
   toAffine() { return this.aff(); }
   assertValidity() { return this.ok(); }
-  get x() { return this.aff().x; }
-  get y() { return this.aff().y; }
+  get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine.
+  get y() { return this.aff().y; }                      // Should be used with care.
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // converts hex string to Uint8Array
     let p: Point | undefined = undefined;
@@ -270,7 +270,7 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   const reset = () => { v.fill(1); k.fill(0); i = 0; };
   const _e = 'drbg: tried 1000 values';
   if (asynchronous) {         // asynchronous=true
-    const h = (...b: Bytes[]) => ut.hmacSha256(k, v, ...b); // hmac(k)(v, ...values)
+    const h = (...b: Bytes[]) => ut.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
     const reseed = async (seed = u8n()) => {              // HMAC-DRBG reseed() function. Steps D-G
       k = await h(u8fr([0x00]), seed);                    // k = hmac(K || V || 0x00 || seed)
       v = await h();                                      // v = hmac(K || V)
@@ -376,7 +376,7 @@ const ut = {                                            // utilities
       cr.node ? u8fr(cr.node.randomBytes(len)) : err('CSPRNG not present');
   },
   hashToPrivateKey,
-  hmacSha256: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
+  hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
     const m = concatB(...msgs);                         // HMAC-SHA256 async. No sync built-in!
     if (cr.web) {                                       // browser built-in version
       const s = cr.web.subtle;

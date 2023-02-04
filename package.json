@@ -1,7 +1,7 @@
 {
   "name": "@noble/secp256k1",
   "version": "2.0.0-pre",
-  "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA signatures",
+  "description": "Fastest JS implementation of secp256k1. Auditable, high-security, 0-dependency ECDSA signatures",
   "files": [
     "lib"
   ],
