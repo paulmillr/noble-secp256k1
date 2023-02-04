@@ -1,10 +1,11 @@
 # noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
 [Fastest](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
-an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979 and **Schnorr** signatures from [BIP0340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki).
+an elliptic curve that could be used for ECDSA/Schnorr signature schemes and ECDH key agreement protocol.
 
-[**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
+Conforms to [RFC6979](https://datatracker.ietf.org/doc/rfc6979/) for deterministic ECDSA and to [BIP0340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki).
+
+[**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ crypto
 
@@ -15,9 +16,9 @@ ECDH key agreement protocol and signature schemes. Supports deterministic **ECDS
 - Supported in all major browsers and stable node.js versions
 - All releases are signed with PGP keys
 - Check out [homepage](https://paulmillr.com/noble/) & all libraries:
-  [secp256k1](https://github.com/paulmillr/noble-secp256k1),
-  [ed25519](https://github.com/paulmillr/noble-ed25519),
-  [bls12-381](https://github.com/paulmillr/noble-bls12-381),
+  [curves](https://github.com/paulmillr/noble-curves)
+  ([secp256k1](https://github.com/paulmillr/noble-secp256k1),
+  [ed25519](https://github.com/paulmillr/noble-ed25519)),
   [hashes](https://github.com/paulmillr/noble-hashes)
 
 ## Usage
