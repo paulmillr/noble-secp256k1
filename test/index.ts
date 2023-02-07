@@ -370,7 +370,7 @@ describe('secp256k1', () => {
       const r = 1n;
       const s = 115792089237316195423570985008687907852837564279074904382605163141518162728904n;
 
-      const pub = new Point(x, y);
+      const pub = new Point(x, y, 1n);
       const signature = new secp.Signature(2n, 2n);
       // @ts-ignore
       signature.r = r;
@@ -387,7 +387,7 @@ describe('secp256k1', () => {
       const y = 32670510020758816978083085130507043184471273380659243275938904335757337482424n;
       const r = 104546003225722045112039007203142344920046999340768276760147352389092131869133n;
       const s = 96900796730960181123786672629079577025401317267213807243199432755332205217369n;
-      const pub = new Point(x, y).toRawBytes();
+      const pub = new Point(x, y, 1n).toRawBytes();
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub)).toBeFalsy();
     });
@@ -397,7 +397,7 @@ describe('secp256k1', () => {
       const y = 17482644437196207387910659778872952193236850502325156318830589868678978890912n;
       const r = 432420386565659656852420866390673177323n;
       const s = 115792089237316195423570985008687907852837564279074904382605163141518161494334n;
-      const pub = new Point(x, y).toRawBytes();
+      const pub = new Point(x, y, 1n).toRawBytes();
       const sig = new secp.Signature(r, s);
       expect(secp.verify(sig, msg, pub, { lowS: false })).toBeTruthy();
     });

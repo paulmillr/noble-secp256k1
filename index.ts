@@ -29,9 +29,11 @@ let Gpows: Point[] | undefined = undefined;             // precomputes for base 
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {                                           // Point in 3d xyz projective coords
+  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} // z is optional
   static readonly BASE = new Point(Gx, Gy, 1n);         // generator / base point.
   static readonly ZERO = new Point(0n, 1n, 0n);         // identity / zero point
-  constructor(readonly px: bigint, readonly py: bigint, readonly pz = 1n) {} // z is optional
+  get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine.
+  get y() { return this.aff().y; }                      // Should be used with care.
   equals(other: Point): boolean {                       // equality check
     const { px: X1, py: Y1, pz: Z1 } = this;
     const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // isPoint() checks class equality
@@ -94,8 +96,6 @@ class Point {                                           // Point in 3d xyz proje
   multiply(n: bigint) { return this.mul(n); }           // Aliases for compatibilty
   toAffine() { return this.aff(); }
   assertValidity() { return this.ok(); }
-  get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine.
-  get y() { return this.aff().y; }                      // Should be used with care.
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // converts hex string to Uint8Array
     let p: Point | undefined = undefined;
@@ -107,17 +107,17 @@ class Point {                                           // Point in 3d xyz proje
       const isYOdd = (y & 1n) === 1n;                   // y² is equivalent left-side. Calculate y²:
       const headOdd = (head & 1) === 1;                 // y = √y²; there are two solutions: y, -y
       if (headOdd !== isYOdd) y = mod(-y);              // determine proper solution
-      p = new Point(x, y);                              // create 3d point
+      p = new Point(x, y, 1n);                          // create point
     }                                                   // Uncompressed points: 65b, start with 0x04
-    if (len === 65 && head === 0x04) p = new Point(x, slcNum(tail, fLen, 2 * fLen));
+    if (len === 65 && head === 0x04) p = new Point(x, slcNum(tail, fLen, 2 * fLen), 1n);
     return p ? p.ok() : err('Point is not on curve');   // Verify the result
   }
-  toHex(isCompressed = true) {                          // Converts point to hex string
+  toHex(isCompressed = true) {                          // Encodes point to hex string
     const { x, y } = this.aff();                        // Convert to 2d xy affine point
     const head = isCompressed ? ((y & 1n) === 0n ? '02' : '03') : '04'; // 0x02, 0x03, 0x04 prefix
     return `${head}${n2h(x)}${isCompressed ? '' : n2h(y)}`; // prefix||x and ||y
   }
-  toRawBytes(isCompressed = true) {                     // Converts point to Uint8Array
+  toRawBytes(isCompressed = true) {                     // Encodes point to Uint8Array
     return h2b(this.toHex(isCompressed));               // Re-use toHex(), convert hex to bytes
   }
   static fromPrivateKey(n: bigint | Hex) {              // Create point from a private key. Multiply
