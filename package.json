@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc && tsc -p tsconfig.esm.json",
     "build:release": "rollup -c rollup.config.js",
-    "test": "jest",
+    "test": "node test/secp256k1.test.mjs",
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js",
     "min": "terser --ecma 2020 -m -c < lib/esm/index.js",
@@ -29,13 +29,11 @@
   },
   "devDependencies": {
     "@noble/hashes": "1.2.0",
-    "@types/jest": "28.1.1",
     "@types/node": "17.0.18",
     "fast-check": "3.0.0",
-    "jest": "28.1.0",
     "micro-bmark": "0.3.0",
+    "micro-should": "0.4.0",
     "terser": "5.16.1",
-    "ts-jest": "28.0.4",
     "typescript": "4.7.3"
   },
   "keywords": [
@@ -61,12 +59,6 @@
       "types": "./lib/index.d.ts",
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
-    }
-  },
-  "jest": {
-    "testRegex": "/test/.*?\\.ts",
-    "transform": {
-      "^.+\\.ts$": "ts-jest"
     }
   },
   "funding": [

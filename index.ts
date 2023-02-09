@@ -8,7 +8,7 @@ const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; 
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
 export const CURVE = { P, n: N, a: _a, b: _b, Gx, Gy };        // exported variables
 const fLen = 32;                                        // field / group byte length
-type Bytes = Uint8Array; type Hex = Bytes | string;     // accepted inputs: bytes/hex
+type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
 const crv = (x: bigint) => mod(mod(x * mod(x*x)) + _a * x + _b); // x³ + ax + b weierstrass formula
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n: any): n is bigint => typeof n === 'bigint'; // is big integer
@@ -21,7 +21,7 @@ const au8 = (a: any, l?: number): Bytes =>              // is Uint8Array (of spe
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
 const toU8 = (a: any, len?: number) => au8(str(a) ? h2b(a) : a, len);  // normalize (hex/u8a) to u8a
-const toPriv = (p: Hex | bigint): bigint => {           // normalize private key to bigint
+const toPriv = (p: PrivKey): bigint => {           // normalize private key to bigint
   if (!big(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
   return ge(p) ? p : err('private key out of range');   // check if bigint is in range
 };
@@ -96,6 +96,7 @@ class Point {                                           // Point in 3d xyz proje
       this : err('Point invalid: not on curve');
   }
   multiply(n: bigint) { return this.mul(n); }           // Aliases for compatibilty
+  negate() { return this.neg(); }
   toAffine() { return this.aff(); }
   assertValidity() { return this.ok(); }
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
@@ -122,7 +123,7 @@ class Point {                                           // Point in 3d xyz proje
   toRawBytes(isCompressed = true) {                     // Encodes point to Uint8Array
     return h2b(this.toHex(isCompressed));               // Re-use toHex(), convert hex to bytes
   }
-  static fromPrivateKey(n: bigint | Hex) {              // Create point from a private key. Multiply
+  static fromPrivateKey(n: PrivKey) {              // Create point from a private key. Multiply
     return G.mul(toPriv(n));                            // base point by bigint(n)
   }
 }
@@ -181,7 +182,7 @@ const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Arra
   return r;
 };
 const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n) // if a number is bigger than CURVE.n/2
-export const getPublicKey = (privKey: Hex | bigint, isCompressed = true) => {  // calculate public
+export const getPublicKey = (privKey: PrivKey, isCompressed = true) => {  // calculate public
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // key from private
 };
 export class Signature {                                       // calculates signature
@@ -191,6 +192,7 @@ export class Signature {                                       // calculates sig
     hex = toU8(hex, 64);                                // compact repr is (32b r)||(32b s)
     return new Signature(slcNum(hex, 0, fLen), slcNum(hex, fLen, 2 * fLen));
   }
+  hasHighS() { return moreThanHalfN(this.s); }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
     if (![0, 1, 2, 3].includes(rec!)) err('recovery id invalid'); // check recovery id
@@ -216,10 +218,10 @@ const bits2int_modN = (bytes: Uint8Array): bigint => { // int2octets can't be us
   return mod(bits2int(bytes), N);                      // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
-declare const self: Record<string, any> | undefined;    // Typescript global symbol available in
+declare const globalThis: Record<string, any> | undefined;    // Typescript global symbol available in
 const cr: { node?: any; web?: any } = {     // browsers only. Ensure no dependence on @types/dom
   node: typeof require === 'function' && require('crypto'), // node.js require('crypto')
-  web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined, // browser-only var
+  web: typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined, // browser-only var
 };
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
@@ -296,7 +298,7 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   } else {
     const h = (...b: Bytes[]) => {                        // Same, but synchronous
       const f = _hmacSync;
-      if (!f) err('utils.hmacSha256 not set');
+      if (!f) err('utils.hmacSha256Sync not set');
       return f!(k, v, ...b);                              // hmac(k)(v, ...values)
     };
     const reseed = (seed = u8n()) => {                    // HMAC-DRBG reseed() function. Steps D-G
@@ -372,7 +374,10 @@ const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compli
 };
 const ut = {                                            // utilities
   mod, invert: inv,                                     // math utilities
-  concatBytes: concatB, hexToBytes: h2b, bytesToHex: b2h, bytesToNumber: b2n, numToField: n2b,
+  concatBytes: concatB,
+  hexToBytes: h2b, bytesToHex: b2h,
+  bytesToNumberBE: b2n, numberToBytesBE: n2b,
+  normPrivateKeyToScalar: toPriv,
   randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
     return cr.web ? cr.web.getRandomValues(u8n(len)) :
       cr.node ? u8fr(cr.node.randomBytes(len)) : err('CSPRNG not present');
@@ -393,8 +398,9 @@ const ut = {                                            // utilities
   hmacSha256Sync: _hmacSync,                            // For TypeScript. Actual logic is below
   randomPrivateKey: (): Bytes => hashToPrivateKey(ut.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
+  precompute(p: Point) {return p;}
 };
-Object.defineProperties(ut, { hmacSha256Sync: { // Allow setting it once. Next sets will be ignored
+Object.defineProperties(ut, { hmacSha256Sync: {         // Allow setting it once, ignore then
   configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
 } });
 const W = 8;                                            // Precomputes-related code. W = window size
