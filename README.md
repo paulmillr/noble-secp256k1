@@ -1,16 +1,14 @@
 # noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-[Fastest](#speed) JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
+[Fastest](#speed) 9KB JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
 ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979.
 
 Check out [the online demo](https://paulmillr.com/ecc) and blog post: [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
-**2023 update:** version 2 has been released, check out [Upgrading](#upgrading) section.
-It features 4x less code and improved security. Some features have been removed.
+The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is even faster drop-in replacement for noble-secp256k1 with more features such as Schnorr signatures, DER encoding, support for different hash functions.
 
-1. Use [**noble-curves**](https://github.com/paulmillr/noble-curves) now if you need audited & optimized library with features like Schnorr & DER.
-2. Use **noble-secp256k1** if you need a tiny 9KB stable library with minimal feature set and smaller attack surface.
+Check out [Upgrading](#upgrading) section for v1 to v2 transition instructions.
 
 ### This library belongs to _noble_ crypto
 
@@ -237,14 +235,14 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 ## Speed
 
-Benchmarks measured with Apple M2 on MacOS 12 with node.js 18.10.
+Benchmarks measured with Apple M2 on MacOS 13 with node.js 19.
 
-    getPublicKey(utils.randomPrivateKey()) x 5,030 ops/sec @ 198μs/op
-    sign x 4,046 ops/sec @ 247μs/op
-    verify x 479 ops/sec @ 2ms/op
-    getSharedSecret x 405 ops/sec @ 2ms/op
-    recoverPublicKey x 487 ops/sec @ 2ms/op
-    Point.fromHex (decompression) x 7,642 ops/sec @ 130μs/op
+    getPublicKey(utils.randomPrivateKey()) x 5,695 ops/sec @ 175μs/op
+    sign x 4,737 ops/sec @ 211μs/op
+    verify x 523 ops/sec @ 1ms/op
+    getSharedSecret x 441 ops/sec @ 2ms/op
+    recoverPublicKey x 534 ops/sec @ 1ms/op
+    Point.fromHex (decompression) x 8,538 ops/sec @ 117μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 
