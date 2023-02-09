@@ -1,12 +1,12 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 const B256 = 2n ** 256n;                                // secp256k1 is short weierstrass curve
-const P = B256 - 0x1000003d1n;                          // curve's field
+const P = B256 - 0x1000003d1n;                          // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn;  // curve (group) order
 const _a = 0n;                                          // a equation's param
 const _b = 7n;                                          // b equation's param
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const CURVE = { P, n: N, a: _a, b: _b, Gx, Gy };        // exported variables
+export const CURVE = { P, n: N, a: _a, b: _b, Gx, Gy };        // exported variables
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string;     // accepted inputs: bytes/hex
 const crv = (x: bigint) => mod(mod(x * mod(x*x)) + _a * x + _b); // x³ + ax + b weierstrass formula
@@ -179,10 +179,10 @@ const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Arra
   return r;
 };
 const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n) // if a number is bigger than CURVE.n/2
-const getPublicKey = (privKey: Hex | bigint, isCompressed = true) => {  // calculate public
+export const getPublicKey = (privKey: Hex | bigint, isCompressed = true) => {  // calculate public
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // key from private
 };
-class Signature {                                       // calculates signature
+export class Signature {                                       // calculates signature
   constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) { this.ok(); }
   ok(): Signature { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
   static fromCompact(hex: Hex) {                        // create signature from 64b compact repr
@@ -320,18 +320,18 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   }
 };
 // ECDSA sig generation via secg.org/sec1-v2.pdf 4.1.2. hmacDrbg()
-const signAsync = async (msgh: Hex, priv: Hex, opts = stdo): Promise<Signature> => {
+export const signAsync = async (msgh: Hex, priv: Hex, opts = stdo): Promise<Signature> => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);
   const genUntil = hmacDrbg<Signature>(true);
   return genUntil(seed, k2sig);
 };
-const signSync = (msgh: Hex, priv: Hex, opts = stdo): Signature => {
+export const sign = (msgh: Hex, priv: Hex, opts = stdo): Signature => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);
   const genUntil = hmacDrbg<Signature>(false);
   return genUntil(seed, k2sig);
 };
 type SigLike = { r: bigint, s: bigint };
-const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = vstdo): boolean => {
+export const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = vstdo): boolean => {
   let { lowS } = opts;                                  // ECDSA signature verification
   if (lowS == null) lowS = true;                        // Default lowS=true
   if ('strict' in opts) err('verify() legacy options not supported'); // legacy param
@@ -358,7 +358,7 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = vstdo): boolean 
   const v = mod(R.x, N);
   return v === r;                                       // mod(R.x, n) == r
 }
-const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true) => {
+export const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true) => {
   return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed);
 };
 const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compliant key generation
@@ -435,4 +435,3 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
 export const ProjectivePoint = Point;
 export const utils = ut;
-export { getPublicKey, signAsync, signSync as sign, verify, getSharedSecret, CURVE, Signature };
