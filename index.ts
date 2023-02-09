@@ -34,10 +34,12 @@ class Point {                                           // Point in 3d xyz proje
   static readonly ZERO = new Point(0n, 1n, 0n);         // identity / zero point
   get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine.
   get y() { return this.aff().y; }                      // Should be used with care.
-  equals(other: Point): boolean {                       // equality check
+  equals(other: Point): boolean {                       // equality check: compare points
     const { px: X1, py: Y1, pz: Z1 } = this;
     const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // isPoint() checks class equality
-    return mod(X1 * Z2) === mod(X2 * Z1) && mod(Y1 * Z2) === mod(Y2 * Z1);
+    const X1Z2 = mod(X1 * Z2), X2Z1 = mod(X2 * Z1);
+    const Y1Z2 = mod(Y1 * Z2), Y2Z1 = mod(Y2 * Z1);
+    return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
   }
   neg() { return new Point(this.px, mod(-this.py), this.pz); } // negate, flips point over y coord
   dbl() { return this.add(this); }                      // point doubling
@@ -399,7 +401,7 @@ const W = 8;                                            // Precomputes-related c
 const precompute = () => {                              // They give 12x faster getPublicKey(),
   const points: Point[] = [];                           // 10x sign(), 2x verify(). To achieve this,
   const windows = 256 / W + 1;                          // app needs to spend 40ms+ to calculate
-  let p = G, b = p;                                     // 65536 points related to base point G.
+  let p = G, b = p;                                     // a lot of points related to base point G.
   for (let w = 0; w < windows; w++) {                   // Points are stored in array and used
     b = p;                                              // any time Gx multiplication is done.
     points.push(b);                                     // They consume 16-32 MiB of RAM.
