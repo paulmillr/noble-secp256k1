@@ -220,7 +220,7 @@ const bits2int_modN = (bytes: Uint8Array): bigint => { // int2octets can't be us
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const globalThis: Record<string, any> | undefined;    // Typescript global symbol available in
 const cr: { node?: any; web?: any } = {     // browsers only. Ensure no dependence on @types/dom
-  node: typeof require === 'function' && require('crypto'), // node.js require('crypto')
+  node: typeof require === 'function' && require('node:crypto'), // node.js require('crypto')
   web: typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined, // browser-only var
 };
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
