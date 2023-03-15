@@ -26,13 +26,13 @@ Check out [Upgrading](#upgrading) section for v1 to v2 transition instructions.
 
 ## Usage
 
-Use NPM in node.js / browser, or include single file from
+Use NPM in browser, deno and node.js, or include single file from
 [GitHub's releases page](https://github.com/paulmillr/noble-secp256k1/releases):
 
 > npm install @noble/secp256k1
 
 ```js
-// Common.js and ECMAScript Modules (ESM)
+// ECMAScript Modules (ESM). Common.js not supported without a bundler
 import * as secp from '@noble/secp256k1';
 // If you're using single file, use global variable instead: `window.nobleSecp256k1`
 
@@ -48,13 +48,6 @@ import * as secp from '@noble/secp256k1';
   const isValid = secp.verify(signature, msgHash, pubKey);
 })();
 ```
-
-To use the module with [Deno](https://deno.land),
-you will need [import map](https://deno.land/manual/linking_to_external_code/import_maps):
-
-- `deno run --import-map=imports.json app.ts`
-- app.ts: `import * as secp from "https://deno.land/x/secp256k1/mod.ts";`
-- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.153.0/node/crypto.ts"}}`
 
 ## API
 
