@@ -123,7 +123,7 @@ class Point {                                           // Point in 3d xyz proje
   toRawBytes(isCompressed = true) {                     // Encodes point to Uint8Array
     return h2b(this.toHex(isCompressed));               // Re-use toHex(), convert hex to bytes
   }
-  static fromPrivateKey(n: PrivKey) {              // Create point from a private key. Multiply
+  static fromPrivateKey(n: PrivKey) {                   // Create point from a private key. Multiply
     return G.mul(toPriv(n));                            // base point by bigint(n)
   }
 }
@@ -176,8 +176,8 @@ const n2b = (num: bigint): Bytes => {                   // number to bytes. must
 };
 const n2h = (num: bigint): string => b2h(n2b(num));     // number to hex
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
-  const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0)); // create u8a of summed length
-  let pad = 0;                                               // walk through each array, ensure
+  const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0));  // create u8a of summed length
+  let pad = 0;                                                // walk through each array, ensure
   arrs.forEach(a => { r.set(au8(a), pad); pad += a.length }); // they have proper type
   return r;
 };
