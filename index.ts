@@ -237,7 +237,7 @@ const prepSig = (msgh: Hex, priv: Hex, opts = stdo): BC => { // prepare for RFC6
   const seed = [i2o(d), h1o];                           // Step D of RFC6979 3.2
   let ent = opts.extraEntropy;                          // RFC6979 3.6: additional k' (optional)
   if (ent != null) {          // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
-    if (ent === true) ent = ut.randomBytes(fLen);       // if true, use CSPRNG to generate data
+    if (ent === true) ent = etc.randomBytes(fLen);       // if true, use CSPRNG to generate data
     const e = toU8(ent);                                // convert Hex|Bytes to Bytes
     if (e.length !== fLen) err();                       // Expected 32 bytes of extra data
     seed.push(e);
@@ -272,7 +272,7 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   const reset = () => { v.fill(1); k.fill(0); i = 0; };
   const _e = 'drbg: tried 1000 values';
   if (asynchronous) {         // asynchronous=true
-    const h = (...b: Bytes[]) => ut.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
+    const h = (...b: Bytes[]) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
     const reseed = async (seed = u8n()) => {              // HMAC-DRBG reseed() function. Steps D-G
       k = await h(u8fr([0x00]), seed);                    // k = hmac(K || V || 0x00 || seed)
       v = await h();                                      // v = hmac(K || V)
@@ -370,20 +370,10 @@ const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compli
   const num = mod(b2n(hash), N - 1n) + 1n;              // takes at least n+8 bytes
   return n2b(num);
 };
-const ut = {                                            // utilities
+export const etc = {                                    // Not placed in `utils` because utils
+  hexToBytes: h2b, bytesToHex: b2h,                     // share API with noble-curves.
+  concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
   mod, invert: inv,                                     // math utilities
-  concatBytes: concatB,
-  hexToBytes: h2b, bytesToHex: b2h,
-  bytesToNumberBE: b2n, numberToBytesBE: n2b,
-  normPrivateKeyToScalar: toPriv,
-  randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
-    const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
-    // import { webcrypto } from 'node:crypto';
-    // globalThis.crypto = webcrypto;
-    if (!crypto) err('crypto.getRandomValues must be defined');
-    return crypto.getRandomValues(u8n(len));
-  },
-  hashToPrivateKey,
   hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
     const m = concatB(...msgs);                         // HMAC-SHA256 async. No sync built-in!
     const crypto = cr();
@@ -393,11 +383,22 @@ const ut = {                                            // utilities
     return u8n(await s.sign('HMAC', k, m));
   },
   hmacSha256Sync: _hmacSync,                            // For TypeScript. Actual logic is below
-  randomPrivateKey: (): Bytes => hashToPrivateKey(ut.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
+  hashToPrivateKey,
+  randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
+    const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
+    // import { webcrypto } from 'node:crypto';
+    // if (!globalThis.crypto) globalThis.crypto = webcrypto;
+    if (!crypto) err('crypto.getRandomValues must be defined');
+    return crypto.getRandomValues(u8n(len));
+  },
+}
+export const utils = {                                  // utilities
+  normPrivateKeyToScalar: toPriv,
+  randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
-  precompute(p: Point) { return p; } // no-op
+  precompute(p: Point, windowSize = 8) { return p; } // no-op
 };
-Object.defineProperties(ut, { hmacSha256Sync: {         // Allow setting it once, ignore then
+Object.defineProperties(etc, { hmacSha256Sync: {         // Allow setting it once, ignore then
   configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
 } });
 const W = 8;                                            // Precomputes-related code. W = window size
@@ -439,4 +440,3 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
 export const ProjectivePoint = Point;
-export const utils = ut;

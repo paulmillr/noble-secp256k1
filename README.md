@@ -228,14 +228,16 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 ## Speed
 
+Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need even higher performance.
+
 Benchmarks measured with Apple M2 on MacOS 13 with node.js 19.
 
-    getPublicKey(utils.randomPrivateKey()) x 5,695 ops/sec @ 175μs/op
-    sign x 4,737 ops/sec @ 211μs/op
-    verify x 523 ops/sec @ 1ms/op
-    getSharedSecret x 441 ops/sec @ 2ms/op
-    recoverPublicKey x 534 ops/sec @ 1ms/op
-    Point.fromHex (decompression) x 8,538 ops/sec @ 117μs/op
+    getPublicKey(utils.randomPrivateKey()) x 5,047 ops/sec @ 198μs/op
+    sign x 2,955 ops/sec @ 338μs/op
+    verify x 470 ops/sec @ 2ms/op
+    getSharedSecret x 403 ops/sec @ 2ms/op
+    recoverPublicKey x 485 ops/sec @ 2ms/op
+    Point.fromHex (decompression) x 7,546 ops/sec @ 132μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 

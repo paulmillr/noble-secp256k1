@@ -1,12 +1,15 @@
+import { webcrypto } from 'node:crypto';
 // @ts-ignore
-export * as secp from '../lib/esm/index.js';
+if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
 // @ts-ignore
-import * as secp256k1 from '../lib/esm/index.js';
+export * as secp from '../index.js';
+// @ts-ignore
+import * as secp256k1 from '../index.js';
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
-secp256k1.utils.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => hmac(sha256, key, secp256k1.utils.concatBytes(...msgs))
+secp256k1.etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => hmac(sha256, key, secp256k1.etc.concatBytes(...msgs))
 
-const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.utils;
+const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc;
 export const DER = {
   // asn.1 DER encoding utils
   Err: class DERErr extends Error {
@@ -61,6 +64,6 @@ export const sigFromDER = (der: string | Uint8Array) => {
 export const sigToDER = (sig: any) => DER.hexFromSig(sig);
 export const selectHash = (secp: any) => sha256;
 export const normVerifySig = (s: any) => DER.toSig(s);
-export const bytesToNumberBE = secp256k1.utils.bytesToNumberBE;
-export const numberToBytesBE = secp256k1.utils.numberToBytesBE;
-export const mod = secp256k1.utils.mod;
+export const bytesToNumberBE = secp256k1.etc.bytesToNumberBE;
+export const numberToBytesBE = secp256k1.etc.numberToBytesBE;
+export const mod = secp256k1.etc.mod;

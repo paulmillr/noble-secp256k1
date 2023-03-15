@@ -1,8 +1,10 @@
-const { run, mark, logMem } = require('micro-bmark');
-const secp = require('..');
-const { join } = require('path');
-const points = require('fs')
-  .readFileSync(join(__dirname, './vectors/points.txt'), 'utf-8')
+import { webcrypto } from 'node:crypto';
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+import { run, mark } from 'micro-bmark';
+import * as secp from '../index.js';
+import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+const points = readFileSync(join('.', 'test/vectors/points.txt'), 'utf-8')
   .split('\n')
   .filter((a) => a)
   .slice(0, 1000);
