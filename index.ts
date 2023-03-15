@@ -218,11 +218,9 @@ const bits2int_modN = (bytes: Uint8Array): bigint => { // int2octets can't be us
   return mod(bits2int(bytes), N);                      // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
-declare const globalThis: Record<string, any> | undefined;    // Typescript global symbol available in
-const cr: { node?: any; web?: any } = {     // browsers only. Ensure no dependence on @types/dom
-  node: typeof require === 'function' && require('node:crypto'), // node.js require('crypto')
-  web: typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined, // browser-only var
-};
+declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
+const cr = () => // We support: 1) browsers 2) node.js 19+
+  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 const stdo: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
@@ -363,7 +361,7 @@ export const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = vstdo): b
   return v === r;                                       // mod(R.x, n) == r
 }
 export const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true) => {
-  return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed);
+  return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
 };
 const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compliant key generation
   hash = toU8(hash);                                    // produces private keys with modulo bias
@@ -379,26 +377,25 @@ const ut = {                                            // utilities
   bytesToNumberBE: b2n, numberToBytesBE: n2b,
   normPrivateKeyToScalar: toPriv,
   randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
-    return cr.web ? cr.web.getRandomValues(u8n(len)) :
-      cr.node ? u8fr(cr.node.randomBytes(len)) : err('CSPRNG not present');
+    const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
+    // import { webcrypto } from 'node:crypto';
+    // globalThis.crypto = webcrypto;
+    if (!crypto) err('crypto.getRandomValues must be defined');
+    return crypto.getRandomValues(u8n(len));
   },
   hashToPrivateKey,
   hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
     const m = concatB(...msgs);                         // HMAC-SHA256 async. No sync built-in!
-    if (cr.web) {                                       // browser built-in version
-      const s = cr.web.subtle;
-      const k = await s.importKey('raw', key, {name:'HMAC',hash:{name:'SHA-256'}}, false, ['sign']);
-      return u8n(await s.sign('HMAC', k, m));
-    } else if (cr.node) {                               // node.js built-in version
-      return u8fr(cr.node.createHmac('sha256', key).update(m).digest());
-    } else {
-      return err('utils.hmacSha256 not set');
-    }
+    const crypto = cr();
+    if (!crypto) return err('utils.hmacSha256Async not set');
+    const s = crypto.subtle;
+    const k = await s.importKey('raw', key, {name:'HMAC',hash:{name:'SHA-256'}}, false, ['sign']);
+    return u8n(await s.sign('HMAC', k, m));
   },
   hmacSha256Sync: _hmacSync,                            // For TypeScript. Actual logic is below
   randomPrivateKey: (): Bytes => hashToPrivateKey(ut.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
-  precompute(p: Point) {return p;}
+  precompute(p: Point) { return p; } // no-op
 };
 Object.defineProperties(ut, { hmacSha256Sync: {         // Allow setting it once, ignore then
   configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },

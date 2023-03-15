@@ -1,4 +1,7 @@
 // @ts-ignore
+import { webcrypto } from 'node:crypto';
+globalThis.crypto = webcrypto;
+// @ts-ignore
 export * as secp from '../lib/esm/index.js';
 // @ts-ignore
 import * as secp256k1 from '../lib/esm/index.js';
