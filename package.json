@@ -1,21 +1,24 @@
 {
   "name": "@noble/secp256k1",
-  "version": "1.7.1",
-  "description": "Fastest JS implementation of secp256k1. Independently audited, high-security, 0-dependency ECDSA & Schnorr signatures",
+  "version": "2.0.0-pre",
+  "description": "Fastest 9KB JS implementation of secp256k1. Auditable, high-security, 0-dependency ECDSA signatures compliant with RFC6979",
   "files": [
-    "lib"
+    "index.js",
+    "index.d.ts",
+    "index.ts"
   ],
-  "main": "lib/index.js",
-  "module": "lib/esm/index.js",
-  "types": "lib/index.d.ts",
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.esm.json",
+    "build": "tsc",
     "build:release": "rollup -c rollup.config.js",
-    "lint": "prettier --print-width 100 --single-quote --check index.ts",
-    "format": "prettier --print-width 100 --single-quote --write index.ts",
-    "test": "jest",
+    "test": "node test/secp256k1.test.mjs",
     "coverage": "jest --coverage",
-    "bench": "node test/benchmark.js"
+    "bench": "node test/benchmark.js",
+    "min": "cd build; npm install; npm run terser",
+    "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts`LOC\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
@@ -24,21 +27,11 @@
     "url": "https://github.com/paulmillr/noble-secp256k1.git"
   },
   "license": "MIT",
-  "browser": {
-    "crypto": false
-  },
   "devDependencies": {
-    "@noble/hashes": "1.1.2",
-    "@rollup/plugin-commonjs": "22.0.0",
-    "@rollup/plugin-node-resolve": "13.3.0",
-    "@types/jest": "28.1.1",
-    "@types/node": "17.0.18",
+    "@noble/hashes": "1.2.0",
     "fast-check": "3.0.0",
-    "jest": "28.1.0",
-    "micro-bmark": "0.2.0",
-    "prettier": "2.6.2",
-    "rollup": "2.75.5",
-    "ts-jest": "28.0.4",
+    "micro-bmark": "0.3.0",
+    "micro-should": "0.4.0",
     "typescript": "4.7.3"
   },
   "keywords": [
@@ -51,12 +44,10 @@
     "signature",
     "ecc",
     "rfc6979",
-    "schnorr",
     "sig",
     "bip0340",
     "bip340",
     "ecdsa",
-    "endomorphism",
     "cryptography",
     "security",
     "noble"
@@ -64,14 +55,7 @@
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
-      "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
-    }
-  },
-  "jest": {
-    "testRegex": "/test/.*?\\.ts",
-    "transform": {
-      "^.+\\.ts$": "ts-jest"
     }
   },
   "funding": [
