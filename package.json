@@ -1,7 +1,7 @@
 {
   "name": "@noble/secp256k1",
   "version": "2.0.0-pre",
-  "description": "Fastest 9KB JS implementation of secp256k1. Auditable, high-security, 0-dependency ECDSA signatures compliant with RFC6979",
+  "description": "Fastest 4KB JS implementation of secp256k1. Auditable, high-security, 0-dependency ECDSA signatures compliant with RFC6979",
   "files": [
     "index.js",
     "index.d.ts",
@@ -18,7 +18,7 @@
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js",
     "min": "cd test/build; npm install; npm run terser",
-    "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts`LOC\""
+    "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent min | gzip -c8 | wc -c`B gzipped\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
