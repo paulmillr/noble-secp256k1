@@ -17,7 +17,7 @@
     "test": "node test/secp256k1.test.mjs",
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js",
-    "min": "cd build; npm install; npm run terser",
+    "min": "cd test/build; npm install; npm run terser",
     "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts`LOC\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
