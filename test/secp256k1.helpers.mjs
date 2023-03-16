@@ -1,5 +1,6 @@
 import { webcrypto } from 'node:crypto';
-if (!globalThis.crypto) globalThis.crypto = webcrypto;
+// @ts-ignore
+if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
 // @ts-ignore
 export * as secp from '../index.js';
 // @ts-ignore
