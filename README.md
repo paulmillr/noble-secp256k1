@@ -9,7 +9,7 @@ The library does not use dependencies and is as minimal as possible.
 replacement for noble-secp256k1 with more features such as Schnorr signatures,
 DER encoding and support for different hash functions.
 
-Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions;
+Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 [the online demo](https://paulmillr.com/ecc) and blog post
 [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
