@@ -1,0 +1,16 @@
+{
+  "name": "build",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Builds minified file",
+  "main": "noble-secp256k1.js",
+  "scripts": {
+    "terser": "terser --ecma 2020 -m -c < ../index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "terser": "5.16.6"
+  }
+}
