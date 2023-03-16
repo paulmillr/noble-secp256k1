@@ -242,12 +242,12 @@ Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need even h
 
 Benchmarks measured with Apple M2 on MacOS 13 with node.js 19.
 
-    getPublicKey(utils.randomPrivateKey()) x 5,047 ops/sec @ 198μs/op
-    sign x 2,955 ops/sec @ 338μs/op
-    verify x 470 ops/sec @ 2ms/op
-    getSharedSecret x 403 ops/sec @ 2ms/op
-    recoverPublicKey x 485 ops/sec @ 2ms/op
-    Point.fromHex (decompression) x 7,546 ops/sec @ 132μs/op
+    getPublicKey(utils.randomPrivateKey()) x 5,540 ops/sec @ 180μs/op
+    sign x 3,301 ops/sec @ 302μs/op
+    verify x 517 ops/sec @ 1ms/op
+    getSharedSecret x 433 ops/sec @ 2ms/op
+    recoverPublicKey x 526 ops/sec @ 1ms/op
+    Point.fromHex (decompression) x 8,415 ops/sec @ 118μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 
