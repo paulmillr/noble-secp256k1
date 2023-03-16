@@ -2,7 +2,7 @@
 
 [Fastest](#speed) 4KB JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979.
+ECDH key agreement protocol and deterministic **ECDSA** signatures from RFC6979.
 
 The library does not use dependencies and is as minimal as possible.
 [noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in
@@ -29,15 +29,14 @@ Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 
 ## Usage
 
-Use NPM in browser and node.js:
+Browser, deno, node.js and unpkg are supported:
 
 > npm install @noble/secp256k1
 
-For [Deno](https://deno.land), the module is available at `x/secp256k1`;
-or you can use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
-
 ```js
 import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
+// import * as secp from "https://deno.land/x/secp256k1/mod.ts"; // Deno
+// import * as secp from "https://unpkg.com/@noble/secp256k1"; // Unpkg
 (async () => {
   // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'

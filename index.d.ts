@@ -6,9 +6,9 @@ export declare const CURVE: {
     Gx: bigint;
     Gy: bigint;
 };
-declare type Bytes = Uint8Array;
-declare type Hex = Bytes | string;
-declare type PrivKey = Hex | bigint;
+type Bytes = Uint8Array;
+type Hex = Bytes | string;
+type PrivKey = Hex | bigint;
 interface AffinePoint {
     x: bigint;
     y: bigint;
@@ -52,7 +52,7 @@ export declare class Signature {
     toCompactRawBytes(): Uint8Array;
     toCompactHex(): string;
 }
-declare type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
+type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 export declare const signAsync: (msgh: Hex, priv: Hex, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
@@ -61,7 +61,7 @@ export declare const sign: (msgh: Hex, priv: Hex, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
 }) => Signature;
-declare type SigLike = {
+type SigLike = {
     r: bigint;
     s: bigint;
 };
