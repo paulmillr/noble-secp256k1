@@ -4,9 +4,14 @@
 an elliptic curve that could be used for asymmetric encryption,
 ECDH key agreement protocol and signature schemes. Supports deterministic **ECDSA** from RFC6979.
 
-The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in replacement for noble-secp256k1 with more features such as Schnorr signatures, DER encoding and support for different hash functions.
+The library does not use dependencies and is as minimal as possible.
+[noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in
+replacement for noble-secp256k1 with more features such as Schnorr signatures,
+DER encoding and support for different hash functions.
 
-Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions; [the online demo](https://paulmillr.com/ecc) and blog post [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
+Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions;
+[the online demo](https://paulmillr.com/ecc) and blog post
+[Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ crypto
 
@@ -28,7 +33,8 @@ Use NPM in browser and node.js:
 
 > npm install @noble/secp256k1
 
-For [Deno](https://deno.land), the module is available at `x/secp256k1`; or you can use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
+For [Deno](https://deno.land), the module is available at `x/secp256k1`;
+or you can use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
 
 ```js
 import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
@@ -148,6 +154,7 @@ signature.recoverPublicKey(
 A bunch of useful **utilities** are also exposed:
 
 ```typescript
+type Bytes = Uint8Array;
 export declare const etc: {
   hexToBytes: (hex: string) => Bytes;
   bytesToHex: (b: Bytes) => string;
@@ -178,8 +185,6 @@ class ProjectivePoint {
     get y(): bigint;
     equals(other: Point): boolean;
     add(other: Point): Point;
-    mul(n: bigint, safe?: boolean): Point;
-    mulAddQUns(R: Point, u1: bigint, u2: bigint): Point;
     multiply(n: bigint): Point;
     negate(): Point;
     toAffine(): AffinePoint;
@@ -206,14 +211,30 @@ CURVE // curve prime; order; equation params, generator coordinates
 
 ## Security
 
-The module is production-ready. Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need advanced security.
+The module is production-ready. Use
+[noble-curves](https://github.com/paulmillr/noble-curves) if you need advanced security.
 
-1. The current version is rewrite of v1, which has been audited by cure53: [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
-2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz): run the fuzzer by yourself to check.
+1. The current version is rewrite of v1, which has been audited by cure53:
+[PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
+2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
+run the fuzzer by yourself to check.
 
-Our EC multiplication is hardened to be algorithmically constant time. We're using built-in JS `BigInt`, which is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack) as [per official spec](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt#cryptography). But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard to achieve in a scripting language. Which means _any other JS library doesn't use constant-time bigints_. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
+Our EC multiplication is hardened to be algorithmically constant time.
+We're using built-in JS `BigInt`, which is potentially vulnerable to
+[timing attacks](https://en.wikipedia.org/wiki/Timing_attack) as
+[per MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt#cryptography).
+But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard
+to achieve in a scripting language. Which means _any other JS library doesn't
+use constant-time bigints_. Including bn.js or anything else.
+Even statically typed Rust, a language without GC,
+[makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security)
+for some cases. If your goal is absolute security, don't use any JS lib —
+including bindings to native ones. Use low-level libraries & languages.
 
-We consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
+We consider infrastructure attacks like rogue NPM modules very important;
+that's why it's crucial to minimize the amount of 3rd-party dependencies & native
+bindings. If your app uses 500 dependencies, any dep could get hacked and you'll
+be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
 
 ## Speed
 
@@ -254,20 +275,29 @@ Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 3. `npm run build` to compile TypeScript code
 4. `npm test` to run jest on `test/index.ts`
 
-Special thanks to [Roman Koblov](https://github.com/romankoblov), who have helped to improve scalar multiplication speed.
+Special thanks to [Roman Koblov](https://github.com/romankoblov), who have
+helped to improve scalar multiplication speed.
 
 ## Upgrading
 
-noble-secp256k1 v2.0 has been reduced 4x to just over 400 lines. It features improved security and smaller attack surface.
+noble-secp256k1 v2.0 has been reduced 4x to just over 400 lines. It features
+improved security and smaller attack surface.
 
-Some functionality present in v1, such as schnorr and DER, was removed: use [**noble-curves**](https://github.com/paulmillr/noble-curves) if you still need it.
+Some functionality present in v1, such as schnorr and DER, was removed:
+use [**noble-curves**](https://github.com/paulmillr/noble-curves) if you still need it.
 
-- `getPublicKey()` and `getSharedSecret()` now produce compressed 33-byte signatures by default. If you
-  need the old 65-byte behavior, set `isCompressed` option as `false`: `getPublicKey(priv, false)`, `getSharedSecret(a, b, false)`
-- `sign()`: now returns `Signature` instance with `{ r, s, recovery }` properties. It could still be passed to `verify` as-is.
-    - `canonical` has been renamed to `lowS`. The default value is the same as before: `lowS: true`
+- `getPublicKey()` and `getSharedSecret()` now produce compressed 33-byte
+  signatures by default. If you need the old 65-byte behavior, set isCompresse=false:
+  `getPublicKey(priv, false)`, `getSharedSecret(a, b, false)`
+- `sign()`: now returns `Signature` instance with `{ r, s, recovery }` properties.
+  It could still be passed to `verify` as-is.
+    - `canonical` is now => `lowS`. The default value is the same as before: `lowS: true`
     - `recovered` has been removed. Recovery bit is always returned in the `Signature` instance
-    - `der` has been removed. DER encoding is no longer supported. Use compact format (32-byte r + 32-byte s), `Signature` instance methods `toCompactRawBytes` / `toCompactHex()`: `(await sign(msgHash, priv)).toCompactRawBytes()`. Use curves if you still need der
+    - `der` has been removed. DER encoding is no longer supported. Use compact
+      format (32-byte r + 32-byte s), `Signature` instance methods
+      `toCompactRawBytes` / `toCompactHex()`:
+      `(await sign(msgHash, priv)).toCompactRawBytes()`.
+      Use noble-curves if you still need DER
 - `verify()`: `strict` option has been renamed to `lowS`, default value is still the same
 - `recoverPublicKey(msgHash, sig, recovery)` has been changed to `sig.recoverPublicKey(msgHash)`
 - `Point` is now `ProjectivePoint`, working in 3d xyz projective coordinates instead of 2d xy affine
