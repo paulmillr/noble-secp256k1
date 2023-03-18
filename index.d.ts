@@ -1,5 +1,5 @@
 export declare const CURVE: {
-    P: bigint;
+    p: bigint;
     n: bigint;
     a: bigint;
     b: bigint;
@@ -20,55 +20,56 @@ declare class Point {
     constructor(px: bigint, py: bigint, pz: bigint);
     static readonly BASE: Point;
     static readonly ZERO: Point;
+    static fromPrivateKey(k: PrivKey): Point;
+    static fromHex(hex: Hex): Point;
     get x(): bigint;
     get y(): bigint;
     equals(other: Point): boolean;
-    neg(): Point;
-    dbl(): Point;
-    add(other: Point): Point;
-    mul(n: bigint, safe?: boolean): Point;
-    mulAddQUns(R: Point, u1: bigint, u2: bigint): Point;
-    aff(): AffinePoint;
-    ok(): Point;
-    multiply(n: bigint): Point;
     negate(): Point;
+    double(): Point;
+    add(other: Point): Point;
+    multiply(n: bigint, safe?: boolean): Point;
+    mulAddQUns(R: Point, u1: bigint, u2: bigint): Point;
     toAffine(): AffinePoint;
     assertValidity(): Point;
-    static fromHex(hex: Hex): Point;
+    mul(n: bigint, safe?: boolean): Point;
+    aff(): AffinePoint;
+    ok(): Point;
     toHex(isCompressed?: boolean): string;
     toRawBytes(isCompressed?: boolean): Uint8Array;
-    static fromPrivateKey(n: PrivKey): Point;
 }
-export declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Uint8Array;
+export declare function getPublicKey(privKey: PrivKey, isCompressed?: boolean): Uint8Array;
 export declare class Signature {
     readonly r: bigint;
     readonly s: bigint;
     readonly recovery?: number | undefined;
     constructor(r: bigint, s: bigint, recovery?: number | undefined);
-    ok(): Signature;
     static fromCompact(hex: Hex): Signature;
+    assertValidity(): this;
+    addRecoveryBit(rec: number): Signature;
     hasHighS(): boolean;
     recoverPublicKey(msgh: Hex): Point;
     toCompactRawBytes(): Uint8Array;
     toCompactHex(): string;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-export declare const signAsync: (msgh: Hex, priv: Hex, opts?: {
+export declare function signAsync(msgh: Hex, priv: Hex, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
-}) => Promise<Signature>;
-export declare const sign: (msgh: Hex, priv: Hex, opts?: {
+}): Promise<Signature>;
+export declare function sign(msgh: Hex, priv: Hex, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
-}) => Signature;
+}): Signature;
 type SigLike = {
     r: bigint;
     s: bigint;
 };
-export declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
-    lowS: boolean;
-}) => boolean;
-export declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Uint8Array;
+export declare function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
+    lowS?: boolean | undefined;
+}): boolean;
+export declare function getSharedSecret(privA: Hex, pubB: Hex, isCompressed?: boolean): Bytes;
+declare function hashToPrivateKey(hash: Hex): Bytes;
 export declare const etc: {
     hexToBytes: (hex: string) => Bytes;
     bytesToHex: (b: Bytes) => string;
@@ -79,14 +80,14 @@ export declare const etc: {
     invert: (num: bigint, md?: bigint) => bigint;
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256Sync: HmacFnSync;
-    hashToPrivateKey: (hash: Hex) => Bytes;
+    hashToPrivateKey: typeof hashToPrivateKey;
     randomBytes: (len: number) => Bytes;
 };
 export declare const utils: {
     normPrivateKeyToScalar: (p: PrivKey) => bigint;
     randomPrivateKey: () => Bytes;
     isValidPrivateKey: (key: Hex) => boolean;
-    precompute(p: Point, windowSize?: number): Point;
+    precompute(w?: number, p?: Point): Point;
 };
 export declare const ProjectivePoint: typeof Point;
 export {};
