@@ -96,21 +96,12 @@ There are 3 main methods: `getPublicKey(privateKey)`,
 `sign(messageHash, privateKey)` and
 `verify(signature, messageHash, publicKey)`.
 
-Only **async methods are available by default** to keep library dependency-free.
-To enable sync methods, see below.
-
 ```typescript
 type Hex = Uint8Array | string;
 
-// Generates 33-byte / 65-byte public key from 32-byte private key.
-function getPublicKey(
-  privateKey: Hex,
-  isCompressed?: boolean // optional arg. (default) true=33b key, false=65b.
-): Uint8Array;
-function getPublicKeyAsync(
-  privateKey: Hex,
-  isCompressed?: boolean
-): Promise<Uint8Array>;
+// Generates public key from 32-byte private key.
+// isCompressed=true by default, meaning 33-byte output. Set to false for 65b.
+function getPublicKey(privateKey: Hex, isCompressed?: boolean): Uint8Array;
 // Use:
 // - `ProjectivePoint.fromPrivateKey(privateKey)` for Point instance
 // - `ProjectivePoint.fromHex(publicKey)` to convert hex / bytes into Point.
@@ -120,9 +111,13 @@ function getPublicKeyAsync(
 function sign(
   messageHash: Hex, // message hash (not message) which would be signed
   privateKey: Hex, // private key which will sign the hash
-  opts = {} // optional params `{ lowS: boolean, extraEntropy: boolean | Hex }`
+  opts?: { lowS: boolean, extraEntropy: boolean | Hex } // optional params
 ): Signature;
-function signAsync(messageHash: Hex, privateKey: Hex, opts = {}): Promise<Signature>;
+function signAsync(
+  messageHash: Hex,
+  privateKey: Hex,
+  opts?: { lowS: boolean; extraEntropy: boolean | Hex }
+): Promise<Signature>;
 
 // Verifies ECDSA signature.
 // lowS option Ensures a signature.s is in the lower-half of CURVE.n.
@@ -174,24 +169,24 @@ export declare const utils: {
   precompute(p: Point, windowSize?: number): Point;
 };
 class ProjectivePoint {
-    readonly px: bigint;
-    readonly py: bigint;
-    readonly pz: bigint;
-    constructor(px: bigint, py: bigint, pz: bigint);
-    static readonly BASE: Point;
-    static readonly ZERO: Point;
-    get x(): bigint;
-    get y(): bigint;
-    equals(other: Point): boolean;
-    add(other: Point): Point;
-    multiply(n: bigint): Point;
-    negate(): Point;
-    toAffine(): AffinePoint;
-    assertValidity(): Point;
-    static fromHex(hex: Hex): Point;
-    toHex(isCompressed?: boolean): string;
-    toRawBytes(isCompressed?: boolean): Uint8Array;
-    static fromPrivateKey(n: PrivKey): Point;
+  readonly px: bigint;
+  readonly py: bigint;
+  readonly pz: bigint;
+  constructor(px: bigint, py: bigint, pz: bigint);
+  static readonly BASE: Point;
+  static readonly ZERO: Point;
+  static fromHex(hex: Hex): Point;
+  static fromPrivateKey(n: PrivKey): Point;
+  get x(): bigint;
+  get y(): bigint;
+  equals(other: Point): boolean;
+  add(other: Point): Point;
+  multiply(n: bigint): Point;
+  negate(): Point;
+  toAffine(): AffinePoint;
+  assertValidity(): Point;
+  toHex(isCompressed?: boolean): string;
+  toRawBytes(isCompressed?: boolean): Uint8Array;
 }
 class Signature {
   readonly r: bigint;

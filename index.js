@@ -8,7 +8,7 @@ const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; 
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
 export const CURVE = { p: P, n: N, a: _a, b: _b, Gx, Gy }; // exported variables
 const fLen = 32; // field / group byte length
-const crv = (x) => mod(mod(x * mod(x * x)) + _b); // x³ + ax + b weierstrass formula; w/o a
+const crv = (x) => mod(mod(x * x) * x + _b); // x³ + ax + b weierstrass formula; no a
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n) => typeof n === 'bigint'; // is big integer
 const str = (s) => typeof s === 'string'; // is string
@@ -18,7 +18,6 @@ const au8 = (a, l) => // is Uint8Array (of specific length)
  !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
-const u8fr = (arr) => Uint8Array.from(arr); // another shortcut
 const toU8 = (a, len) => au8(str(a) ? h2b(a) : a, len); // normalize (hex/u8a) to u8a
 const toPriv = (p) => {
     if (!big(p))
@@ -158,7 +157,7 @@ class Point {
         return h2b(this.toHex(isCompressed)); // re-use toHex(), convert hex to bytes
     }
 }
-Point.BASE = new Point(Gx, Gy, 1n); // Generator / base point.
+Point.BASE = new Point(Gx, Gy, 1n); // Generator / base point
 Point.ZERO = new Point(0n, 1n, 0n); // Identity / zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const mod = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
@@ -177,8 +176,8 @@ const sqrt = (n) => {
     let r = 1n; // So, a special, fast case. Paper: "Square Roots from 1;24,51,10 to Dan Shanks".
     for (let num = n, e = (P + 1n) / 4n; e > 0n; e >>= 1n) { // powMod: modular exponentiation.
         if (e & 1n)
-            r = (r * num) % P;
-        num = (num * num) % P;
+            r = (r * num) % P; // Uses exponentiation by squaring.
+        num = (num * num) % P; // Not constant-time.
     }
     return mod(r * r) === n ? r : err('sqrt invalid'); // check if result is valid
 };
@@ -312,11 +311,11 @@ function hmacDrbg(asynchronous) {
     if (asynchronous) { // asynchronous=true
         const h = (...b) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
         const reseed = async (seed = u8n()) => {
-            k = await h(u8fr([0x00]), seed); // k = hmac(K || V || 0x00 || seed)
+            k = await h(u8n([0x00]), seed); // k = hmac(K || V || 0x00 || seed)
             v = await h(); // v = hmac(K || V)
             if (seed.length === 0)
                 return;
-            k = await h(u8fr([0x01]), seed); // k = hmac(K || V || 0x01 || seed)
+            k = await h(u8n([0x01]), seed); // k = hmac(K || V || 0x01 || seed)
             v = await h(); // v = hmac(K || V)
         };
         const gen = async () => {
@@ -343,11 +342,11 @@ function hmacDrbg(asynchronous) {
             return f(k, v, ...b); // hmac(k)(v, ...values)
         };
         const reseed = (seed = u8n()) => {
-            k = h(u8fr([0x00]), seed); // k = hmac(k || v || 0x00 || seed)
+            k = h(u8n([0x00]), seed); // k = hmac(k || v || 0x00 || seed)
             v = h(); // v = hmac(k || v)
             if (seed.length === 0)
                 return;
-            k = h(u8fr([0x01]), seed); // k = hmac(k || v || 0x01 || seed)
+            k = h(u8n([0x01]), seed); // k = hmac(k || v || 0x01 || seed)
             v = h(); // v = hmac(k || v)
         };
         const gen = () => {

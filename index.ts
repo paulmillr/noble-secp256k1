@@ -6,21 +6,20 @@ const _a = 0n;                                          // a equation's param
 const _b = 7n;                                          // b equation's param
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-export const CURVE = { p: P, n: N, a: _a, b: _b, Gx, Gy };  // exported variables
+export const CURVE = {p: P, n: N, a: _a, b: _b, Gx, Gy};// exported variables
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
-const crv = (x: bigint) => mod(mod(x * mod(x*x)) + _b); // x³ + ax + b weierstrass formula; w/o a
+const crv = (x: bigint) => mod(mod(x * x) * x + _b);    // x³ + ax + b weierstrass formula; no a
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
-const big = (n: any): n is bigint => typeof n === 'bigint'; // is big integer
-const str = (s: any): s is string => typeof s === 'string'; // is string
+const big = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
+const str = (s: unknown): s is string => typeof s === 'string'; // is string
 const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element (invertible)
 const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
 const au8 = (a: any, l?: number): Bytes =>              // is Uint8Array (of specific length)
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
-const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
-const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : a, len);  // normalize (hex/u8a) to u8a
+const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : a, len); // normalize (hex/u8a) to u8a
 const toPriv = (p: PrivKey): bigint => {                // normalize private key to bigint
   if (!big(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
   return ge(p) ? p : err('private key out of range');   // check if bigint is in range
@@ -30,7 +29,7 @@ interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {                                           // Point in 3d xyz projective coords
   constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} // z is optional
-  static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point.
+  static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point
   static readonly ZERO = new Point(0n, 1n, 0n);         // Identity / zero point
   static fromPrivateKey(k: PrivKey) { return G.mul(toPriv(k)); } // Create point from a private key.
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
@@ -139,8 +138,8 @@ const inv = (num: bigint, md = P): bigint => {          // modular inversion
 const sqrt = (n: bigint) => {                           // √n = n^((p+1)/4) for fields p = 3 mod 4
   let r = 1n;     // So, a special, fast case. Paper: "Square Roots from 1;24,51,10 to Dan Shanks".
   for (let num = n, e = (P + 1n) / 4n; e > 0n; e >>= 1n) { // powMod: modular exponentiation.
-    if (e & 1n) r = (r * num) % P;
-    num = (num * num) % P;
+    if (e & 1n) r = (r * num) % P;                      // Uses exponentiation by squaring.
+    num = (num * num) % P;                              // Not constant-time.
   }
   return mod(r * r) === n ? r : err('sqrt invalid');    // check if result is valid
 };
@@ -264,44 +263,44 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   let i = 0;                  // Iterations counter, will throw when over 1000
   const reset = () => { v.fill(1); k.fill(0); i = 0; };
   const _e = 'drbg: tried 1000 values';
-  if (asynchronous) {         // asynchronous=true
+  if (asynchronous) {                                   // asynchronous=true
     const h = (...b: Bytes[]) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
-    const reseed = async (seed = u8n()) => {              // HMAC-DRBG reseed() function. Steps D-G
-      k = await h(u8fr([0x00]), seed);                    // k = hmac(K || V || 0x00 || seed)
-      v = await h();                                      // v = hmac(K || V)
+    const reseed = async (seed = u8n()) => {            // HMAC-DRBG reseed() function. Steps D-G
+      k = await h(u8n([0x00]), seed);                   // k = hmac(K || V || 0x00 || seed)
+      v = await h();                                    // v = hmac(K || V)
       if (seed.length === 0) return;
-      k = await h(u8fr([0x01]), seed);                    // k = hmac(K || V || 0x01 || seed)
-      v = await h();                                      // v = hmac(K || V)
+      k = await h(u8n([0x01]), seed);                   // k = hmac(K || V || 0x01 || seed)
+      v = await h();                                    // v = hmac(K || V)
     };
-    const gen = async () => {                             // HMAC-DRBG generate() function
+    const gen = async () => {                           // HMAC-DRBG generate() function
       if (i++ >= 1000) err(_e);
-      v = await h();                                      // v = hmac(K || V)
+      v = await h();                                    // v = hmac(K || V)
       return v;
     };
     return async (seed: Bytes, pred: Pred<T>): Promise<T> => { // Even though it feels safe to reuse
       reset(); // the returned fn, don't, it's: 1. slower (JIT). 2. unsafe (async race conditions)
       await reseed(seed); // Steps D-G
       let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
-      while (!(res = pred(await gen()))) await reseed();  // test predicate until it returns ok
+      while (!(res = pred(await gen()))) await reseed();// test predicate until it returns ok
       reset();
       return res!;
     };
   } else {
-    const h = (...b: Bytes[]) => {                        // Same, but synchronous
+    const h = (...b: Bytes[]) => {                      // asynchronous=false; same, but synchronous
       const f = _hmacSync;
       if (!f) err('etc.hmacSha256Sync not set');
-      return f!(k, v, ...b);                              // hmac(k)(v, ...values)
+      return f!(k, v, ...b);                            // hmac(k)(v, ...values)
     };
-    const reseed = (seed = u8n()) => {                    // HMAC-DRBG reseed() function. Steps D-G
-      k = h(u8fr([0x00]), seed);                          // k = hmac(k || v || 0x00 || seed)
-      v = h();                                            // v = hmac(k || v)
+    const reseed = (seed = u8n()) => {                  // HMAC-DRBG reseed() function. Steps D-G
+      k = h(u8n([0x00]), seed);                         // k = hmac(k || v || 0x00 || seed)
+      v = h();                                          // v = hmac(k || v)
       if (seed.length === 0) return;
-      k = h(u8fr([0x01]), seed);                          // k = hmac(k || v || 0x01 || seed)
-      v = h();                                            // v = hmac(k || v)
+      k = h(u8n([0x01]), seed);                         // k = hmac(k || v || 0x01 || seed)
+      v = h();                                          // v = hmac(k || v)
     };
-    const gen = () => {                                   // HMAC-DRBG generate() function
+    const gen = () => {                                 // HMAC-DRBG generate() function
       if (i++ >= 1000) err(_e);
-      v = h();                                            // v = hmac(k || v)
+      v = h();                                          // v = hmac(k || v)
       return v;
     };
     return (seed: Bytes, pred: Pred<T>): T => {
