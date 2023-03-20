@@ -295,7 +295,7 @@ Other changes:
 - `getPublicKey`
     - now produce 33-byte compressed signatures by default
     - to use old behavior, which produced 65-byte uncompressed keys, set
-      second argument `isCompressed` to `false`: `getPublicKey(priv, false)`
+      argument `isCompressed` to `false`: `getPublicKey(priv, false)`
 - `sign`
     - now returns `Signature` instance with `{ r, s, recovery }` properties
     - `canonical` option was renamed to `lowS`
@@ -306,6 +306,10 @@ Other changes:
         2. If you must use DER encoding, switch to noble-curves (see above).
 - `verify`
     - `strict` option was renamed to `lowS`
+- `getSharedSecret`
+    - now produce 33-byte compressed signatures by default
+    - to use old behavior, which produced 65-byte uncompressed keys, set
+      argument `isCompressed` to `false`: `getSharedSecret(a, b, false)`
 - `recoverPublicKey(msg, sig, rec)` was changed to `sig.recoverPublicKey(msg)`
 - `Point` (2d xy) has been changed to `ProjectivePoint` (3d xyz)
 - `utils` were split into `utils` (same api as in noble-curves) and
