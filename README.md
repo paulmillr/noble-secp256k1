@@ -274,31 +274,42 @@ helped to improve scalar multiplication speed.
 
 ## Upgrading
 
-noble-secp256k1 v2.0 has been reduced 4x to just over 400 lines. It features
-improved security and smaller attack surface.
+noble-secp256k1 v2.0 features improved security and smaller attack surface.
+The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
-Some functionality present in v1, such as schnorr and DER, was removed:
-use [**noble-curves**](https://github.com/paulmillr/noble-curves) if you still need it.
+That means the library was reduced 4x, to just over 400 lines. In order to
+achieve the goal, **some features were moved** to
+[noble-curves](https://github.com/paulmillr/noble-curves), which is
+even safer and faster drop-in replacement library with same API.
+Switch to curves if you intend to keep using these features:
 
-- `getPublicKey()` and `getSharedSecret()` now produce compressed 33-byte
-  signatures by default. If you need the old 65-byte behavior, set isCompresse=false:
-  `getPublicKey(priv, false)`, `getSharedSecret(a, b, false)`
-- `sign()`: now returns `Signature` instance with `{ r, s, recovery }` properties.
-  It could still be passed to `verify` as-is.
-    - `canonical` is now => `lowS`. The default value is the same as before: `lowS: true`
-    - `recovered` has been removed. Recovery bit is always returned in the `Signature` instance
-    - `der` has been removed. DER encoding is no longer supported. Use compact
-      format (32-byte r + 32-byte s), `Signature` instance methods
-      `toCompactRawBytes` / `toCompactHex()`:
-      `(await sign(msgHash, priv)).toCompactRawBytes()`.
-      Use noble-curves if you still need DER
-- `verify()`: `strict` option has been renamed to `lowS`, default value is still the same
-- `recoverPublicKey(msgHash, sig, recovery)` has been changed to `sig.recoverPublicKey(msgHash)`
-- `Point` is now `ProjectivePoint`, working in 3d xyz projective coordinates instead of 2d xy affine
-- Removed schnorr signatures, asn.1 DER, custom precomputes. Use noble-curves if you need them
-- Support for environments that can't parse bigint literals has been removed
-- Some utils such as `hmacSha256Sync` have been moved to `etc`: `import { etc } from "@noble/secp256k1";
-- node.js 18 and older are not supported without crypto shim (see [Usage](#usage))
+- DER encoding: toDERHex, toDERRawBytes, signing / verification of DER sigs
+- Schnorr signatures
+- Using `utils.precompute()` for non-base point
+- Support for environments which don't support bigint literals
+- Common.js support
+- Support for node.js 18 and older without [shim](#usage)
+
+Other changes:
+
+- `getPublicKey`
+    - now produce 33-byte compressed signatures by default
+    - to use old behavior, which produced 65-byte uncompressed keys, set
+      second argument `isCompressed` to `false`: `getPublicKey(priv, false)`
+- `sign`
+    - now returns `Signature` instance with `{ r, s, recovery }` properties
+    - `canonical` option was renamed to `lowS`
+    - `recovered` option has been removed because recovery bit is always returned now
+    - `der` option has been removed. There are 2 options:
+        1. Use compact encoding: `fromCompact`, `toCompactRawBytes`, `toCompactHex`.
+           Compact encoding is simply a concatenation of 32-byte r and 32-byte s.
+        2. If you must use DER encoding, switch to noble-curves (see above).
+- `verify`
+    - `strict` option was renamed to `lowS`
+- `recoverPublicKey(msg, sig, rec)` was changed to `sig.recoverPublicKey(msg)`
+- `Point` (2d xy) has been changed to `ProjectivePoint` (3d xyz)
+- `utils` were split into `utils` (same api as in noble-curves) and
+  `etc` (`hmacSha256Sync` and others)
 
 ## License
 
