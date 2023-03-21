@@ -4,10 +4,10 @@
 an elliptic curve that could be used for asymmetric encryption,
 ECDH key agreement protocol and deterministic **ECDSA** signatures from RFC6979.
 
-The library does not use dependencies and is as minimal as possible.
-[noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in
-replacement for noble-secp256k1 with more features such as Schnorr signatures,
-DER encoding and support for different hash functions.
+The library is a tiny single-feature version of
+[noble-curves](https://github.com/paulmillr/noble-curves), with some features
+removed. Check out curves as a drop-in replacement with
+Schnorr signatures, DER encoding and support for different hash functions.
 
 Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 [the online demo](https://paulmillr.com/ecc) and blog post
