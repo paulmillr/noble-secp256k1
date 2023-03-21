@@ -20,8 +20,9 @@ declare class Point {
     constructor(px: bigint, py: bigint, pz: bigint);
     static readonly BASE: Point;
     static readonly ZERO: Point;
-    static fromPrivateKey(k: PrivKey): Point;
+    static fromAffine(p: AffinePoint): Point;
     static fromHex(hex: Hex): Point;
+    static fromPrivateKey(k: PrivKey): Point;
     get x(): bigint;
     get y(): bigint;
     equals(other: Point): boolean;
@@ -38,6 +39,7 @@ declare class Point {
     toHex(isCompressed?: boolean): string;
     toRawBytes(isCompressed?: boolean): Uint8Array;
 }
+export declare const ProjectivePoint: typeof Point;
 export declare function getPublicKey(privKey: PrivKey, isCompressed?: boolean): Uint8Array;
 export declare class Signature {
     readonly r: bigint;
@@ -85,9 +87,8 @@ export declare const etc: {
 };
 export declare const utils: {
     normPrivateKeyToScalar: (p: PrivKey) => bigint;
-    randomPrivateKey: () => Bytes;
     isValidPrivateKey: (key: Hex) => boolean;
+    randomPrivateKey: () => Bytes;
     precompute(w?: number, p?: Point): Point;
 };
-export declare const ProjectivePoint: typeof Point;
 export {};

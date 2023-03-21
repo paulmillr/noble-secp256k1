@@ -2,14 +2,12 @@
 const B256 = 2n ** 256n;                                // secp256k1 is short weierstrass curve
 const P = B256 - 0x1000003d1n;                          // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn;  // curve (group) order
-const _a = 0n;                                          // a equation's param
-const _b = 7n;                                          // b equation's param
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-export const CURVE = {p: P, n: N, a: _a, b: _b, Gx, Gy};// exported variables
+export const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};// exported variables incl. a, b
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
-const crv = (x: bigint) => mod(mod(x * x) * x + _b);    // x³ + ax + b weierstrass formula; no a
+const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; no a
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
@@ -19,19 +17,16 @@ const au8 = (a: any, l?: number): Bytes =>              // is Uint8Array (of spe
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
-const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : a, len); // normalize (hex/u8a) to u8a
-const toPriv = (p: PrivKey): bigint => {                // normalize private key to bigint
-  if (!big(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
-  return ge(p) ? p : err('private key out of range');   // check if bigint is in range
-};
-let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
-interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
+const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(a), len); // norm(hex/u8a) to u8a
+const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
-class Point {                                           // Point in 3d xyz projective coords
+let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
+interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
+class Point {                                           // Point in 3d xyz projective coordinates
   constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} // z is optional
   static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point
   static readonly ZERO = new Point(0n, 1n, 0n);         // Identity / zero point
-  static fromPrivateKey(k: PrivKey) { return G.mul(toPriv(k)); } // Create point from a private key.
+  static fromAffine(p: AffinePoint) { return new Point(p.x, p.y, 1n); }
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // convert hex string to Uint8Array
     let p: Point | undefined = undefined;
@@ -48,6 +43,7 @@ class Point {                                           // Point in 3d xyz proje
     if (len === 65 && head === 0x04) p = new Point(x, slcNum(tail, fLen, 2 * fLen), 1n);
     return p ? p.ok() : err('Point is not on curve');   // Verify the result
   }
+  static fromPrivateKey(k: PrivKey) { return G.mul(toPriv(k)); } // Create point from a private key.
   get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine:
   get y() { return this.aff().y; }                      // should be used with care.
   equals(other: Point): boolean {                       // Equality check: compare points
@@ -124,7 +120,34 @@ class Point {                                           // Point in 3d xyz proje
   }
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
-const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
+export const ProjectivePoint = Point;
+const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
+const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
+const h2b = (hex: string): Bytes => {                   // hex to bytes
+  const l = hex.length;                                 // error if not string,
+  if (!str(hex) || l % 2) err('hex invalid 1');         // or has odd length like 3, 5.
+  const arr = u8n(l / 2);                               // create result array
+  for (let i = 0; i < arr.length; i++) {
+    const j = i * 2;
+    const h = hex.slice(j, j + 2);                      // hexByte. slice is faster than substr
+    const b = Number.parseInt(h, 16);                   // byte, created from string part
+    if (Number.isNaN(b) || b < 0) err('hex invalid 2'); // byte must be valid 0 <= byte < 256
+    arr[i] = b;
+  }
+  return arr;
+};
+const b2n = (b: Bytes): bigint => BigInt(`0x${b2h(b)||'0'}`); // bytes to number
+const slcNum = (b: Bytes, from: number, to: number) => b2n(b.slice(from, to)); // slice bytes num
+const n2b = (num: bigint): Bytes => {                   // number to 32bytes. mustbe 0 <= num < B256
+  return big(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
+};
+const n2h = (num: bigint): string => b2h(n2b(num));     // number to 32b hex
+const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
+  const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0));  // create u8a of summed length
+  let pad = 0;                                                // walk through each array, ensure
+  arrs.forEach(a => { r.set(au8(a), pad); pad += a.length }); // they have proper type
+  return r;
+};
 const inv = (num: bigint, md = P): bigint => {          // modular inversion
   if (num === 0n || md <= 0n) err(`no inverse n=${num} mod=${md}`); // no negative exponent for now
   let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
@@ -143,32 +166,9 @@ const sqrt = (n: bigint) => {                           // √n = n^((p+1)/4) fo
   }
   return mod(r * r) === n ? r : err('sqrt invalid');    // check if result is valid
 };
-const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
-const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
-const h2b = (hex: string): Bytes => {                   // hex to bytes
-  const l = hex.length;                                 // error if not string,
-  if (!str(hex) || l % 2) err('hex invalid');           // or has odd length like 3, 5.
-  const arr = u8n(l / 2);                               // create result array
-  for (let i = 0; i < arr.length; i++) {
-    const j = i * 2;
-    const h = hex.slice(j, j + 2);                      // hexByte. slice is faster than substr
-    const b = Number.parseInt(h, 16);                   // byte, created from string part
-    if (Number.isNaN(b) || b < 0) err('hex invalid');   // byte must be valid 0 <= byte < 256
-    arr[i] = b;
-  }
-  return arr;
-};
-const b2n = (b: Bytes): bigint => BigInt(`0x${b2h(b)||'0'}`); // bytes to number
-const slcNum = (b: Bytes, from: number, to: number) => b2n(b.slice(from, to)); // slice bytes num
-const n2b = (num: bigint): Bytes => {                   // number to bytes. must be 0 <= num < B256
-  return big(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
-};
-const n2h = (num: bigint): string => b2h(n2b(num));     // number to hex
-const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
-  const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0));  // create u8a of summed length
-  let pad = 0;                                                // walk through each array, ensure
-  arrs.forEach(a => { r.set(au8(a), pad); pad += a.length }); // they have proper type
-  return r;
+const toPriv = (p: PrivKey): bigint => {                // normalize private key to bigint
+  if (!big(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
+  return ge(p) ? p : err('private key out of range');   // check if bigint is in range
 };
 const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n) // if a number is bigger than CURVE.n/2
 export function getPublicKey(privKey: PrivKey, isCompressed = true) {   // Make public key from priv
@@ -383,8 +383,8 @@ export const etc = {                                    // Not placed in `utils`
 }
 export const utils = {                                  // utilities
   normPrivateKeyToScalar: toPriv,
-  randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
+  randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
   precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
 };
 Object.defineProperties(etc, { hmacSha256Sync: {         // Allow setting it once, ignore then
@@ -428,4 +428,3 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export const ProjectivePoint = Point;

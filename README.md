@@ -205,8 +205,9 @@ CURVE // curve prime; order; equation params, generator coordinates
 
 ## Security
 
-The module is production-ready. Use
-[noble-curves](https://github.com/paulmillr/noble-curves) if you need advanced security.
+The module is production-ready.
+It is cross-tested against [noble-curves](https://github.com/paulmillr/noble-curves),
+and has similar security.
 
 1. The current version is rewrite of v1, which has been audited by cure53:
 [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
@@ -274,7 +275,7 @@ helped to improve scalar multiplication speed.
 
 ## Upgrading
 
-noble-secp256k1 v2.0 features improved security and smaller attack surface.
+noble-secp256k1 v2 features improved security and smaller attack surface.
 The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
 That means the library was reduced 4x, to just over 400 lines. In order to
@@ -290,13 +291,14 @@ Switch to curves if you intend to keep using these features:
 - Common.js support
 - Support for node.js 18 and older without [shim](#usage)
 
-Other changes:
+Other changes for upgrading from @noble/secp256k1 1.7 to 2.0:
 
 - `getPublicKey`
     - now produce 33-byte compressed signatures by default
     - to use old behavior, which produced 65-byte uncompressed keys, set
       argument `isCompressed` to `false`: `getPublicKey(priv, false)`
 - `sign`
+    - is now sync; use `signAsync` for async version
     - now returns `Signature` instance with `{ r, s, recovery }` properties
     - `canonical` option was renamed to `lowS`
     - `recovered` option has been removed because recovery bit is always returned now
