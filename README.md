@@ -1,4 +1,4 @@
-# noble-secp256k1 ![Node CI](https://github.com/paulmillr/noble-secp256k1/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
+# noble-secp256k1
 
 [Fastest](#speed) 4KB JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
@@ -17,7 +17,7 @@ Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
-- No dependencies, one small file
+- No dependencies, protection against supply chain attacks
 - Easily auditable TypeScript/JS code
 - Supported in all major browsers and stable node.js versions
 - All releases are signed with PGP keys
