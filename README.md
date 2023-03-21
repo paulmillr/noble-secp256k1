@@ -313,6 +313,7 @@ Other changes for upgrading from @noble/secp256k1 1.7 to 2.0:
     - to use old behavior, which produced 65-byte uncompressed keys, set
       argument `isCompressed` to `false`: `getSharedSecret(a, b, false)`
 - `recoverPublicKey(msg, sig, rec)` was changed to `sig.recoverPublicKey(msg)`
+- `number` type for private keys have been removed: use `bigint` instead
 - `Point` (2d xy) has been changed to `ProjectivePoint` (3d xyz)
 - `utils` were split into `utils` (same api as in noble-curves) and
   `etc` (`hmacSha256Sync` and others)
