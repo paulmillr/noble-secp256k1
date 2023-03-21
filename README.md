@@ -23,7 +23,7 @@ Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 - All releases are signed with PGP keys
 - Check out [homepage](https://paulmillr.com/noble/) & all libraries:
   [curves](https://github.com/paulmillr/noble-curves)
-  ([secp256k1](https://github.com/paulmillr/noble-secp256k1),
+  (4kb versions [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519)),
   [hashes](https://github.com/paulmillr/noble-hashes)
 
