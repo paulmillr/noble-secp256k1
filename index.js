@@ -25,7 +25,7 @@ class Point {
         this.px = px;
         this.py = py;
         this.pz = pz;
-    } // z is optional
+    } //3d=less inversions
     static fromAffine(p) { return new Point(p.x, p.y, 1n); }
     static fromHex(hex) {
         hex = toU8(hex); // convert hex string to Uint8Array
@@ -146,7 +146,7 @@ class Point {
     toHex(isCompressed = true) {
         const { x, y } = this.aff(); // convert to 2d xy affine point
         const head = isCompressed ? ((y & 1n) === 0n ? '02' : '03') : '04'; // 0x02, 0x03, 0x04 prefix
-        return `${head}${n2h(x)}${isCompressed ? '' : n2h(y)}`; // prefix||x and ||y
+        return head + n2h(x) + (isCompressed ? '' : n2h(y)); // prefix||x and ||y
     }
     toRawBytes(isCompressed = true) {
         return h2b(this.toHex(isCompressed)); // re-use toHex(), convert hex to bytes
@@ -173,21 +173,21 @@ const h2b = (hex) => {
     }
     return arr;
 };
-const b2n = (b) => BigInt(`0x${b2h(b) || '0'}`); // bytes to number
+const b2n = (b) => BigInt('0x' + (b2h(b) || '0')); // bytes to number
 const slcNum = (b, from, to) => b2n(b.slice(from, to)); // slice bytes num
 const n2b = (num) => {
     return big(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
 };
 const n2h = (num) => b2h(n2b(num)); // number to 32b hex
 const concatB = (...arrs) => {
-    const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0)); // create u8a of summed length
-    let pad = 0; // walk through each array, ensure
-    arrs.forEach(a => { r.set(au8(a), pad); pad += a.length; }); // they have proper type
+    const r = u8n(arrs.reduce((sum, a) => sum + au8(a).length, 0)); // create u8a of summed length
+    let pad = 0; // walk through each array,
+    arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
     return r;
 };
 const inv = (num, md = P) => {
     if (num === 0n || md <= 0n)
-        err(`no inverse n=${num} mod=${md}`); // no negative exponent for now
+        err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
     let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
     while (a !== 0n) { // uses euclidean gcd algorithm
         const q = b / a, r = b % a; // not constant-time
@@ -236,8 +236,8 @@ export class Signature {
         const radj = rec === 2 || rec === 3 ? r + N : r; // If rec was 2 or 3, q.x is bigger than n
         if (radj >= P)
             err('q.x invalid'); // ensure q.x is still a field element
-        const prefix = (rec & 1) === 0 ? '02' : '03'; // prefix is 0x02 or 0x03
-        const R = Point.fromHex(`${prefix}${n2h(radj)}`); // concat prefix + hex repr of r
+        const head = (rec & 1) === 0 ? '02' : '03'; // head is 0x02 or 0x03
+        const R = Point.fromHex(head + n2h(radj)); // concat head + hex repr of r
         const ir = inv(radj, N); // r^-1
         const u1 = mod(-h * ir, N); // -hr^-1
         const u2 = mod(s * ir, N); // sr^-1
@@ -255,7 +255,7 @@ const bits2int_modN = (bytes) => {
     return mod(bits2int(bytes), N); // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num) => n2b(num); // int to octets
-const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with `crypto`
+const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 let _hmacSync; // Can be redefined by use in utils; built-ins don't provide it
 const optS = { lowS: true }; // opts for sign()

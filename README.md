@@ -2,7 +2,7 @@
 
 [Fastest](#speed) 4KB JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
 an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and deterministic **ECDSA** signatures from RFC6979.
+ECDH key agreement protocol and deterministic ECDSA signatures from RFC6979.
 
 The library is a tiny single-feature version of
 [noble-curves](https://github.com/paulmillr/noble-curves), with some features
@@ -43,7 +43,7 @@ import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
   const privKey = secp.utils.randomPrivateKey(); // Secure random private key
   // sha256 of 'hello world'
   const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
-  const pubKey = secp.getPublicKey(privKey); // Make pubkey from the private key 
+  const pubKey = secp.getPublicKey(privKey); // Make pubkey from the private key
   const signature = await secp.signAsync(msgHash, privKey); // sign
   const isValid = secp.verify(signature, msgHash, pubKey); // verify
 

@@ -13,17 +13,17 @@ const big = (n: unknown): n is bigint => typeof n === 'bigint'; // is big intege
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
 const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element (invertible)
 const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
-const au8 = (a: any, l?: number): Bytes =>              // is Uint8Array (of specific length)
+const au8 = (a: unknown, l?: number): Bytes =>          // is Uint8Array (of specific length)
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(a), len); // norm(hex/u8a) to u8a
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+const isPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
 class Point {                                           // Point in 3d xyz projective coordinates
-  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} // z is optional
+  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} //3d=less inversions
   static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point
   static readonly ZERO = new Point(0n, 1n, 0n);         // Identity / zero point
   static fromAffine(p: AffinePoint) { return new Point(p.x, p.y, 1n); }
@@ -113,7 +113,7 @@ class Point {                                           // Point in 3d xyz proje
   toHex(isCompressed = true) {                          // Encode point to hex string.
     const { x, y } = this.aff();                        // convert to 2d xy affine point
     const head = isCompressed ? ((y & 1n) === 0n ? '02' : '03') : '04'; // 0x02, 0x03, 0x04 prefix
-    return `${head}${n2h(x)}${isCompressed ? '' : n2h(y)}`; // prefix||x and ||y
+    return head + n2h(x) + (isCompressed ? '' : n2h(y));// prefix||x and ||y
   }
   toRawBytes(isCompressed = true) {                     // Encode point to Uint8Array.
     return h2b(this.toHex(isCompressed));               // re-use toHex(), convert hex to bytes
@@ -136,20 +136,20 @@ const h2b = (hex: string): Bytes => {                   // hex to bytes
   }
   return arr;
 };
-const b2n = (b: Bytes): bigint => BigInt(`0x${b2h(b)||'0'}`); // bytes to number
+const b2n = (b: Bytes): bigint => BigInt('0x' + (b2h(b) || '0')); // bytes to number
 const slcNum = (b: Bytes, from: number, to: number) => b2n(b.slice(from, to)); // slice bytes num
 const n2b = (num: bigint): Bytes => {                   // number to 32bytes. mustbe 0 <= num < B256
   return big(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
 };
 const n2h = (num: bigint): string => b2h(n2b(num));     // number to 32b hex
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
-  const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0));  // create u8a of summed length
-  let pad = 0;                                                // walk through each array, ensure
-  arrs.forEach(a => { r.set(au8(a), pad); pad += a.length }); // they have proper type
+  const r = u8n(arrs.reduce((sum, a) => sum + au8(a).length, 0)); // create u8a of summed length
+  let pad = 0;                                          // walk through each array,
+  arrs.forEach(a => {r.set(a, pad); pad += a.length});  // ensure they have proper type
   return r;
 };
 const inv = (num: bigint, md = P): bigint => {          // modular inversion
-  if (num === 0n || md <= 0n) err(`no inverse n=${num} mod=${md}`); // no negative exponent for now
+  if (num === 0n || md <= 0n) err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
   let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
   while (a !== 0n) {                                    // uses euclidean gcd algorithm
     const q = b / a, r = b % a;                         // not constant-time
@@ -191,8 +191,8 @@ export class Signature {                                // ECDSA Signature class
     const h = bits2int_modN(toU8(msgh, 32));            // Truncate hash
     const radj = rec === 2 || rec === 3 ? r + N : r;    // If rec was 2 or 3, q.x is bigger than n
     if (radj >= P) err('q.x invalid');                  // ensure q.x is still a field element
-    const prefix = (rec! & 1) === 0 ? '02' : '03';      // prefix is 0x02 or 0x03
-    const R = Point.fromHex(`${prefix}${n2h(radj)}`);   // concat prefix + hex repr of r
+    const head = (rec! & 1) === 0 ? '02' : '03';        // head is 0x02 or 0x03
+    const R = Point.fromHex(head + n2h(radj));          // concat head + hex repr of r
     const ir = inv(radj, N);                            // r^-1
     const u1 = mod(-h * ir, N);                         // -hr^-1
     const u2 = mod(s * ir, N);                          // sr^-1
@@ -211,7 +211,7 @@ const bits2int_modN = (bytes: Uint8Array): bigint => { // int2octets can't be us
 };
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
-const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with `crypto`
+const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
@@ -360,7 +360,7 @@ function hashToPrivateKey(hash: Hex): Bytes {           // FIPS 186 B.4.1 compli
   const num = mod(b2n(hash), N - 1n) + 1n;              // takes at least n+8 bytes
   return n2b(num);
 }
-export const etc = {                                    // Not placed in `utils` because utils
+export const etc = {                                    // Not placed in utils because they
   hexToBytes: h2b, bytesToHex: b2h,                     // share API with noble-curves.
   concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
   mod, invert: inv,                                     // math utilities
