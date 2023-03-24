@@ -15,7 +15,6 @@
     "build": "tsc",
     "build:release": "rollup -c rollup.config.js",
     "test": "node test/secp256k1.test.mjs",
-    "coverage": "jest --coverage",
     "bench": "node test/benchmark.js",
     "min": "cd test/build; npm install; npm run terser",
     "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent min | gzip -c8 | wc -c`B gzipped\""
@@ -36,21 +35,17 @@
   },
   "keywords": [
     "secp256k1",
-    "secp",
-    "secp256",
-    "elliptic",
-    "elliptic curve",
-    "curve",
-    "signature",
-    "ecc",
     "rfc6979",
-    "sig",
-    "bip0340",
-    "bip340",
+    "signature",
     "ecdsa",
+    "noble",
     "cryptography",
-    "security",
-    "noble"
+    "elliptic curve",
+    "ecc",
+    "curve",
+    "cryptography",
+    "bitcoin",
+    "ethereum"
   ],
   "exports": {
     ".": {
