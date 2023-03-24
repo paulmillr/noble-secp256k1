@@ -43,7 +43,7 @@
     "elliptic curve",
     "ecc",
     "curve",
-    "cryptography",
+    "schnorr",
     "bitcoin",
     "ethereum"
   ],
