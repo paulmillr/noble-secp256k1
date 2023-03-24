@@ -10,7 +10,7 @@ removed. Check out curves as a drop-in replacement with
 Schnorr signatures, DER encoding and support for different hash functions.
 
 Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
-[the online demo](https://paulmillr.com/ecc) and blog post
+[the online demo](https://paulmillr.com/noble/) and blog post
 [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ crypto
@@ -18,7 +18,7 @@ Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
 - No dependencies, protection against supply chain attacks
-- Easily auditable TypeScript/JS code
+- Auditable TypeScript / JS code
 - Supported in all major browsers and stable node.js versions
 - All releases are signed with PGP keys
 - Check out [homepage](https://paulmillr.com/noble/) & all libraries:
