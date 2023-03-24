@@ -1,8 +1,7 @@
 # noble-secp256k1
 
-[Fastest](#speed) 4KB JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf),
-an elliptic curve that could be used for asymmetric encryption,
-ECDH key agreement protocol and deterministic ECDSA signatures matching RFC6979.
+[Fastest](#speed) 4KB JS implementation of [secp256k1](https://www.secg.org/sec2-v2.pdf)
+elliptic curve. Auditable, high-security, 0-dependency ECDH & ECDSA signatures compliant with RFC6979.
 
 The library is a tiny single-feature version of
 [noble-curves](https://github.com/paulmillr/noble-curves), with some features
