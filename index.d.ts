@@ -1,4 +1,4 @@
-export declare const CURVE: {
+declare const CURVE: {
     p: bigint;
     n: bigint;
     a: bigint;
@@ -29,19 +29,18 @@ declare class Point {
     negate(): Point;
     double(): Point;
     add(other: Point): Point;
-    multiply(n: bigint, safe?: boolean): Point;
+    mul(n: bigint, safe?: boolean): Point;
     mulAddQUns(R: Point, u1: bigint, u2: bigint): Point;
     toAffine(): AffinePoint;
     assertValidity(): Point;
-    mul(n: bigint, safe?: boolean): Point;
+    multiply(n: bigint): Point;
     aff(): AffinePoint;
     ok(): Point;
     toHex(isCompressed?: boolean): string;
     toRawBytes(isCompressed?: boolean): Uint8Array;
 }
-export declare const ProjectivePoint: typeof Point;
-export declare function getPublicKey(privKey: PrivKey, isCompressed?: boolean): Uint8Array;
-export declare class Signature {
+declare function getPublicKey(privKey: PrivKey, isCompressed?: boolean): Uint8Array;
+declare class Signature {
     readonly r: bigint;
     readonly s: bigint;
     readonly recovery?: number | undefined;
@@ -55,11 +54,11 @@ export declare class Signature {
     toCompactHex(): string;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-export declare function signAsync(msgh: Hex, priv: Hex, opts?: {
+declare function signAsync(msgh: Hex, priv: Hex, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
 }): Promise<Signature>;
-export declare function sign(msgh: Hex, priv: Hex, opts?: {
+declare function sign(msgh: Hex, priv: Hex, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
 }): Signature;
@@ -67,12 +66,12 @@ type SigLike = {
     r: bigint;
     s: bigint;
 };
-export declare function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
+declare function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
     lowS?: boolean | undefined;
 }): boolean;
-export declare function getSharedSecret(privA: Hex, pubB: Hex, isCompressed?: boolean): Bytes;
+declare function getSharedSecret(privA: Hex, pubB: Hex, isCompressed?: boolean): Bytes;
 declare function hashToPrivateKey(hash: Hex): Bytes;
-export declare const etc: {
+declare const etc: {
     hexToBytes: (hex: string) => Bytes;
     bytesToHex: (b: Bytes) => string;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
@@ -85,10 +84,11 @@ export declare const etc: {
     hashToPrivateKey: typeof hashToPrivateKey;
     randomBytes: (len: number) => Bytes;
 };
-export declare const utils: {
+declare const utils: {
     normPrivateKeyToScalar: (p: PrivKey) => bigint;
     isValidPrivateKey: (key: Hex) => boolean;
     randomPrivateKey: () => Bytes;
     precompute(w?: number, p?: Point): Point;
 };
-export {};
+export { getPublicKey, sign, signAsync, verify, CURVE, // Remove the export to easily use in REPL
+getSharedSecret, etc, utils, Point as ProjectivePoint, Signature };

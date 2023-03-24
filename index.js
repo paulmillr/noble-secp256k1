@@ -4,7 +4,7 @@ const P = B256 - 0x1000003d1n; // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-export const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
+const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
 const fLen = 32; // field / group byte length
 const crv = (x) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; no a
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
@@ -103,7 +103,7 @@ class Point {
         Z3 = mod(Z3 + t0); // step 40
         return new Point(X3, Y3, Z3);
     }
-    multiply(n, safe = true) {
+    mul(n, safe = true) {
         if (!safe && n === 0n)
             return I; // in unsafe mode, allow zero
         if (!ge(n))
@@ -140,7 +140,7 @@ class Point {
         return mod(y * y) === crv(x) ? // y² = x³ + ax + b, must be equal
             this : err('Point invalid: not on curve');
     }
-    mul(n, safe) { return this.multiply(n, safe); } // Aliases to compress code
+    multiply(n) { return this.mul(n); } // Aliases to compress code
     aff() { return this.toAffine(); }
     ok() { return this.assertValidity(); }
     toHex(isCompressed = true) {
@@ -155,7 +155,6 @@ class Point {
 Point.BASE = new Point(Gx, Gy, 1n); // Generator / base point
 Point.ZERO = new Point(0n, 1n, 0n); // Identity / zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
-export const ProjectivePoint = Point;
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
 const b2h = (b) => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
 const h2b = (hex) => {
@@ -211,10 +210,10 @@ const toPriv = (p) => {
     return ge(p) ? p : err('private key out of range'); // check if bigint is in range
 };
 const moreThanHalfN = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
-export function getPublicKey(privKey, isCompressed = true) {
+function getPublicKey(privKey, isCompressed = true) {
     return Point.fromPrivateKey(privKey).toRawBytes(isCompressed); // 33b or 65b output
 }
-export class Signature {
+class Signature {
     constructor(r, s, recovery) {
         this.r = r;
         this.s = s;
@@ -292,7 +291,7 @@ function prepSig(msgh, priv, opts = optS) {
         const s = mod(ik * mod(m + mod(d * r, N), N), N); // s = k^-1(m + rd) mod n
         if (s === 0n)
             return; // s=0 invalid
-        let normS = s;
+        let normS = s; // normalized S
         let rec = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit
         if (lowS && moreThanHalfN(s)) { // if lowS was passed, ensure s is always
             normS = mod(-s, N); // in the bottom half of CURVE.n
@@ -366,16 +365,16 @@ function hmacDrbg(asynchronous) {
         };
     }
 }
-// ECDSA sig generation via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
-export async function signAsync(msgh, priv, opts = optS) {
-    const { seed, k2sig } = prepSig(msgh, priv, opts);
-    return hmacDrbg(true)(seed, k2sig);
+// ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
+async function signAsync(msgh, priv, opts = optS) {
+    const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
+    return hmacDrbg(true)(seed, k2sig); // Re-run hmac-drbg until k2sig returns ok
 }
-export function sign(msgh, priv, opts = optS) {
-    const { seed, k2sig } = prepSig(msgh, priv, opts);
-    return hmacDrbg(false)(seed, k2sig);
+function sign(msgh, priv, opts = optS) {
+    const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
+    return hmacDrbg(false)(seed, k2sig); // Re-run hmac-drbg until k2sig returns ok
 }
-export function verify(sig, msgh, pub, opts = optV) {
+function verify(sig, msgh, pub, opts = optV) {
     let { lowS } = opts; // ECDSA signature verification
     if (lowS == null)
         lowS = true; // Default lowS=true
@@ -413,7 +412,7 @@ export function verify(sig, msgh, pub, opts = optV) {
     const v = mod(R.x, N); // <== The weird ECDSA part. R.x must be in N's field, not P's
     return v === r; // mod(R.x, n) == r
 }
-export function getSharedSecret(privA, pubB, isCompressed = true) {
+function getSharedSecret(privA, pubB, isCompressed = true) {
     return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
 }
 function hashToPrivateKey(hash) {
@@ -424,7 +423,7 @@ function hashToPrivateKey(hash) {
     const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
     return n2b(num);
 }
-export const etc = {
+const etc = {
     hexToBytes: h2b, bytesToHex: b2h,
     concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
     mod, invert: inv,
@@ -447,7 +446,7 @@ export const etc = {
         return crypto.getRandomValues(u8n(len));
     },
 };
-export const utils = {
+const utils = {
     normPrivateKeyToScalar: toPriv,
     isValidPrivateKey: (key) => { try {
         return !!toPriv(key);
@@ -507,3 +506,5 @@ const wNAF = (n) => {
     }
     return { p, f }; // return both real and fake points for JIT
 }; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
+export { getPublicKey, sign, signAsync, verify, CURVE, // Remove the export to easily use in REPL
+getSharedSecret, etc, utils, Point as ProjectivePoint, Signature }; // envs like browser console
