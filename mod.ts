@@ -2,7 +2,7 @@
 import {
   CURVE, ProjectivePoint, Signature,
   getPublicKey, sign, signAsync, verify, getSharedSecret,
-  utils,
+  utils, etc,
 } from './index.ts';
 import { hmac } from 'npm:@noble/hashes@1.2.0/hmac';
 import { sha256 } from 'npm:@noble/hashes@1.2.0/sha256';
@@ -23,5 +23,5 @@ utils.hmacSha256Sync = function hmac(key: Uint8Array, ...messages: Uint8Array[])
 export {
   CURVE, ProjectivePoint, Signature,
   getPublicKey, sign, signAsync, verify, getSharedSecret,
-  utils,
+  utils, etc,
 };
