@@ -165,25 +165,24 @@ export declare const utils: {
   normPrivateKeyToScalar: (p: PrivKey) => bigint;
   randomPrivateKey: () => Bytes;
   isValidPrivateKey: (key: Hex) => boolean;
-  precompute(p: Point, windowSize?: number): Point;
+  precompute(p: ProjectivePoint, windowSize?: number): ProjectivePoint;
 };
 class ProjectivePoint {
-  readonly px: bigint;
-  readonly py: bigint;
-  readonly pz: bigint;
   constructor(px: bigint, py: bigint, pz: bigint);
-  static readonly BASE: Point;
-  static readonly ZERO: Point;
-  static fromHex(hex: Hex): Point;
-  static fromPrivateKey(n: PrivKey): Point;
+  static readonly BASE: ProjectivePoint;
+  static readonly ZERO: ProjectivePoint;
+  static fromAffine(point: AffinePoint): ProjectivePoint;
+  static fromHex(hex: Hex): ProjectivePoint;
+  static fromPrivateKey(n: PrivKey): ProjectivePoint;
   get x(): bigint;
   get y(): bigint;
-  equals(other: Point): boolean;
-  add(other: Point): Point;
-  multiply(n: bigint): Point;
-  negate(): Point;
+  add(other: ProjectivePoint): ProjectivePoint;
+  assertValidity(): void;
+  equals(other: ProjectivePoint): boolean;
+  multiply(n: bigint): ProjectivePoint;
+  negate(): ProjectivePoint;
+  subtract(other: ProjectivePoint): ProjectivePoint;
   toAffine(): AffinePoint;
-  assertValidity(): Point;
   toHex(isCompressed?: boolean): string;
   toRawBytes(isCompressed?: boolean): Uint8Array;
 }
