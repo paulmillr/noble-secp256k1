@@ -235,14 +235,14 @@ be downloading malware with every `npm install`. Our goal is to minimize this at
 
 Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need even higher performance.
 
-Benchmarks measured with Apple M2 on MacOS 13 with node.js 19.
+Benchmarks measured with Apple M2 on MacOS 13 with node.js 20.
 
-    getPublicKey(utils.randomPrivateKey()) x 5,540 ops/sec @ 180μs/op
-    sign x 3,301 ops/sec @ 302μs/op
-    verify x 517 ops/sec @ 1ms/op
-    getSharedSecret x 433 ops/sec @ 2ms/op
-    recoverPublicKey x 526 ops/sec @ 1ms/op
-    Point.fromHex (decompression) x 8,415 ops/sec @ 118μs/op
+    getPublicKey(utils.randomPrivateKey()) x 6,430 ops/sec @ 155μs/op
+    sign x 3,367 ops/sec @ 296μs/op
+    verify x 600 ops/sec @ 1ms/op
+    getSharedSecret x 505 ops/sec @ 1ms/op
+    recoverPublicKey x 612 ops/sec @ 1ms/op
+    Point.fromHex (decompression) x 9,185 ops/sec @ 108μs/op
 
 Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 
