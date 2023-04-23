@@ -7,7 +7,7 @@ signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979).
 
 The library is a tiny single-feature version of
 [noble-curves](https://github.com/paulmillr/noble-curves), with some features
-removed. Check out curves as a drop-in replacement with
+removed. Check out curves as a drop-in replacement with common.js,
 Schnorr signatures, DER encoding and support for different hash functions.
 
 Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
