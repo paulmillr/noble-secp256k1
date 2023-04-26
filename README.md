@@ -11,7 +11,9 @@ removed. Check out curves as a drop-in replacement with common.js,
 Schnorr signatures, DER encoding and support for different hash functions.
 
 Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
-[the online demo](https://paulmillr.com/noble/) and blog post
+[the online demo](https://paulmillr.com/noble/),
+[secp256k1-node compatibility layer](https://github.com/ethereum/js-ethereum-cryptography/blob/2.0.0/src/secp256k1-compat.ts)
+and blog post
 [Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ crypto
