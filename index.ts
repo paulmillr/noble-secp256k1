@@ -173,6 +173,7 @@ const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n) // if a number is bi
 function getPublicKey(privKey: PrivKey, isCompressed = true) {   // Make public key from priv
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // 33b or 65b output
 }
+type SignatureWithRecovery = SignatureWithRecovery
 class Signature {                                // ECDSA Signature class
   constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
     this.assertValidity();                              // recovery bit is optional when
@@ -216,7 +217,7 @@ type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 const optS: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
 const optV: { lowS?: boolean } = { lowS: true };        // standard opts for verify()
-type BC = { seed: Bytes, k2sig : (kb: Bytes) => Signature | undefined }; // Bytes+predicate checker
+type BC = { seed: Bytes, k2sig : (kb: Bytes) => SignatureWithRecovery | undefined }; // Bytes+predicate checker
 function prepSig(msgh: Hex, priv: Hex, opts = optS): BC { // prepare for RFC6979 sig generation
   if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
     err('sign() legacy options not supported');
@@ -234,7 +235,7 @@ function prepSig(msgh: Hex, priv: Hex, opts = optS): BC { // prepare for RFC6979
     seed.push(e);
   }
   const m = h1i;                                        // convert msg to bigint
-  const k2sig = (kBytes: Bytes): Signature | undefined => { // Transform k into Signature.
+  const k2sig = (kBytes: Bytes): SignatureWithRecovery | undefined => { // Transform k into Signature.
     const k = bits2int(kBytes);                         // RFC6979 method.
     if (!ge(k)) return;                                 // Check 0 < k < CURVE.n
     const ik = inv(k, N);                               // k^-1 mod n, NOT mod P
@@ -249,7 +250,7 @@ function prepSig(msgh: Hex, priv: Hex, opts = optS): BC { // prepare for RFC6979
       normS = mod(-s, N);                               // in the bottom half of CURVE.n
       rec ^= 1;
     }
-    return new Signature(r, normS, rec);                // use normS, not s
+    return new Signature(r, normS, rec) as SignatureWithRecovery;                // use normS, not s
   };
   return { seed: concatB(...seed), k2sig }
 }
@@ -313,13 +314,13 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   }
 }
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
-async function signAsync(msgh: Hex, priv: Hex, opts = optS): Promise<Signature> {
+async function signAsync(msgh: Hex, priv: Hex, opts = optS): Promise<SignatureWithRecovery> {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
-  return hmacDrbg<Signature>(true)(seed, k2sig);        // Re-run hmac-drbg until k2sig returns ok
+  return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);        // Re-run hmac-drbg until k2sig returns ok
 }
-function sign(msgh: Hex, priv: Hex, opts = optS): Signature {
+function sign(msgh: Hex, priv: Hex, opts = optS): SignatureWithRecovery {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
-  return hmacDrbg<Signature>(false)(seed, k2sig);       // Re-run hmac-drbg until k2sig returns ok
+  return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig);       // Re-run hmac-drbg until k2sig returns ok
 }
 type SigLike = { r: bigint, s: bigint };
 function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean {
