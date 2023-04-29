@@ -173,7 +173,7 @@ const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n) // if a number is bi
 function getPublicKey(privKey: PrivKey, isCompressed = true) {   // Make public key from priv
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // 33b or 65b output
 }
-type SignatureWithRecovery = SignatureWithRecovery
+type SignatureWithRecovery = Signature & { recovery: number }
 class Signature {                                // ECDSA Signature class
   constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
     this.assertValidity();                              // recovery bit is optional when
