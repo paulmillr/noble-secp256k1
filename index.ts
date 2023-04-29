@@ -218,7 +218,7 @@ let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don
 const optS: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
 const optV: { lowS?: boolean } = { lowS: true };        // standard opts for verify()
 type BC = { seed: Bytes, k2sig : (kb: Bytes) => SignatureWithRecovery | undefined }; // Bytes+predicate checker
-function prepSig(msgh: Hex, priv: Hex, opts = optS): BC { // prepare for RFC6979 sig generation
+function prepSig(msgh: Hex, priv: PrivKey, opts = optS): BC { // prepare for RFC6979 sig generation
   if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
     err('sign() legacy options not supported');
   let { lowS } = opts;                                  // generates low-s sigs by default
@@ -314,11 +314,11 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   }
 }
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
-async function signAsync(msgh: Hex, priv: Hex, opts = optS): Promise<SignatureWithRecovery> {
+async function signAsync(msgh: Hex, priv: PrivKey, opts = optS): Promise<SignatureWithRecovery> {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);        // Re-run hmac-drbg until k2sig returns ok
 }
-function sign(msgh: Hex, priv: Hex, opts = optS): SignatureWithRecovery {
+function sign(msgh: Hex, priv: PrivKey, opts = optS): SignatureWithRecovery {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig);       // Re-run hmac-drbg until k2sig returns ok
 }
