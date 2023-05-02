@@ -7,6 +7,9 @@
     "index.d.ts",
     "index.ts"
   ],
+  "engines": {
+    "node": "16.x || >= 18.0.0"
+  },
   "type": "module",
   "main": "index.js",
   "module": "index.js",
