@@ -1,6 +1,6 @@
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
-globalThis.crypto = webcrypto;
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 import './secp256k1.test.js';
 
