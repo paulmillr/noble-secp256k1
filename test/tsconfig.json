@@ -8,6 +8,6 @@
     "preserveConstEnums": true,
     "resolveJsonModule": true
   },
-  "include": ["secp256k1.helpers.mts"],
+  "include": ["secp256k1.helpers.ts"],
   "exclude": ["node_modules"]
 }
