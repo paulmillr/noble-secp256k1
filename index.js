@@ -6,7 +6,7 @@ const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; 
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
 const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
 const fLen = 32; // field / group byte length
-const crv = (x) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; no a
+const crv = (x) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n) => typeof n === 'bigint'; // is big integer
 const str = (s) => typeof s === 'string'; // is string
@@ -225,7 +225,9 @@ class Signature {
         return new Signature(slcNum(hex, 0, fLen), slcNum(hex, fLen, 2 * fLen));
     }
     assertValidity() { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
-    addRecoveryBit(rec) { return new Signature(this.r, this.s, rec); }
+    addRecoveryBit(rec) {
+        return new Signature(this.r, this.s, rec);
+    }
     hasHighS() { return moreThanHalfN(this.s); }
     recoverPublicKey(msgh) {
         const { r, s, recovery: rec } = this; // secg.org/sec1-v2.pdf 4.1.6
@@ -368,11 +370,11 @@ function hmacDrbg(asynchronous) {
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
 async function signAsync(msgh, priv, opts = optS) {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
-    return hmacDrbg(true)(seed, k2sig); // Re-run hmac-drbg until k2sig returns ok
+    return hmacDrbg(true)(seed, k2sig); // Re-run drbg until k2sig returns ok
 }
 function sign(msgh, priv, opts = optS) {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
-    return hmacDrbg(false)(seed, k2sig); // Re-run hmac-drbg until k2sig returns ok
+    return hmacDrbg(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
 }
 function verify(sig, msgh, pub, opts = optV) {
     let { lowS } = opts; // ECDSA signature verification

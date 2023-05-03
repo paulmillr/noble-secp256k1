@@ -7,7 +7,7 @@ const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; 
 const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};// exported variables incl. a, b
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
-const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; no a
+const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
@@ -174,7 +174,7 @@ function getPublicKey(privKey: PrivKey, isCompressed = true) {   // Make public 
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // 33b or 65b output
 }
 type SignatureWithRecovery = Signature & { recovery: number }
-class Signature {                                // ECDSA Signature class
+class Signature {                                       // ECDSA Signature class
   constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
     this.assertValidity();                              // recovery bit is optional when
   }                                                     // constructed outside.
@@ -183,7 +183,9 @@ class Signature {                                // ECDSA Signature class
     return new Signature(slcNum(hex, 0, fLen), slcNum(hex, fLen, 2 * fLen));
   }
   assertValidity() { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
-  addRecoveryBit(rec: number) { return new Signature(this.r, this.s, rec); }
+  addRecoveryBit(rec: number): SignatureWithRecovery {
+    return new Signature(this.r, this.s, rec) as SignatureWithRecovery;
+  }
   hasHighS() { return moreThanHalfN(this.s); }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
@@ -235,7 +237,7 @@ function prepSig(msgh: Hex, priv: PrivKey, opts = optS): BC { // prepare for RFC
     seed.push(e);
   }
   const m = h1i;                                        // convert msg to bigint
-  const k2sig = (kBytes: Bytes): SignatureWithRecovery | undefined => { // Transform k into Signature.
+  const k2sig = (kBytes: Bytes): SignatureWithRecovery | undefined => { // Transform k => Signature.
     const k = bits2int(kBytes);                         // RFC6979 method.
     if (!ge(k)) return;                                 // Check 0 < k < CURVE.n
     const ik = inv(k, N);                               // k^-1 mod n, NOT mod P
@@ -250,7 +252,7 @@ function prepSig(msgh: Hex, priv: PrivKey, opts = optS): BC { // prepare for RFC
       normS = mod(-s, N);                               // in the bottom half of CURVE.n
       rec ^= 1;
     }
-    return new Signature(r, normS, rec) as SignatureWithRecovery;                // use normS, not s
+    return new Signature(r, normS, rec) as SignatureWithRecovery;       // use normS, not s
   };
   return { seed: concatB(...seed), k2sig }
 }
@@ -316,11 +318,11 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
 async function signAsync(msgh: Hex, priv: PrivKey, opts = optS): Promise<SignatureWithRecovery> {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
-  return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);        // Re-run hmac-drbg until k2sig returns ok
+  return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);  // Re-run drbg until k2sig returns ok
 }
 function sign(msgh: Hex, priv: PrivKey, opts = optS): SignatureWithRecovery {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
-  return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig);       // Re-run hmac-drbg until k2sig returns ok
+  return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
 }
 type SigLike = { r: bigint, s: bigint };
 function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean {
