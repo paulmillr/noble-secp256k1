@@ -1,10 +1,3 @@
-// @ts-ignore
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (process.env['TEST_WEBCRYPTO']) {
-  // @ts-ignore
-  globalThis.crypto = webcrypto;
-}
 export * as secp from '../index.js';
 import * as secp256k1 from '../index.js';
 import { hmac } from '@noble/hashes/hmac';
