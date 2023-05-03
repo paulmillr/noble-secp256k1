@@ -1,9 +1,5 @@
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
-// @ts-ignore
-export * as secp from '../index.js';
-// @ts-ignore
+import * as secp_1 from '../index.js';
+export { secp_1 as secp };
 import * as secp256k1 from '../index.js';
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
@@ -22,11 +18,14 @@ export const DER = {
             throw new E('Invalid signature integer tag');
         const len = data[1];
         const res = data.subarray(2, len + 2);
+        if (!len || res.length !== len)
+            throw new E('Invalid signature integer: wrong length');
         // https://crypto.stackexchange.com/a/57734 Leftmost bit of first byte is 'negative' flag,
         // since we always use positive integers here. It must always be empty:
         // - add zero byte if exists
         // - if next byte doesn't have a flag, leading zero is not allowed (minimal encoding)
-        if (res[0] & 0b10000000) throw new E('Invalid signature integer: negative');
+        if (res[0] & 0b10000000)
+            throw new E('Invalid signature integer: negative');
         if (res[0] === 0x00 && !(res[1] & 0b10000000))
             throw new E('Invalid signature integer: unnecessary leading zero');
         return { d: b2n(res), l: data.subarray(len + 2) }; // d is data, l is left

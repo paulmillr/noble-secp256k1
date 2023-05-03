@@ -1,9 +1,4 @@
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
-// @ts-ignore
 export * as secp from '../index.js';
-// @ts-ignore
 import * as secp256k1 from '../index.js';
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';

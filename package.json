@@ -15,6 +15,7 @@
     "build": "tsc",
     "build:release": "rollup -c rollup.config.js",
     "test": "node test/secp256k1.test.js",
+    "test:webcrypto": "node test/secp256k1.webcrypto.test.js",
     "bench": "node test/benchmark.js",
     "min": "cd test/build; npm install; npm run terser",
     "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent min | gzip -c8 | wc -c`B gzipped\""
