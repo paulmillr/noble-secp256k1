@@ -40,6 +40,9 @@ declare class Point {
     toRawBytes(isCompressed?: boolean): Uint8Array;
 }
 declare function getPublicKey(privKey: PrivKey, isCompressed?: boolean): Uint8Array;
+type SignatureWithRecovery = Signature & {
+    recovery: number;
+};
 declare class Signature {
     readonly r: bigint;
     readonly s: bigint;
@@ -54,14 +57,14 @@ declare class Signature {
     toCompactHex(): string;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-declare function signAsync(msgh: Hex, priv: Hex, opts?: {
+declare function signAsync(msgh: Hex, priv: PrivKey, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
-}): Promise<Signature>;
-declare function sign(msgh: Hex, priv: Hex, opts?: {
+}): Promise<SignatureWithRecovery>;
+declare function sign(msgh: Hex, priv: PrivKey, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
-}): Signature;
+}): SignatureWithRecovery;
 type SigLike = {
     r: bigint;
     s: bigint;
