@@ -4,7 +4,7 @@ const P = B256 - 0x1000003d1n;                          // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn;  // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};// exported variables incl. a, b
+const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};       // exported variables incl. a, b
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
 const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
@@ -59,7 +59,7 @@ class Point {                                           // Point in 3d xyz proje
     const { px: X1, py: Y1, pz: Z1 } = this;            // free formula from Renes-Costello-Batina
     const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // https://eprint.iacr.org/2015/1060, algo 1
     const { a, b } = CURVE;                             // Cost: 12M + 0S + 3*a + 3*b3 + 23add
-    let X3 = 0n, Y3 = 0n, Z3 = 0n;                      
+    let X3 = 0n, Y3 = 0n, Z3 = 0n;
     const b3 = mod(b * 3n);
     let t0 = mod(X1 * X2), t1 = mod(Y1 * Y2), t2 = mod(Z1 * Z2), t3 = mod(X1 + Y1); // step 1
     let t4 = mod(X2 + Y2);                              // step 5
@@ -79,7 +79,7 @@ class Point {                                           // Point in 3d xyz proje
     Z3 = mod(Z3 + t0);                                  // step 40
     return new Point(X3, Y3, Z3);
   }
-  mul(n: bigint, safe = true) {                    // Point scalar multiplication.
+  mul(n: bigint, safe = true) {                         // Point scalar multiplication.
     if (!safe && n === 0n) return I;                    // in unsafe mode, allow zero
     if (!ge(n)) err('invalid scalar');                  // must be 0 < n < CURVE.n
     if (this.equals(G)) return wNAF(n).p;               // use precomputes for base point
@@ -169,7 +169,7 @@ const toPriv = (p: PrivKey): bigint => {                // normalize private key
   if (!big(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
   return ge(p) ? p : err('private key out of range');   // check if bigint is in range
 };
-const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n) // if a number is bigger than CURVE.n/2
+const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n); // if a number is bigger than CURVE.n/2
 function getPublicKey(privKey: PrivKey, isCompressed = true) {   // Make public key from priv
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // 33b or 65b output
 }
@@ -208,8 +208,8 @@ const bits2int = (bytes: Uint8Array): bigint => {       // RFC6979: ensure ECDSA
   const num = b2n(bytes); // FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits, which
   return delta > 0 ? num >> BigInt(delta) : num; // matches bits2int. bits2int can produce res>N.
 };
-const bits2int_modN = (bytes: Uint8Array): bigint => { // int2octets can't be used; pads small msgs
-  return mod(bits2int(bytes), N);                      // with 0: BAD for trunc as per RFC vectors
+const bits2int_modN = (bytes: Uint8Array): bigint => {  // int2octets can't be used; pads small msgs
+  return mod(bits2int(bytes), N);                       // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
@@ -281,8 +281,8 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
     };
     return async (seed: Bytes, pred: Pred<T>): Promise<T> => { // Even though it feels safe to reuse
       reset(); // the returned fn, don't, it's: 1. slower (JIT). 2. unsafe (async race conditions)
-      await reseed(seed); // Steps D-G
-      let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+      await reseed(seed);                               // Steps D-G
+      let res: T | undefined = undefined;               // Step H: grind until k is in [1..n-1]
       while (!(res = pred(await gen()))) await reseed();// test predicate until it returns ok
       reset();
       return res!;
@@ -307,9 +307,9 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
     };
     return (seed: Bytes, pred: Pred<T>): T => {
       reset();
-      reseed(seed); // Steps D-G
-      let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
-      while (!(res = pred(gen()))) reseed();              // test predicate until it returns ok
+      reseed(seed);                                     // Steps D-G
+      let res: T | undefined = undefined;               // Step H: grind until k is in [1..n-1]
+      while (!(res = pred(gen()))) reseed();            // test predicate until it returns ok
       reset();
       return res!;
     };
@@ -362,7 +362,7 @@ function hashToPrivateKey(hash: Hex): Bytes {           // FIPS 186 B.4.1 compli
   const num = mod(b2n(hash), N - 1n) + 1n;              // takes at least n+8 bytes
   return n2b(num);
 }
-const etc = {                                    // Not placed in utils because they
+const etc = {                                           // Not placed in utils because they
   hexToBytes: h2b, bytesToHex: b2h,                     // share API with noble-curves.
   concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
   mod, invert: inv,                                     // math utilities
