@@ -5,12 +5,12 @@ secp256k1 [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman) 
 [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
 signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979).
 
-The library is a tiny single-feature version of
-[noble-curves](https://github.com/paulmillr/noble-curves), with some features
-removed. Check out curves as a drop-in replacement with common.js,
-Schnorr signatures, DER encoding and support for different hash functions.
+If you're looking for additional features,
+check out [noble-curves](https://github.com/paulmillr/noble-curves):
+a drop-in replacement with common.js, Schnorr signatures, DER encoding and
+support for different hash functions.
 
-Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
+Check out [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 [the online demo](https://paulmillr.com/noble/),
 [secp256k1-node compatibility layer](https://github.com/ethereum/js-ethereum-cryptography/blob/2.0.0/src/secp256k1-compat.ts)
 and blog post
