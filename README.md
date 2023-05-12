@@ -46,17 +46,17 @@ import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
   const privKey = secp.utils.randomPrivateKey(); // Secure random private key
   // sha256 of 'hello world'
   const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
-  const pubKey = secp.getPublicKey(privKey); // Make pubkey from the private key
-  const signature = await secp.signAsync(msgHash, privKey); // sign
-  const isValid = secp.verify(signature, msgHash, pubKey); // verify
+  const pubKey = secp.getPublicKey(privKey);
+  const signature = await secp.signAsync(msgHash, privKey); // sync methods below
+  const isValid = secp.verify(signature, msgHash, pubKey);
 
-  const pubKey2 = getPublicKey(secp.utils.randomPrivateKey()); // Key of user 2
+  const alicesPubkey = secp.getPublicKey(secp.utils.randomPrivateKey());
   secp.getSharedSecret(privKey, alicesPubkey); // Elliptic curve diffie-hellman
   signature.recoverPublicKey(msgHash); // Public key recovery
 })();
 ```
 
-Advanced examples:
+Note that node.js <= 18 requires `global.crypto` polyfill. Advanced examples:
 
 ```ts
 // 1. Use the shim to enable synchronous methods.
@@ -66,9 +66,9 @@ import { sha256 } from '@noble/hashes/sha256';
 secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m))
 const signature2 = secp.sign(msgHash, privKey); // Can be used now
 
-// 2. Use the shim only for node.js <= 18 BEFORE importing noble-secp256k1.
-// The library depends on global variable crypto to work. It is available in
-// all browsers and many environments, but node.js <= 18 don't have it.
+// 2. Use the shim only in node.js <= 18 BEFORE importing noble.
+// `crypto` global variable is already present in all browsers and node.js 19+.
+// It is necessary for the library to work.
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -155,7 +155,7 @@ type Bytes = Uint8Array;
 export declare const etc: {
   hexToBytes: (hex: string) => Bytes;
   bytesToHex: (b: Bytes) => string;
-  concatBytes: (...arrs: Bytes[]) => Uint8Array;
+  concatBytes: (...arrs: Bytes[]) => Bytes;
   bytesToNumberBE: (b: Bytes) => bigint;
   numberToBytesBE: (num: bigint) => Bytes;
   mod: (a: bigint, b?: bigint) => bigint;
@@ -188,7 +188,7 @@ class ProjectivePoint {
   subtract(other: ProjectivePoint): ProjectivePoint;
   toAffine(): AffinePoint;
   toHex(isCompressed?: boolean): string;
-  toRawBytes(isCompressed?: boolean): Uint8Array;
+  toRawBytes(isCompressed?: boolean): Bytes;
 }
 class Signature {
   readonly r: bigint;
@@ -199,7 +199,7 @@ class Signature {
   static fromCompact(hex: Hex): Signature;
   hasHighS(): boolean;
   recoverPublicKey(msgh: Hex): Point;
-  toCompactRawBytes(): Uint8Array;
+  toCompactRawBytes(): Bytes;
   toCompactHex(): string;
 }
 CURVE // curve prime; order; equation params, generator coordinates
