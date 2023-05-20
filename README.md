@@ -39,7 +39,7 @@ For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
 For React Native, you may need a [polyfill for getRandomValues](https://github.com/LinusU/react-native-get-random-values).
 
 ```js
-import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
+import * as secp from '@noble/secp256k1';
 // import * as secp from "https://deno.land/x/secp256k1/mod.ts"; // Deno
 // import * as secp from "https://unpkg.com/@noble/secp256k1"; // Unpkg
 (async () => {
@@ -49,7 +49,7 @@ import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
   // sha256 of 'hello world'
   const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
   const pubKey = secp.getPublicKey(privKey);
-  const signature = await secp.signAsync(msgHash, privKey); // sync methods below
+  const signature = await secp.signAsync(msgHash, privKey); // Sync methods below
   const isValid = secp.verify(signature, msgHash, pubKey);
 
   const alicesPubkey = secp.getPublicKey(secp.utils.randomPrivateKey());
@@ -66,7 +66,8 @@ Advanced examples:
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m))
-const signature2 = secp.sign(msgHash, privKey); // Can be used now
+// const signature2 = secp.sign(msgHash, privKey); // Can be used now
+// secp.sign(msgHash, privKey); // sync methods can be used now
 
 // node.js 18 and earlier requires globalThis.crypto polyfill.
 import { webcrypto } from 'node:crypto';
