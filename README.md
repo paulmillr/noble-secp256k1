@@ -66,7 +66,6 @@ Advanced examples:
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m))
-// const signature2 = secp.sign(msgHash, privKey); // Can be used now
 // secp.sign(msgHash, privKey); // sync methods can be used now
 
 // node.js 18 and earlier requires globalThis.crypto polyfill.
