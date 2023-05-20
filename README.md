@@ -32,9 +32,11 @@ and blog post
 
 ## Usage
 
-Browser, deno, node.js and unpkg are supported:
-
 > npm install @noble/secp256k1
+
+We support all major platforms and runtimes.
+For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
+For React Native, you may need a [polyfill for getRandomValues](https://github.com/LinusU/react-native-get-random-values).
 
 ```js
 import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
@@ -56,33 +58,30 @@ import * as secp from '@noble/secp256k1'; // ESM-only. Use bundler for common.js
 })();
 ```
 
-Note that node.js <= 18 requires `global.crypto` polyfill. Advanced examples:
+Advanced examples:
 
 ```ts
-// 1. Use the shim to enable synchronous methods.
-// Only async methods are available by default to keep library dependency-free.
+// Enable synchronous methods.
+// Only async methods are available by default, to keep the library dependency-free.
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m))
 const signature2 = secp.sign(msgHash, privKey); // Can be used now
 
-// 2. Use the shim only in node.js <= 18 BEFORE importing noble.
-// `crypto` global variable is already present in all browsers and node.js 19+.
-// It is necessary for the library to work.
+// node.js 18 and earlier requires globalThis.crypto polyfill.
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-// Other stuff
-// Malleable signatures, incompatible with BTC/ETH, but compatible with openssl
-// `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) because of
-// malleability
+// Enable OpenSSL compatibility.
+// OpenSSL allows to create malleable signatures, which are not compatible with BTC/ETH.
+// By default, `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n).
 const signatureMalleable = secp.sign(msgHash, privKey, { lowS: false });
 
-// Signatures with improved security: adds additional entropy `k` for
-// deterministic signature, follows section 3.6 of RFC6979. When `true`, it
-// would be filled with 32b from CSPRNG. **Strongly recommended** to pass `true`
-// to improve security:
+// Signatures with improved security, containing additional entropy.
+// Adds entropy to deterministic signature, follows section 3.6 of RFC6979.
+// When `true`, it would be filled with 32b from CSPRNG.
+// **Strongly recommended** to use, to improve security:
 // - No disadvantage: if an entropy generator is broken, sigs would be the same
 //   as they are without the option
 // - It would help a lot in case there is an error somewhere in `k` gen.
@@ -152,7 +151,7 @@ A bunch of useful **utilities** are also exposed:
 
 ```typescript
 type Bytes = Uint8Array;
-export declare const etc: {
+const etc: {
   hexToBytes: (hex: string) => Bytes;
   bytesToHex: (b: Bytes) => string;
   concatBytes: (...arrs: Bytes[]) => Bytes;
@@ -165,7 +164,7 @@ export declare const etc: {
   hashToPrivateKey: (hash: Hex) => Bytes;
   randomBytes: (len: number) => Bytes;
 };
-export declare const utils: {
+const utils: {
   normPrivateKeyToScalar: (p: PrivKey) => bigint;
   randomPrivateKey: () => Bytes;
   isValidPrivateKey: (key: Hex) => boolean;
@@ -191,12 +190,12 @@ class ProjectivePoint {
   toRawBytes(isCompressed?: boolean): Bytes;
 }
 class Signature {
+  constructor(r: bigint, s: bigint, recovery?: number | undefined);
+  static fromCompact(hex: Hex): Signature;
   readonly r: bigint;
   readonly s: bigint;
   readonly recovery?: number | undefined;
-  constructor(r: bigint, s: bigint, recovery?: number | undefined);
   ok(): Signature;
-  static fromCompact(hex: Hex): Signature;
   hasHighS(): boolean;
   recoverPublicKey(msgh: Hex): Point;
   toCompactRawBytes(): Bytes;
