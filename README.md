@@ -232,6 +232,10 @@ that's why it's crucial to minimize the amount of 3rd-party dependencies & nativ
 bindings. If your app uses 500 dependencies, any dep could get hacked and you'll
 be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
 
+As for key generation, we're deferring to built-in
+[crypto.getRandomValues](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues)
+which is considered cryptographically secure (CSPRNG).
+
 ## Speed
 
 Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need even higher performance.
