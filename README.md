@@ -166,7 +166,7 @@ const etc: {
 };
 const utils: {
   normPrivateKeyToScalar: (p: PrivKey) => bigint;
-  randomPrivateKey: () => Bytes;
+  randomPrivateKey: () => Bytes; // Uses CSPRNG https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
   isValidPrivateKey: (key: Hex) => boolean;
   precompute(p: ProjectivePoint, windowSize?: number): ProjectivePoint;
 };
