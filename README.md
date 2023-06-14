@@ -34,9 +34,7 @@ and blog post
 
 > npm install @noble/secp256k1
 
-We support all major platforms and runtimes.
-For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
-For React Native, which doesn't implement webcrypto, you may need a [polyfill for crypto.getRandomValues](https://github.com/LinusU/react-native-get-random-values) and either a polyfill for webcrypto, or simply enabling synchronous methods.
+We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
 ```js
 import * as secp from '@noble/secp256k1';
@@ -58,25 +56,37 @@ import * as secp from '@noble/secp256k1';
 })();
 ```
 
-Advanced examples:
+Additional steps needed for some environments:
 
 ```ts
-// Enable synchronous methods.
+// 1. Enable synchronous methods.
 // Only async methods are available by default, to keep the library dependency-free.
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m))
-// secp.sign(msgHash, privKey); // sync methods can be used now
+// Sync methods can be used now:
+// secp.sign(msgHash, privKey);
 
-// node.js 18 and earlier requires globalThis.crypto polyfill.
+// 2. node.js 18 and earlier,  needs globalThis.crypto polyfill
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+// 3. React Native needs crypto.getRandomValues polyfill and sha512
+import 'react-native-get-random-values';
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
+secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
+secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
+```
+
+Advanced examples: secure signatures with additional entropy and openssl-compatible signatures:
+
+```ts
 // Enable OpenSSL compatibility.
 // OpenSSL allows to create malleable signatures, which are not compatible with BTC/ETH.
 // By default, `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n).
-const signatureMalleable = secp.sign(msgHash, privKey, { lowS: false });
+secp.sign(msgHash, privKey, { lowS: false });
 
 // Signatures with improved security, containing additional entropy.
 // Adds entropy to deterministic signature, follows section 3.6 of RFC6979.
@@ -89,8 +99,9 @@ const signatureMalleable = secp.sign(msgHash, privKey, { lowS: false });
 // - Sigs with extra entropy would have different `r` / `s`, which means they
 //   would still be valid, but may break some test vectors if you're
 //   cross-testing against other libs
-const signatureImproved = secp.sign(msgHash, privKey, { extraEntropy: true });
+secp.sign(msgHash, privKey, { extraEntropy: true });
 ```
+
 
 ## API
 
