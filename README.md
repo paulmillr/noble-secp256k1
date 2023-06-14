@@ -120,7 +120,8 @@ secp.sign(msgHash, privKey, { lowS: false }); // Malleable signature
 secp.sign(msgHash, privKey, { extraEntropy: true }); // Improved security
 ```
 
-Generates low-s deterministic-k RFC6979 ECDSA signature.
+Generates low-s deterministic-k RFC6979 ECDSA signature. Assumes hash of message,
+which means you'll need to do something like `sha256(message)` before signing.
 
 1. `lowS: false` allows to create malleable signatures, for compatibility with openssl.
    Default `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
