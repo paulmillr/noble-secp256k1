@@ -430,20 +430,18 @@ const etc = {
     concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
     mod, invert: inv,
     hmacSha256Async: async (key, ...msgs) => {
-        const crypto = cr(); // HMAC-SHA256 async. No sync built-in!
-        if (!crypto)
-            return err('etc.hmacSha256Async not set'); // Uses webcrypto: native cryptography.
-        const s = crypto.subtle;
+        const c = cr(); // async HMAC-SHA256, no sync built-in!
+        const s = c && c.subtle; // For React Native support, see README.
+        if (!s)
+            return err('etc.hmacSha256Async not set'); // Uses webcrypto built-in cryptography.
         const k = await s.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
         return u8n(await s.sign('HMAC', k, concatB(...msgs)));
     },
     hmacSha256Sync: _hmacSync,
     hashToPrivateKey,
     randomBytes: (len) => {
-        const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
-        // import { webcrypto } from 'node:crypto';
-        // if (!globalThis.crypto) globalThis.crypto = webcrypto;
-        if (!crypto)
+        const crypto = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
+        if (!crypto || !crypto.getRandomValues)
             err('crypto.getRandomValues must be defined');
         return crypto.getRandomValues(u8n(len));
     },
