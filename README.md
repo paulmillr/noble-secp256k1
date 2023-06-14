@@ -80,47 +80,32 @@ secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m
 secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
 ```
 
-Advanced examples: secure signatures with additional entropy and openssl-compatible signatures:
-
-```ts
-// Enable OpenSSL compatibility.
-// OpenSSL allows to create malleable signatures, which are not compatible with BTC/ETH.
-// By default, `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n).
-secp.sign(msgHash, privKey, { lowS: false });
-
-// Signatures with improved security, containing additional entropy.
-// Adds entropy to deterministic signature, follows section 3.6 of RFC6979.
-// When `true`, it would be filled with 32b from CSPRNG.
-// **Strongly recommended** to use, to improve security:
-// - No disadvantage: if an entropy generator is broken, sigs would be the same
-//   as they are without the option
-// - It would help a lot in case there is an error somewhere in `k` gen.
-//   Exposing `k` could leak private keys
-// - Sigs with extra entropy would have different `r` / `s`, which means they
-//   would still be valid, but may break some test vectors if you're
-//   cross-testing against other libs
-secp.sign(msgHash, privKey, { extraEntropy: true });
-```
-
-
 ## API
 
 There are 3 main methods: `getPublicKey(privateKey)`,
 `sign(messageHash, privateKey)` and
 `verify(signature, messageHash, publicKey)`.
+We accept Hex type everywhere:
 
-```typescript
-type Hex = Uint8Array | string;
+```ts
+type Hex = Uint8Array | string
+```
 
-// Generates public key from 32-byte private key.
-// isCompressed=true by default, meaning 33-byte output. Set to false for 65b.
+### getPublicKey
+
+```ts
 function getPublicKey(privateKey: Hex, isCompressed?: boolean): Uint8Array;
-// Use:
-// - `ProjectivePoint.fromPrivateKey(privateKey)` for Point instance
-// - `ProjectivePoint.fromHex(publicKey)` to convert hex / bytes into Point.
+```
 
-// Generates low-s deterministic-k RFC6979 ECDSA signature.
-// Use with `extraEntropy: true` to improve security.
+Generates 33-byte compressed public key from 32-byte private key.
+
+- If you need uncompressed 65-byte public key, set second argument to `false`.
+- Use `ProjectivePoint.fromPrivateKey(privateKey)` for Point instance.
+- Use `ProjectivePoint.fromHex(publicKey)` to convert Hex / Uint8Array into Point.
+
+### sign
+
+```ts
 function sign(
   messageHash: Hex, // message hash (not message) which would be signed
   privateKey: Hex, // private key which will sign the hash
@@ -131,32 +116,63 @@ function signAsync(
   privateKey: Hex,
   opts?: { lowS: boolean; extraEntropy: boolean | Hex }
 ): Promise<Signature>;
+secp.sign(msgHash, privKey, { lowS: false }); // Malleable signature
+secp.sign(msgHash, privKey, { extraEntropy: true }); // Improved security
+```
 
-// Verifies ECDSA signature.
-// lowS option Ensures a signature.s is in the lower-half of CURVE.n.
-// Used in BTC, ETH.
-// `{ lowS: false }` should only be used if you need OpenSSL-compatible signatures
+Generates low-s deterministic-k RFC6979 ECDSA signature.
+
+1. `lowS: false` allows to create malleable signatures, for compatibility with openssl.
+   Default `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
+2. `extraEntropy: true` improves security by adding entropy, follows section 3.6 of RFC6979:
+    - No disadvantage: if an entropy generator is broken, sigs would be the same
+      as they are without the option
+    - It would help a lot in case there is an error somewhere in `k` gen.
+      Exposing `k` could leak private keys
+    - Sigs with extra entropy would have different `r` / `s`, which means they
+      would still be valid, but may break some test vectors if you're
+      cross-testing against other libs
+
+### verify
+
+```ts
 function verify(
   signature: Hex | Signature, // returned by the `sign` function
   messageHash: Hex, // message hash (not message) that must be verified
   publicKey: Hex, // public (not private) key
   opts?: { lowS: boolean } // optional params; { lowS: true } by default
 ): boolean;
+```
 
-// Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between
-// key A and different key B.
+Verifies ECDSA signature and ensures it has lowS (compatible with BTC/ETH).
+`lowS: false` turns off malleability check, but makes it OpenSSL-compatible.
+
+### getSharedSecret
+
+```ts
 function getSharedSecret(
   privateKeyA: Uint8Array | string, // Alices's private key
   publicKeyB: Uint8Array | string, // Bob's public key
   isCompressed = true // optional arg. (default) true=33b key, false=65b.
 ): Uint8Array;
-// Use `ProjectivePoint.fromHex(publicKeyB).multiply(privateKeyA)` for Point instance
+```
 
-// Recover public key from Signature instance with `recovery` bit set
+Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between
+key A and different key B.
+
+Use `ProjectivePoint.fromHex(publicKeyB).multiply(privateKeyA)` for Point instance
+
+### recoverPublicKey
+
+```ts
 signature.recoverPublicKey(
   msgHash: Uint8Array | string
 ): Uint8Array | undefined;
 ```
+
+Recover public key from Signature instance with `recovery` bit set.
+
+### utils
 
 A bunch of useful **utilities** are also exposed:
 
@@ -269,13 +285,11 @@ Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
     sjcl#sign x 199 ops/sec
     openssl#sign x 4,243 ops/sec
     ecdsa#sign x 116 ops/sec
-    bip-schnorr#sign x 60 ops/sec
 
     elliptic#verify x 812 ops/sec
     sjcl#verify x 166 ops/sec
     openssl#verify x 4,452 ops/sec
     ecdsa#verify x 80 ops/sec
-    bip-schnorr#verify x 56 ops/sec
 
     elliptic#ecdh x 971 ops/sec
 
