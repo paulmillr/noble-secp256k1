@@ -85,7 +85,7 @@ declare const etc: {
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256Sync: HmacFnSync;
     hashToPrivateKey: typeof hashToPrivateKey;
-    randomBytes: (len: number) => Bytes;
+    randomBytes: (len?: number) => Bytes;
 };
 declare const utils: {
     normPrivateKeyToScalar: (p: PrivKey) => bigint;

@@ -375,7 +375,7 @@ const etc = {                                           // Not placed in utils b
   },
   hmacSha256Sync: _hmacSync,                            // For TypeScript. Actual logic is below
   hashToPrivateKey,
-  randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
+  randomBytes: (len = 32): Bytes => {                   // CSPRNG (random number generator)
     const crypto = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
     if (!crypto || !crypto.getRandomValues) err('crypto.getRandomValues must be defined');
     return crypto.getRandomValues(u8n(len));

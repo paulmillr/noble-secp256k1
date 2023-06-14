@@ -439,7 +439,7 @@ const etc = {
     },
     hmacSha256Sync: _hmacSync,
     hashToPrivateKey,
-    randomBytes: (len) => {
+    randomBytes: (len = 32) => {
         const crypto = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
         if (!crypto || !crypto.getRandomValues)
             err('crypto.getRandomValues must be defined');
