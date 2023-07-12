@@ -11,6 +11,7 @@
   "main": "index.js",
   "module": "index.js",
   "types": "index.d.ts",
+  "sideEffects": false,
   "scripts": {
     "build": "tsc",
     "build:release": "rollup -c rollup.config.js",
