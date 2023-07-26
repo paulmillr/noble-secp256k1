@@ -137,7 +137,7 @@ const h2b = (hex: string): Bytes => {                   // hex to bytes
 };
 const b2n = (b: Bytes): bigint => BigInt('0x' + (b2h(b) || '0')); // bytes to number
 const slcNum = (b: Bytes, from: number, to: number) => b2n(b.slice(from, to)); // slice bytes num
-const n2b = (num: bigint): Bytes => {                   // number to 32bytes. mustbe 0 <= num < B256
+const n2b = (num: bigint): Bytes => {                   // number to 32b. Must be 0 <= num < B256
   return big(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
 };
 const n2h = (num: bigint): string => b2h(n2b(num));     // number to 32b hex
@@ -381,13 +381,13 @@ const etc = {                                           // Not placed in utils b
     return crypto.getRandomValues(u8n(len));
   },
 }
-const utils = {                                  // utilities
+const utils = {                                         // utilities
   normPrivateKeyToScalar: toPriv,
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
   randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
-  precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
+  precompute(w=8, p: Point = G) { p.multiply(3n); w; return p; }, // no-op
 };
-Object.defineProperties(etc, { hmacSha256Sync: {         // Allow setting it once, ignore then
+Object.defineProperties(etc, { hmacSha256Sync: {        // Allow setting it once, ignore then
   configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
 } });
 const W = 8;                                            // Precomputes-related code. W = window size

@@ -455,7 +455,7 @@ const utils = {
         return false;
     } },
     randomPrivateKey: () => hashToPrivateKey(etc.randomBytes(fLen + 8)),
-    precompute(w = 8, p = G) { p.multiply(3n); return p; }, // no-op
+    precompute(w = 8, p = G) { p.multiply(3n); w; return p; }, // no-op
 };
 Object.defineProperties(etc, { hmacSha256Sync: {
         configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync)
