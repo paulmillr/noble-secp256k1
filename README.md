@@ -57,7 +57,7 @@ import * as secp from '@noble/secp256k1';
 })();
 ```
 
-Additional steps needed for some environments:
+Additional polyfills for some environments:
 
 ```ts
 // 1. Enable synchronous methods.
@@ -68,7 +68,7 @@ secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m
 // Sync methods can be used now:
 // secp.sign(msgHash, privKey);
 
-// 2. node.js 18 and earlier,  needs globalThis.crypto polyfill
+// 2. node.js 18 and earlier, requires polyfilling globalThis.crypto
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
