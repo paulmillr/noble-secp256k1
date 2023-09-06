@@ -1,29 +1,25 @@
 # noble-secp256k1
 
-[Fastest](#speed) 4KB JS implementation of
-secp256k1 [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman) &
-[ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
-signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979).
+Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 
-If you're looking for additional features,
-check out [noble-curves](https://github.com/paulmillr/noble-curves):
-a drop-in replacement with common.js, Schnorr signatures, DER encoding and
-support for different hash functions.
+- ✍️ Deterministic [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
+  signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
+- 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
+- 🪶 4KB gzipped, 450 lines of code
 
-Check out [Upgrading](#upgrading) section for v1 to v2 transition instructions,
-[the online demo](https://paulmillr.com/noble/),
-[secp256k1-node compatibility layer](https://github.com/ethereum/js-ethereum-cryptography/blob/2.0.0/src/secp256k1-compat.ts)
-and blog post
-[Learning fast elliptic-curve cryptography in JS](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
+To upgrade from v1 to v2, see [Upgrading](#upgrading).
+If you're looking for additional features (cjs, Schnorr signatures, DER encoding, support for different hash functions),
+check out a drop-in replacement [noble-curves](https://github.com/paulmillr/noble-curves).
+[Online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to _noble_ crypto
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
-- No dependencies, protection against supply chain attacks
-- Auditable TypeScript / JS code
+- Zero or minimal dependencies
 - Supported on all major platforms
-- Releases are signed with PGP keys and built transparently with NPM provenance
+- Highly readable TypeScript / JS code
+- PGP-signed releases & transparent NPM builds with provenance
 - Check out [homepage](https://paulmillr.com/noble/) & all libraries:
   [ciphers](https://github.com/paulmillr/noble-ciphers),
   [curves](https://github.com/paulmillr/noble-curves),
