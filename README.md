@@ -17,9 +17,8 @@ check out a drop-in replacement [noble-curves](https://github.com/paulmillr/nobl
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
 - Zero or minimal dependencies
-- Supported on all major platforms
 - Highly readable TypeScript / JS code
-- PGP-signed releases & transparent NPM builds with provenance
+- PGP-signed releases and transparent NPM builds with provenance
 - Check out [homepage](https://paulmillr.com/noble/) & all libraries:
   [ciphers](https://github.com/paulmillr/noble-ciphers),
   [curves](https://github.com/paulmillr/noble-curves),
