@@ -5,6 +5,7 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 - ✍️ Deterministic [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
   signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
+- 📦 Pure ESM, can be imported without transpilers
 - 🪶 4KB gzipped, 450 lines of code
 
 To upgrade from v1 to v2, see [Upgrading](#upgrading).
