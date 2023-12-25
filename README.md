@@ -8,10 +8,8 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 - 📦 Pure ESM, can be imported without transpilers
 - 🪶 4KB gzipped, 450 lines of code
 
-To upgrade from v1 to v2, see [Upgrading](#upgrading).
-If you're looking for additional features (cjs, Schnorr signatures, DER encoding, support for different hash functions),
-check out a drop-in replacement [noble-curves](https://github.com/paulmillr/noble-curves).
-[Online demo](https://paulmillr.com/noble/).
+If you're looking for additional features (common.js, Schnorr signatures, DER encoding, support for different hash functions),
+check out a drop-in replacement [noble-curves](https://github.com/paulmillr/noble-curves). To upgrade from v1 to v2, see [Upgrading](#upgrading).
 
 ### This library belongs to _noble_ crypto
 
@@ -113,8 +111,9 @@ function signAsync(
   privateKey: Hex,
   opts?: { lowS: boolean; extraEntropy: boolean | Hex }
 ): Promise<Signature>;
-secp.sign(msgHash, privKey, { lowS: false }); // Malleable signature
-secp.sign(msgHash, privKey, { extraEntropy: true }); // Improved security
+
+sign(msgHash, privKey, { lowS: false }); // Malleable signature
+sign(msgHash, privKey, { extraEntropy: true }); // Improved security
 ```
 
 Generates low-s deterministic-k RFC6979 ECDSA signature. Assumes hash of message,
