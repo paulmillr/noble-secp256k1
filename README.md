@@ -11,9 +11,9 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 Use [noble-curves](https://github.com/paulmillr/noble-curves) instead, if you need additional features such as
 common.js, Schnorr signatures, DER encoding, support for different hash functions. To upgrade from v1 to v2, see [Upgrading](#upgrading).
 
-### This library belongs to _noble_ crypto
+### This library belongs to _noble_ cryptography
 
-> **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
+> **noble-cryptography** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
 - Zero or minimal dependencies
 - Highly readable TypeScript / JS code
