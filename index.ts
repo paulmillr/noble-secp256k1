@@ -26,7 +26,10 @@ class Point {                                           // Point in 3d xyz proje
   constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} //3d=less inversions
   static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point
   static readonly ZERO = new Point(0n, 1n, 0n);         // Identity / zero point
-  static fromAffine(p: AffinePoint) { return new Point(p.x, p.y, 1n); }
+  static fromAffine (p: AffinePoint) {
+    if ((p.x === 0n) && (p.y === 0n)) return Point.ZERO;
+    else return new Point(p.x, p.y, 1n) ;
+  }
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // convert hex string to Uint8Array
     let p: Point | undefined = undefined;

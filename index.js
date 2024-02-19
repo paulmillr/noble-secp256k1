@@ -26,7 +26,12 @@ class Point {
         this.py = py;
         this.pz = pz;
     } //3d=less inversions
-    static fromAffine(p) { return new Point(p.x, p.y, 1n); }
+    static fromAffine(p) {
+        if ((p.x === 0n) && (p.y === 0n))
+            return new Point(0n, 1n, 0n);
+        else
+            return new Point(p.x, p.y, 1n);
+    }
     static fromHex(hex) {
         hex = toU8(hex); // convert hex string to Uint8Array
         let p = undefined;
