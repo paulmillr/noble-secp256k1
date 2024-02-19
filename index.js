@@ -462,12 +462,10 @@ const utils = {
     randomPrivateKey: () => hashToPrivateKey(etc.randomBytes(fLen + 8)),
     precompute(w = 8, p = G) { p.multiply(3n); w; return p; }, // no-op
 };
-Object.defineProperties(etc, {
-    hmacSha256Sync: {
+Object.defineProperties(etc, { hmacSha256Sync: {
         configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync)
             _hmacSync = f; },
-    }
-});
+    } });
 const W = 8; // Precomputes-related code. W = window size
 const precompute = () => {
     const points = []; // 10x sign(), 2x verify(). To achieve this,
