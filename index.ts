@@ -4,7 +4,7 @@ const P = B256 - 0x1000003d1n;                          // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn;  // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};       // exported variables incl. a, b
+const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy };       // exported variables incl. a, b
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
 const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
@@ -23,12 +23,12 @@ const isPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'))
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
 class Point {                                           // Point in 3d xyz projective coordinates
-  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} //3d=less inversions
+  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) { } //3d=less inversions
   static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point
   static readonly ZERO = new Point(0n, 1n, 0n);         // Identity / zero point
-  static fromAffine ( p: AffinePoint ) {
-    if (( p.x == 0n ) && ( p.y == 0n ) ) return new Point (0n , 1n , 0n );
-    else return new Point ( p.x , p.y , 1n ) ;
+  static fromAffine(p: AffinePoint) {
+    if ((p.x === 0n) && (p.y === 0n)) return new Point(0n, 1n, 0n);
+    else return new Point(p.x, p.y, 1n);
   }
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // convert hex string to Uint8Array
@@ -147,7 +147,7 @@ const n2h = (num: bigint): string => b2h(n2b(num));     // number to 32b hex
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
   const r = u8n(arrs.reduce((sum, a) => sum + au8(a).length, 0)); // create u8a of summed length
   let pad = 0;                                          // walk through each array,
-  arrs.forEach(a => {r.set(a, pad); pad += a.length});  // ensure they have proper type
+  arrs.forEach(a => { r.set(a, pad); pad += a.length });  // ensure they have proper type
   return r;
 };
 const inv = (num: bigint, md = P): bigint => {          // modular inversion
@@ -222,7 +222,7 @@ type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 const optS: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
 const optV: { lowS?: boolean } = { lowS: true };        // standard opts for verify()
-type BC = { seed: Bytes, k2sig : (kb: Bytes) => SignatureWithRecovery | undefined }; // Bytes+predicate checker
+type BC = { seed: Bytes, k2sig: (kb: Bytes) => SignatureWithRecovery | undefined }; // Bytes+predicate checker
 function prepSig(msgh: Hex, priv: PrivKey, opts = optS): BC { // prepare for RFC6979 sig generation
   if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
     err('sign() legacy options not supported');
@@ -373,7 +373,7 @@ const etc = {                                           // Not placed in utils b
     const c = cr();                                     // async HMAC-SHA256, no sync built-in!
     const s = c && c.subtle;                            // For React Native support, see README.
     if (!s) return err('etc.hmacSha256Async not set');  // Uses webcrypto built-in cryptography.
-    const k = await s.importKey('raw', key, {name:'HMAC',hash:{name:'SHA-256'}}, false, ['sign']);
+    const k = await s.importKey('raw', key, { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign']);
     return u8n(await s.sign('HMAC', k, concatB(...msgs)));
   },
   hmacSha256Sync: _hmacSync,                            // For TypeScript. Actual logic is below
@@ -388,11 +388,13 @@ const utils = {                                         // utilities
   normPrivateKeyToScalar: toPriv,
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
   randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
-  precompute(w=8, p: Point = G) { p.multiply(3n); w; return p; }, // no-op
+  precompute(w = 8, p: Point = G) { p.multiply(3n); w; return p; }, // no-op
 };
-Object.defineProperties(etc, { hmacSha256Sync: {        // Allow setting it once, ignore then
-  configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
-} });
+Object.defineProperties(etc, {
+  hmacSha256Sync: {        // Allow setting it once, ignore then
+    configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
+  }
+});
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),
   const points: Point[] = [];                           // 10x sign(), 2x verify(). To achieve this,
@@ -407,7 +409,7 @@ const precompute = () => {                              // They give 12x faster 
   return points;                                        // when precomputes are using base point
 }
 const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method.
-                                                        // Compared to other point mult methods,
+  // Compared to other point mult methods,
   const comp = Gpows || (Gpows = precompute());         // stores 2x less points using subtraction
   const neg = (cnd: boolean, p: Point) => { let n = p.negate(); return cnd ? n : p; } // negate
   let p = I, f = G;                                     // f must be G, or could become I in the end
@@ -431,5 +433,7 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export { getPublicKey, sign, signAsync, verify, CURVE,  // Remove the export to easily use in REPL
-  getSharedSecret, etc, utils, Point as ProjectivePoint, Signature } // envs like browser console
+export {
+  getPublicKey, sign, signAsync, verify, CURVE,  // Remove the export to easily use in REPL
+  getSharedSecret, etc, utils, Point as ProjectivePoint, Signature
+} // envs like browser console
