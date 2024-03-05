@@ -8,8 +8,8 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 - 📦 Pure ESM, can be imported without transpilers
 - 🪶 4KB gzipped, 450 lines of code
 
-Use [noble-curves](https://github.com/paulmillr/noble-curves) instead, if you need additional features such as
-common.js, Schnorr signatures, DER encoding, support for different hash functions. To upgrade from v1 to v2, see [Upgrading](#upgrading).
+Use larger drop-in replacement [noble-curves](https://github.com/paulmillr/noble-curves) instead,
+if you need additional features such as common.js, Schnorr signatures, DER encoding or support for different hash functions. To upgrade from v1 to v2, see [Upgrading](#upgrading).
 
 ### This library belongs to _noble_ cryptography
 
