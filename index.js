@@ -7,19 +7,20 @@ const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; 
 const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
 const fLen = 32; // field / group byte length
 const crv = (x) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
-const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n) => typeof n === 'bigint'; // is big integer
 const str = (s) => typeof s === 'string'; // is string
 const fe = (n) => big(n) && 0n < n && n < P; // is field element (invertible)
 const ge = (n) => big(n) && 0n < n && n < N; // is group element
-const au8 = (a, l) => // is Uint8Array (of specific length)
- !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
+const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
+const isu8 = (a) => (a instanceof Uint8Array ||
+    (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array'));
+const au8 = (a, l) => // assert is Uint8Array (of specific length)
+ !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
-const toU8 = (a, len) => au8(str(a) ? h2b(a) : u8n(a), len); // norm(hex/u8a) to u8a
+const toU8 = (a, len) => au8(str(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
 const mod = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
-let Gpows = undefined; // precomputes for base point G
 class Point {
     constructor(px, py, pz) {
         this.px = px;
@@ -28,7 +29,7 @@ class Point {
     } //3d=less inversions
     static fromAffine(p) {
         if ((p.x === 0n) && (p.y === 0n))
-            return new Point(0n, 1n, 0n);
+            return Point.ZERO;
         else
             return new Point(p.x, p.y, 1n);
     }
@@ -234,11 +235,14 @@ class Signature {
         return new Signature(this.r, this.s, rec);
     }
     hasHighS() { return moreThanHalfN(this.s); }
+    normalizeS() {
+        return this.hasHighS() ? new Signature(this.r, mod(this.s, N), this.recovery) : this;
+    }
     recoverPublicKey(msgh) {
         const { r, s, recovery: rec } = this; // secg.org/sec1-v2.pdf 4.1.6
         if (![0, 1, 2, 3].includes(rec))
             err('recovery id invalid'); // check recovery id
-        const h = bits2int_modN(toU8(msgh, 32)); // Truncate hash
+        const h = bits2int_modN(toU8(msgh, fLen)); // Truncate hash
         const radj = rec === 2 || rec === 3 ? r + N : r; // If rec was 2 or 3, q.x is bigger than n
         if (radj >= P)
             err('q.x invalid'); // ensure q.x is still a field element
@@ -416,7 +420,7 @@ function verify(sig, msgh, pub, opts = optV) {
     }
     if (!R)
         return false; // stop if R is identity / zero point
-    const v = mod(R.x, N); // <== The weird ECDSA part. R.x must be in N's field, not P's
+    const v = mod(R.x, N); // R.x must be in N's field, not P's
     return v === r; // mod(R.x, n) == r
 }
 function getSharedSecret(privA, pubB, isCompressed = true) {
@@ -427,7 +431,7 @@ function hashToPrivateKey(hash) {
     const minLen = fLen + 8; // being neglible.
     if (hash.length < minLen || hash.length > 1024)
         err('expected proper params');
-    const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
+    const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+16 bytes
     return n2b(num);
 }
 const etc = {
@@ -459,7 +463,7 @@ const utils = {
     catch (e) {
         return false;
     } },
-    randomPrivateKey: () => hashToPrivateKey(etc.randomBytes(fLen + 8)),
+    randomPrivateKey: () => hashToPrivateKey(etc.randomBytes(fLen + 16)),
     precompute(w = 8, p = G) { p.multiply(3n); w; return p; }, // no-op
 };
 Object.defineProperties(etc, { hmacSha256Sync: {
@@ -482,6 +486,7 @@ const precompute = () => {
     } // which multiplies user point by scalar,
     return points; // when precomputes are using base point
 };
+let Gpows = undefined; // precomputes for base point G
 const wNAF = (n) => {
     // Compared to other point mult methods,
     const comp = Gpows || (Gpows = precompute()); // stores 2x less points using subtraction

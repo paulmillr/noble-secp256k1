@@ -52,6 +52,7 @@ declare class Signature {
     assertValidity(): this;
     addRecoveryBit(rec: number): SignatureWithRecovery;
     hasHighS(): boolean;
+    normalizeS(): Signature;
     recoverPublicKey(msgh: Hex): Point;
     toCompactRawBytes(): Uint8Array;
     toCompactHex(): string;

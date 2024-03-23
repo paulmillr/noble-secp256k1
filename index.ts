@@ -8,19 +8,22 @@ const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};       // exported variables in
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
 const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
-const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
 const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element (invertible)
 const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
-const au8 = (a: unknown, l?: number): Bytes =>          // is Uint8Array (of specific length)
-  !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
+const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
+const isu8 = (a: unknown): a is Uint8Array => (
+  a instanceof Uint8Array ||
+  (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array')
+);
+const au8 = (a: unknown, l?: number): Bytes =>          // assert is Uint8Array (of specific length)
+  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
-const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(a), len); // norm(hex/u8a) to u8a
+const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
-let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
 class Point {                                           // Point in 3d xyz projective coordinates
   constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} //3d=less inversions
@@ -190,10 +193,13 @@ class Signature {                                       // ECDSA Signature class
     return new Signature(this.r, this.s, rec) as SignatureWithRecovery;
   }
   hasHighS() { return moreThanHalfN(this.s); }
+  normalizeS() {
+    return this.hasHighS() ? new Signature(this.r, mod(this.s, N), this.recovery) : this
+  }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
     if (![0, 1, 2, 3].includes(rec!)) err('recovery id invalid'); // check recovery id
-    const h = bits2int_modN(toU8(msgh, 32));            // Truncate hash
+    const h = bits2int_modN(toU8(msgh, fLen));          // Truncate hash
     const radj = rec === 2 || rec === 3 ? r + N : r;    // If rec was 2 or 3, q.x is bigger than n
     if (radj >= P) err('q.x invalid');                  // ensure q.x is still a field element
     const head = (rec! & 1) === 0 ? '02' : '03';        // head is 0x02 or 0x03
@@ -265,7 +271,7 @@ function hmacDrbg<T>(asynchronous: false): (seed: Bytes, predicate: Pred<T>) => 
 function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   let v = u8n(fLen);  // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
   let k = u8n(fLen);  // Steps B, C of RFC6979 3.2: set hashLen, in our case always same
-  let i = 0;                  // Iterations counter, will throw when over 1000
+  let i = 0;          // Iterations counter, will throw when over 1000
   const reset = () => { v.fill(1); k.fill(0); i = 0; };
   const _e = 'drbg: tried 1000 values';
   if (asynchronous) {                                   // asynchronous=true
@@ -352,7 +358,7 @@ function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean {
     R = G.mulAddQUns(P, u1, u2).aff();                  // R = u1⋅G + u2⋅P
   } catch (error) { return false; }
   if (!R) return false;                                 // stop if R is identity / zero point
-  const v = mod(R.x, N);       // <== The weird ECDSA part. R.x must be in N's field, not P's
+  const v = mod(R.x, N);                                // R.x must be in N's field, not P's
   return v === r;                                       // mod(R.x, n) == r
 }
 function getSharedSecret(privA: Hex, pubB: Hex, isCompressed = true): Bytes {
@@ -387,7 +393,7 @@ const etc = {                                           // Not placed in utils b
 const utils = {                                         // utilities
   normPrivateKeyToScalar: toPriv,
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
-  randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 8)), // FIPS 186 B.4.1.
+  randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 16)), // FIPS 186 B.4.1.
   precompute(w=8, p: Point = G) { p.multiply(3n); w; return p; }, // no-op
 };
 Object.defineProperties(etc, { hmacSha256Sync: {        // Allow setting it once, ignore then
@@ -406,6 +412,7 @@ const precompute = () => {                              // They give 12x faster 
   }                                                     // which multiplies user point by scalar,
   return points;                                        // when precomputes are using base point
 }
+let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method.
                                                         // Compared to other point mult methods,
   const comp = Gpows || (Gpows = precompute());         // stores 2x less points using subtraction
