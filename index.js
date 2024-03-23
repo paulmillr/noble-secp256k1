@@ -28,10 +28,7 @@ class Point {
         this.pz = pz;
     } //3d=less inversions
     static fromAffine(p) {
-        if ((p.x === 0n) && (p.y === 0n))
-            return Point.ZERO;
-        else
-            return new Point(p.x, p.y, 1n);
+        return ((p.x === 0n) && (p.y === 0n)) ? Point.ZERO : new Point(p.x, p.y, 1n);
     }
     static fromHex(hex) {
         hex = toU8(hex); // convert hex string to Uint8Array
