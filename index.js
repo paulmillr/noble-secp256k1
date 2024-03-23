@@ -7,11 +7,11 @@ const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; 
 const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
 const fLen = 32; // field / group byte length
 const crv = (x) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
+const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n) => typeof n === 'bigint'; // is big integer
 const str = (s) => typeof s === 'string'; // is string
 const fe = (n) => big(n) && 0n < n && n < P; // is field element (invertible)
 const ge = (n) => big(n) && 0n < n && n < N; // is group element
-const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const isu8 = (a) => (a instanceof Uint8Array ||
     (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array'));
 const au8 = (a, l) => // assert is Uint8Array (of specific length)

@@ -8,11 +8,11 @@ const CURVE = {p: P, n: N, a: 0n, b: 7n, Gx, Gy};       // exported variables in
 const fLen = 32;                                        // field / group byte length
 type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
 const crv = (x: bigint) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
+const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const big = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
 const fe = (n: bigint) => big(n) && 0n < n && n < P;    // is field element (invertible)
 const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
-const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const isu8 = (a: unknown): a is Uint8Array => (
   a instanceof Uint8Array ||
   (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array')
