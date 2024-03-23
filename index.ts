@@ -344,7 +344,7 @@ function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean {
     err('signature must be 64 bytes');
   try {
     sig_ = rs ? new Signature(sig.r, sig.s).assertValidity() : Signature.fromCompact(sig);
-    h = bits2int_modN(toU8(msgh, fLen));                // Truncate hash
+    h = bits2int_modN(toU8(msgh));                // Truncate hash
     P = pub instanceof Point ? pub.ok() : Point.fromHex(pub); // Validate public key
   } catch (e) { return false; }                         // Check sig for validity in both cases
   if (!sig_) return false;

@@ -397,7 +397,7 @@ function verify(sig, msgh, pub, opts = optV) {
         err('signature must be 64 bytes');
     try {
         sig_ = rs ? new Signature(sig.r, sig.s).assertValidity() : Signature.fromCompact(sig);
-        h = bits2int_modN(toU8(msgh, fLen)); // Truncate hash
+        h = bits2int_modN(toU8(msgh)); // Truncate hash
         P = pub instanceof Point ? pub.ok() : Point.fromHex(pub); // Validate public key
     }
     catch (e) {
@@ -431,7 +431,7 @@ function hashToPrivateKey(hash) {
     const minLen = fLen + 8; // being neglible.
     if (hash.length < minLen || hash.length > 1024)
         err('expected proper params');
-    const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+16 bytes
+    const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
     return n2b(num);
 }
 const etc = {
