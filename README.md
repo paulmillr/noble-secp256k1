@@ -22,6 +22,7 @@ if you need additional features such as common.js, Schnorr signatures, DER encod
   [ciphers](https://github.com/paulmillr/noble-ciphers),
   [curves](https://github.com/paulmillr/noble-curves),
   [hashes](https://github.com/paulmillr/noble-hashes),
+  [post-quantum](https://github.com/paulmillr/noble-post-quantum),
   4kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
 
@@ -62,7 +63,7 @@ secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m
 // Sync methods can be used now:
 // secp.sign(msgHash, privKey);
 
-// 2. node.js 18 and earlier, requires polyfilling globalThis.crypto
+// 2. node.js 18 and older, requires polyfilling globalThis.crypto
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -221,6 +222,7 @@ class Signature {
   readonly recovery?: number | undefined;
   ok(): Signature;
   hasHighS(): boolean;
+  normalizeS(): Signature;
   recoverPublicKey(msgh: Hex): Point;
   toCompactRawBytes(): Bytes;
   toCompactHex(): string;
