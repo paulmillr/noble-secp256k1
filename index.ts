@@ -175,7 +175,7 @@ const toPriv = (p: PrivKey): bigint => {                // normalize private key
   return ge(p) ? p : err('private key out of range');   // check if bigint is in range
 };
 const moreThanHalfN = (n: bigint): boolean => n > (N >> 1n); // if a number is bigger than CURVE.n/2
-function getPublicKey(privKey: PrivKey, isCompressed = true) {   // Make public key from priv
+const getPublicKey = (privKey: PrivKey, isCompressed = true) => {   // Make public key from priv
   return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // 33b or 65b output
 }
 type SignatureWithRecovery = Signature & { recovery: number }
@@ -228,7 +228,7 @@ let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don
 const optS: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
 const optV: { lowS?: boolean } = { lowS: true };        // standard opts for verify()
 type BC = { seed: Bytes, k2sig : (kb: Bytes) => SignatureWithRecovery | undefined }; // Bytes+predicate checker
-function prepSig(msgh: Hex, priv: PrivKey, opts = optS): BC { // prepare for RFC6979 sig generation
+const prepSig = (msgh: Hex, priv: PrivKey, opts=optS): BC => {// prepare for RFC6979 sig generation
   if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
     err('sign() legacy options not supported');
   let { lowS } = opts;                                  // generates low-s sigs by default
@@ -324,16 +324,16 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
   }
 }
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
-async function signAsync(msgh: Hex, priv: PrivKey, opts = optS): Promise<SignatureWithRecovery> {
+const signAsync = async (msgh: Hex, priv: PrivKey, opts = optS): Promise<SignatureWithRecovery> => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);  // Re-run drbg until k2sig returns ok
 }
-function sign(msgh: Hex, priv: PrivKey, opts = optS): SignatureWithRecovery {
+const sign = (msgh: Hex, priv: PrivKey, opts = optS): SignatureWithRecovery => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
 }
 type SigLike = { r: bigint, s: bigint };
-function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean {
+const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean => {
   let { lowS } = opts;                                  // ECDSA signature verification
   if (lowS == null) lowS = true;                        // Default lowS=true
   if ('strict' in opts) err('verify() legacy options not supported'); // legacy param
@@ -360,10 +360,10 @@ function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean {
   const v = mod(R.x, N);                                // R.x must be in N's field, not P's
   return v === r;                                       // mod(R.x, n) == r
 }
-function getSharedSecret(privA: Hex, pubB: Hex, isCompressed = true): Bytes {
+const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true): Bytes => {
   return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
 }
-function hashToPrivateKey(hash: Hex): Bytes {           // FIPS 186 B.4.1 compliant key generation
+const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compliant key generation
   hash = toU8(hash);                                    // produces private keys with modulo bias
   const minLen = fLen + 8;                              // being neglible.
   if (hash.length < minLen || hash.length > 1024) err('expected proper params');

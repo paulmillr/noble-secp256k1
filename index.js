@@ -213,9 +213,9 @@ const toPriv = (p) => {
     return ge(p) ? p : err('private key out of range'); // check if bigint is in range
 };
 const moreThanHalfN = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
-function getPublicKey(privKey, isCompressed = true) {
+const getPublicKey = (privKey, isCompressed = true) => {
     return Point.fromPrivateKey(privKey).toRawBytes(isCompressed); // 33b or 65b output
-}
+};
 class Signature {
     constructor(r, s, recovery) {
         this.r = r;
@@ -267,7 +267,7 @@ const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs w
 let _hmacSync; // Can be redefined by use in utils; built-ins don't provide it
 const optS = { lowS: true }; // opts for sign()
 const optV = { lowS: true }; // standard opts for verify()
-function prepSig(msgh, priv, opts = optS) {
+const prepSig = (msgh, priv, opts = optS) => {
     if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
         err('sign() legacy options not supported');
     let { lowS } = opts; // generates low-s sigs by default
@@ -308,7 +308,7 @@ function prepSig(msgh, priv, opts = optS) {
         return new Signature(r, normS, rec); // use normS, not s
     };
     return { seed: concatB(...seed), k2sig };
-}
+};
 function hmacDrbg(asynchronous) {
     let v = u8n(fLen); // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
     let k = u8n(fLen); // Steps B, C of RFC6979 3.2: set hashLen, in our case always same
@@ -374,15 +374,15 @@ function hmacDrbg(asynchronous) {
     }
 }
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
-async function signAsync(msgh, priv, opts = optS) {
+const signAsync = async (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
     return hmacDrbg(true)(seed, k2sig); // Re-run drbg until k2sig returns ok
-}
-function sign(msgh, priv, opts = optS) {
+};
+const sign = (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
     return hmacDrbg(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
-}
-function verify(sig, msgh, pub, opts = optV) {
+};
+const verify = (sig, msgh, pub, opts = optV) => {
     let { lowS } = opts; // ECDSA signature verification
     if (lowS == null)
         lowS = true; // Default lowS=true
@@ -419,18 +419,18 @@ function verify(sig, msgh, pub, opts = optV) {
         return false; // stop if R is identity / zero point
     const v = mod(R.x, N); // R.x must be in N's field, not P's
     return v === r; // mod(R.x, n) == r
-}
-function getSharedSecret(privA, pubB, isCompressed = true) {
+};
+const getSharedSecret = (privA, pubB, isCompressed = true) => {
     return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
-}
-function hashToPrivateKey(hash) {
+};
+const hashToPrivateKey = (hash) => {
     hash = toU8(hash); // produces private keys with modulo bias
     const minLen = fLen + 8; // being neglible.
     if (hash.length < minLen || hash.length > 1024)
         err('expected proper params');
     const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
     return n2b(num);
-}
+};
 const etc = {
     hexToBytes: h2b, bytesToHex: b2h, // share API with noble-curves.
     concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
