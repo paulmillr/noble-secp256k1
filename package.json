@@ -1,6 +1,6 @@
 {
   "name": "@noble/secp256k1",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Fastest 4KB JS implementation of secp256k1 ECDH & ECDSA signatures compliant with RFC6979",
   "files": [
     "index.js",
@@ -26,7 +26,7 @@
   "homepage": "https://paulmillr.com/noble/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paulmillr/noble-secp256k1.git"
+    "url": "git+https://github.com/paulmillr/noble-secp256k1.git"
   },
   "license": "MIT",
   "devDependencies": {
