@@ -1,8 +1,7 @@
 name: Publish packge to jsr
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [created]
 jobs:
   publish:
     runs-on: ubuntu-latest
