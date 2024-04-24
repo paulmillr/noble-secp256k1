@@ -1,0 +1,13 @@
+{
+  "name": "@noble/secp256k1",
+  "version": "2.1.0",
+  "exports": "./index.ts",
+  "publish": {
+    "include": [
+      "LICENSE",
+      "README.md",
+      "index.ts",
+      "jsr.json"
+    ]
+  }
+}
