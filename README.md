@@ -36,11 +36,10 @@ We support all major platforms and runtimes. For node.js <= 18 and React Native,
 
 ```js
 import * as secp from '@noble/secp256k1';
-// import * as secp from "https://deno.land/x/secp256k1/mod.ts"; // Deno
 // import * as secp from "https://unpkg.com/@noble/secp256k1"; // Unpkg
 (async () => {
-  // keys, messages & other inputs can be Uint8Arrays or hex strings
-  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
+  // Uint8Arrays or hex strings are accepted:
+  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
   const privKey = secp.utils.randomPrivateKey(); // Secure random private key
   // sha256 of 'hello world'
   const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
