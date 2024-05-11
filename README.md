@@ -28,7 +28,9 @@ if you need additional features such as common.js, Schnorr signatures, DER encod
 
 ## Usage
 
-> `npm install @noble/secp256k1` > `deno add @noble/secp256k1`
+> `npm install @noble/secp256k1`
+
+> `deno add @noble/secp256k1`
 
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
