@@ -28,7 +28,7 @@ if you need additional features such as common.js, Schnorr signatures, DER encod
 
 ## Usage
 
-> npm install @noble/secp256k1
+> `npm install @noble/secp256k1` > `deno add @noble/secp256k1`
 
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
@@ -59,7 +59,7 @@ Additional polyfills for some environments:
 // Only async methods are available by default, to keep the library dependency-free.
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
-secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m))
+secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
 // Sync methods can be used now:
 // secp.sign(msgHash, privKey);
 
@@ -84,7 +84,7 @@ There are 3 main methods: `getPublicKey(privateKey)`,
 We accept Hex type everywhere:
 
 ```ts
-type Hex = Uint8Array | string
+type Hex = Uint8Array | string;
 ```
 
 ### getPublicKey
@@ -105,7 +105,7 @@ Generates 33-byte compressed public key from 32-byte private key.
 function sign(
   messageHash: Hex, // message hash (not message) which would be signed
   privateKey: Hex, // private key which will sign the hash
-  opts?: { lowS: boolean, extraEntropy: boolean | Hex } // optional params
+  opts?: { lowS: boolean; extraEntropy: boolean | Hex } // optional params
 ): Signature;
 function signAsync(
   messageHash: Hex,
@@ -123,13 +123,13 @@ which means you'll need to do something like `sha256(message)` before signing.
 1. `lowS: false` allows to create malleable signatures, for compatibility with openssl.
    Default `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
 2. `extraEntropy: true` improves security by adding entropy, follows section 3.6 of RFC6979:
-    - No disadvantage: if an entropy generator is broken, sigs would be the same
-      as they are without the option
-    - It would help a lot in case there is an error somewhere in `k` gen.
-      Exposing `k` could leak private keys
-    - Sigs with extra entropy would have different `r` / `s`, which means they
-      would still be valid, but may break some test vectors if you're
-      cross-testing against other libs
+   - No disadvantage: if an entropy generator is broken, sigs would be the same
+     as they are without the option
+   - It would help a lot in case there is an error somewhere in `k` gen.
+     Exposing `k` could leak private keys
+   - Sigs with extra entropy would have different `r` / `s`, which means they
+     would still be valid, but may break some test vectors if you're
+     cross-testing against other libs
 
 ### verify
 
@@ -227,7 +227,7 @@ class Signature {
   toCompactRawBytes(): Bytes;
   toCompactHex(): string;
 }
-CURVE // curve prime; order; equation params, generator coordinates
+CURVE; // curve prime; order; equation params, generator coordinates
 ```
 
 ## Security
@@ -237,9 +237,9 @@ It is cross-tested against [noble-curves](https://github.com/paulmillr/noble-cur
 and has similar security.
 
 1. The current version is rewrite of v1, which has been audited by cure53:
-[PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
+   [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
 2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
-run the fuzzer by yourself to check.
+   run the fuzzer by yourself to check.
 
 Our EC multiplication is hardened to be algorithmically constant time.
 We're using built-in JS `BigInt`, which is potentially vulnerable to
@@ -323,24 +323,24 @@ Switch to curves if you intend to keep using these features:
 Other changes for upgrading from @noble/secp256k1 1.7 to 2.0:
 
 - `getPublicKey`
-    - now produce 33-byte compressed signatures by default
-    - to use old behavior, which produced 65-byte uncompressed keys, set
-      argument `isCompressed` to `false`: `getPublicKey(priv, false)`
+  - now produce 33-byte compressed signatures by default
+  - to use old behavior, which produced 65-byte uncompressed keys, set
+    argument `isCompressed` to `false`: `getPublicKey(priv, false)`
 - `sign`
-    - is now sync; use `signAsync` for async version
-    - now returns `Signature` instance with `{ r, s, recovery }` properties
-    - `canonical` option was renamed to `lowS`
-    - `recovered` option has been removed because recovery bit is always returned now
-    - `der` option has been removed. There are 2 options:
-        1. Use compact encoding: `fromCompact`, `toCompactRawBytes`, `toCompactHex`.
-           Compact encoding is simply a concatenation of 32-byte r and 32-byte s.
-        2. If you must use DER encoding, switch to noble-curves (see above).
+  - is now sync; use `signAsync` for async version
+  - now returns `Signature` instance with `{ r, s, recovery }` properties
+  - `canonical` option was renamed to `lowS`
+  - `recovered` option has been removed because recovery bit is always returned now
+  - `der` option has been removed. There are 2 options:
+    1. Use compact encoding: `fromCompact`, `toCompactRawBytes`, `toCompactHex`.
+       Compact encoding is simply a concatenation of 32-byte r and 32-byte s.
+    2. If you must use DER encoding, switch to noble-curves (see above).
 - `verify`
-    - `strict` option was renamed to `lowS`
+  - `strict` option was renamed to `lowS`
 - `getSharedSecret`
-    - now produce 33-byte compressed signatures by default
-    - to use old behavior, which produced 65-byte uncompressed keys, set
-      argument `isCompressed` to `false`: `getSharedSecret(a, b, false)`
+  - now produce 33-byte compressed signatures by default
+  - to use old behavior, which produced 65-byte uncompressed keys, set
+    argument `isCompressed` to `false`: `getSharedSecret(a, b, false)`
 - `recoverPublicKey(msg, sig, rec)` was changed to `sig.recoverPublicKey(msg)`
 - `number` type for private keys have been removed: use `bigint` instead
 - `Point` (2d xy) has been changed to `ProjectivePoint` (3d xyz)
