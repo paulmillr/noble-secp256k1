@@ -222,7 +222,7 @@ const bits2int_modN = (bytes: Uint8Array): bigint => {  // int2octets can't be u
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
-  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 const optS: { lowS?: boolean; extraEntropy?: boolean | Hex; } = { lowS: true }; // opts for sign()
