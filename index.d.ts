@@ -39,7 +39,7 @@ declare class Point {
     toHex(isCompressed?: boolean): string;
     toRawBytes(isCompressed?: boolean): Uint8Array;
 }
-declare function getPublicKey(privKey: PrivKey, isCompressed?: boolean): Uint8Array;
+declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Uint8Array;
 type SignatureWithRecovery = Signature & {
     recovery: number;
 };
@@ -58,25 +58,24 @@ declare class Signature {
     toCompactHex(): string;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-declare function signAsync(msgh: Hex, priv: PrivKey, opts?: {
+declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
-}): Promise<SignatureWithRecovery>;
-declare function sign(msgh: Hex, priv: PrivKey, opts?: {
+}) => Promise<SignatureWithRecovery>;
+declare const sign: (msgh: Hex, priv: PrivKey, opts?: {
     lowS?: boolean | undefined;
     extraEntropy?: boolean | Hex | undefined;
-}): SignatureWithRecovery;
+}) => SignatureWithRecovery;
 type SigLike = {
     r: bigint;
     s: bigint;
 };
-declare function verify(sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
+declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
     lowS?: boolean | undefined;
-}): boolean;
-declare function getSharedSecret(privA: Hex, pubB: Hex, isCompressed?: boolean): Bytes;
-declare function hashToPrivateKey(hash: Hex): Bytes;
+}) => boolean;
+declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Bytes;
 declare const etc: {
-    hexToBytes: (hex: string) => Bytes;
+    hexToBytes: (hex: string) => Uint8Array;
     bytesToHex: (b: Bytes) => string;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
     bytesToNumberBE: (b: Bytes) => bigint;
@@ -85,7 +84,7 @@ declare const etc: {
     invert: (num: bigint, md?: bigint) => bigint;
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256Sync: HmacFnSync;
-    hashToPrivateKey: typeof hashToPrivateKey;
+    hashToPrivateKey: (hash: Hex) => Bytes;
     randomBytes: (len?: number) => Bytes;
 };
 declare const utils: {

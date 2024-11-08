@@ -6,20 +6,19 @@ const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; 
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
 const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
 const fLen = 32; // field / group byte length
-const crv = (x) => mod(mod(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
+const curve = (x) => M(M(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
-const big = (n) => typeof n === 'bigint'; // is big integer
-const str = (s) => typeof s === 'string'; // is string
-const fe = (n) => big(n) && 0n < n && n < P; // is field element (invertible)
-const ge = (n) => big(n) && 0n < n && n < N; // is group element
-const isu8 = (a) => (a instanceof Uint8Array ||
-    (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array'));
+const isB = (n) => typeof n === 'bigint'; // is big integer
+const isS = (s) => typeof s === 'string'; // is string
+const fe = (n) => isB(n) && 0n < n && n < P; // is field element (invertible)
+const ge = (n) => isB(n) && 0n < n && n < N; // is group element
+const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
 const au8 = (a, l) => // assert is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
-const toU8 = (a, len) => au8(str(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
-const mod = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
+const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
+const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {
     constructor(px, py, pz) {
@@ -34,20 +33,20 @@ class Point {
         hex = toU8(hex); // convert hex string to Uint8Array
         let p = undefined;
         const head = hex[0], tail = hex.subarray(1); // first byte is prefix, rest is data
-        const x = slcNum(tail, 0, fLen), len = hex.length; // next 32 bytes are x coordinate
+        const x = slc(tail, 0, fLen), len = hex.length; // next 32 bytes are x coordinate
         if (len === 33 && [0x02, 0x03].includes(head)) { // compressed points: 33b, start
             if (!fe(x))
                 err('Point hex invalid: x not FE'); // with byte 0x02 or 0x03. Check if 0<x<P
-            let y = sqrt(crv(x)); // x³ + ax + b is right side of equation
+            let y = sqrt(curve(x)); // x³ + ax + b is right side of equation
             const isYOdd = (y & 1n) === 1n; // y² is equivalent left-side. Calculate y²:
             const headOdd = (head & 1) === 1; // y = √y²; there are two solutions: y, -y
             if (headOdd !== isYOdd)
-                y = mod(-y); // determine proper solution
+                y = M(-y); // determine proper solution
             p = new Point(x, y, 1n); // create point
         } // Uncompressed points: 65b, start with 0x04
         if (len === 65 && head === 0x04)
-            p = new Point(x, slcNum(tail, fLen, 2 * fLen), 1n);
-        return p ? p.ok() : err('Point is not on curve'); // Verify the result
+            p = new Point(x, slc(tail, fLen, 2 * fLen), 1n);
+        return p ? p.ok() : err('Point invalid: not on curve'); // Verify the result
     }
     static fromPrivateKey(k) { return G.mul(toPriv(k)); } // Create point from a private key.
     get x() { return this.aff().x; } // .x, .y will call expensive toAffine:
@@ -55,62 +54,62 @@ class Point {
     equals(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
         const { px: X2, py: Y2, pz: Z2 } = isPoint(other); // isPoint() checks class equality
-        const X1Z2 = mod(X1 * Z2), X2Z1 = mod(X2 * Z1);
-        const Y1Z2 = mod(Y1 * Z2), Y2Z1 = mod(Y2 * Z1);
+        const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
+        const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
     }
-    negate() { return new Point(this.px, mod(-this.py), this.pz); } // Flip point over y coord
+    negate() { return new Point(this.px, M(-this.py), this.pz); } // Flip point over y coord
     double() { return this.add(this); } // Point doubling: P+P, complete formula.
     add(other) {
         const { px: X1, py: Y1, pz: Z1 } = this; // free formula from Renes-Costello-Batina
         const { px: X2, py: Y2, pz: Z2 } = isPoint(other); // https://eprint.iacr.org/2015/1060, algo 1
         const { a, b } = CURVE; // Cost: 12M + 0S + 3*a + 3*b3 + 23add
         let X3 = 0n, Y3 = 0n, Z3 = 0n;
-        const b3 = mod(b * 3n);
-        let t0 = mod(X1 * X2), t1 = mod(Y1 * Y2), t2 = mod(Z1 * Z2), t3 = mod(X1 + Y1); // step 1
-        let t4 = mod(X2 + Y2); // step 5
-        t3 = mod(t3 * t4);
-        t4 = mod(t0 + t1);
-        t3 = mod(t3 - t4);
-        t4 = mod(X1 + Z1);
-        let t5 = mod(X2 + Z2); // step 10
-        t4 = mod(t4 * t5);
-        t5 = mod(t0 + t2);
-        t4 = mod(t4 - t5);
-        t5 = mod(Y1 + Z1);
-        X3 = mod(Y2 + Z2); // step 15
-        t5 = mod(t5 * X3);
-        X3 = mod(t1 + t2);
-        t5 = mod(t5 - X3);
-        Z3 = mod(a * t4);
-        X3 = mod(b3 * t2); // step 20
-        Z3 = mod(X3 + Z3);
-        X3 = mod(t1 - Z3);
-        Z3 = mod(t1 + Z3);
-        Y3 = mod(X3 * Z3);
-        t1 = mod(t0 + t0); // step 25
-        t1 = mod(t1 + t0);
-        t2 = mod(a * t2);
-        t4 = mod(b3 * t4);
-        t1 = mod(t1 + t2);
-        t2 = mod(t0 - t2); // step 30
-        t2 = mod(a * t2);
-        t4 = mod(t4 + t2);
-        t0 = mod(t1 * t4);
-        Y3 = mod(Y3 + t0);
-        t0 = mod(t5 * t4); // step 35
-        X3 = mod(t3 * X3);
-        X3 = mod(X3 - t0);
-        t0 = mod(t3 * t1);
-        Z3 = mod(t5 * Z3);
-        Z3 = mod(Z3 + t0); // step 40
+        const b3 = M(b * 3n);
+        let t0 = M(X1 * X2), t1 = M(Y1 * Y2), t2 = M(Z1 * Z2), t3 = M(X1 + Y1); // step 1
+        let t4 = M(X2 + Y2); // step 5
+        t3 = M(t3 * t4);
+        t4 = M(t0 + t1);
+        t3 = M(t3 - t4);
+        t4 = M(X1 + Z1);
+        let t5 = M(X2 + Z2); // step 10
+        t4 = M(t4 * t5);
+        t5 = M(t0 + t2);
+        t4 = M(t4 - t5);
+        t5 = M(Y1 + Z1);
+        X3 = M(Y2 + Z2); // step 15
+        t5 = M(t5 * X3);
+        X3 = M(t1 + t2);
+        t5 = M(t5 - X3);
+        Z3 = M(a * t4);
+        X3 = M(b3 * t2); // step 20
+        Z3 = M(X3 + Z3);
+        X3 = M(t1 - Z3);
+        Z3 = M(t1 + Z3);
+        Y3 = M(X3 * Z3);
+        t1 = M(t0 + t0); // step 25
+        t1 = M(t1 + t0);
+        t2 = M(a * t2);
+        t4 = M(b3 * t4);
+        t1 = M(t1 + t2);
+        t2 = M(t0 - t2); // step 30
+        t2 = M(a * t2);
+        t4 = M(t4 + t2);
+        t0 = M(t1 * t4);
+        Y3 = M(Y3 + t0);
+        t0 = M(t5 * t4); // step 35
+        X3 = M(t3 * X3);
+        X3 = M(X3 - t0);
+        t0 = M(t3 * t1);
+        Z3 = M(t5 * Z3);
+        Z3 = M(Z3 + t0); // step 40
         return new Point(X3, Y3, Z3);
     }
     mul(n, safe = true) {
         if (!safe && n === 0n)
             return I; // in unsafe mode, allow zero
         if (!ge(n))
-            err('invalid scalar'); // must be 0 < n < CURVE.n
+            err('scalar invalid'); // must be 0 < n < CURVE.n
         if (this.equals(G))
             return wNAF(n).p; // use precomputes for base point
         let p = I, f = G; // init result point & fake point
@@ -132,15 +131,15 @@ class Point {
         if (z === 1n)
             return { x, y }; // if z is 1, pass affine coordinates as-is
         const iz = inv(z); // z^-1: invert z
-        if (mod(z * iz) !== 1n)
-            err('invalid inverse'); // (z * z^-1) must be 1, otherwise bad math
-        return { x: mod(x * iz), y: mod(y * iz) }; // x = x*z^-1; y = y*z^-1
+        if (M(z * iz) !== 1n)
+            err('inverse invalid'); // (z * z^-1) must be 1, otherwise bad math
+        return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
     }
     assertValidity() {
         const { x, y } = this.aff(); // convert to 2d xy affine point.
         if (!fe(x) || !fe(y))
             err('Point invalid: x or y'); // x and y must be in range 0 < n < P
-        return mod(y * y) === crv(x) ? // y² = x³ + ax + b, must be equal
+        return M(y * y) === curve(x) ? // y² = x³ + ax + b, must be equal
             this : err('Point invalid: not on curve');
     }
     multiply(n) { return this.mul(n); } // Aliases to compress code
@@ -159,26 +158,38 @@ Point.BASE = new Point(Gx, Gy, 1n); // Generator / base point
 Point.ZERO = new Point(0n, 1n, 0n); // Identity / zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
-const b2h = (b) => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
+const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 };
+const ch = (char) => {
+    if (char >= C._0 && char <= C._9)
+        return char - C._0; // '0' will resolve to 48-48, '1' to 49-48 (1)
+    if (char >= C.A && char <= C.F)
+        return char - (C.A - 10); // 'A' will resolve to 65-(65-10), 'F' to 70-(70-10)
+    if (char >= C.a && char <= C.f)
+        return char - (C.a - 10); // similar to upcase
+    return;
+};
 const h2b = (hex) => {
-    const l = hex.length; // error if not string,
-    if (!str(hex) || l % 2)
-        err('hex invalid 1'); // or has odd length like 3, 5.
-    const arr = u8n(l / 2); // create result array
-    for (let i = 0; i < arr.length; i++) {
-        const j = i * 2;
-        const h = hex.slice(j, j + 2); // hexByte. slice is faster than substr
-        const b = Number.parseInt(h, 16); // byte, created from string part
-        if (Number.isNaN(b) || b < 0)
-            err('hex invalid 2'); // byte must be valid 0 <= byte < 256
-        arr[i] = b;
+    const e = 'hex invalid';
+    if (!isS(hex))
+        return err(e);
+    const hl = hex.length, al = hl / 2;
+    if (hl % 2)
+        return err(e);
+    const array = u8n(al);
+    for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) { // treat each char as ASCII
+        const n1 = ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+        const n2 = ch(hex.charCodeAt(hi + 1)); // parse second char
+        if (n1 === undefined || n2 === undefined)
+            return err(e);
+        array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
     }
-    return arr;
+    return array;
 };
 const b2n = (b) => BigInt('0x' + (b2h(b) || '0')); // bytes to number
-const slcNum = (b, from, to) => b2n(b.slice(from, to)); // slice bytes num
+const slc = (b, from, to) => b2n(b.slice(from, to)); // slice bytes num
 const n2b = (num) => {
-    return big(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
+    return isB(num) && num >= 0n && num < B256 ? h2b(padh(num, 2 * fLen)) : err('bigint expected');
 };
 const n2h = (num) => b2h(n2b(num)); // number to 32b hex
 const concatB = (...arrs) => {
@@ -190,13 +201,13 @@ const concatB = (...arrs) => {
 const inv = (num, md = P) => {
     if (num === 0n || md <= 0n)
         err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
-    let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+    let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
     while (a !== 0n) { // uses euclidean gcd algorithm
         const q = b / a, r = b % a; // not constant-time
         const m = x - u * q, n = y - v * q;
         b = a, a = r, x = u, y = v, u = m, v = n;
     }
-    return b === 1n ? mod(x, md) : err('no inverse'); // b is gcd at this point
+    return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
 };
 const sqrt = (n) => {
     let r = 1n; // So, a special, fast case. Paper: "Square Roots from 1;24,51,10 to Dan Shanks".
@@ -205,14 +216,14 @@ const sqrt = (n) => {
             r = (r * num) % P; // Uses exponentiation by squaring.
         num = (num * num) % P; // Not constant-time.
     }
-    return mod(r * r) === n ? r : err('sqrt invalid'); // check if result is valid
+    return M(r * r) === n ? r : err('sqrt invalid'); // check if result is valid
 };
 const toPriv = (p) => {
-    if (!big(p))
+    if (!isB(p))
         p = b2n(toU8(p, fLen)); // convert to bigint when bytes
-    return ge(p) ? p : err('private key out of range'); // check if bigint is in range
+    return ge(p) ? p : err('private key invalid 3'); // check if bigint is in range
 };
-const moreThanHalfN = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
+const high = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
 const getPublicKey = (privKey, isCompressed = true) => {
     return Point.fromPrivateKey(privKey).toRawBytes(isCompressed); // 33b or 65b output
 };
@@ -225,15 +236,15 @@ class Signature {
     } // constructed outside.
     static fromCompact(hex) {
         hex = toU8(hex, 64); // compact repr is (32b r)||(32b s)
-        return new Signature(slcNum(hex, 0, fLen), slcNum(hex, fLen, 2 * fLen));
+        return new Signature(slc(hex, 0, fLen), slc(hex, fLen, 2 * fLen));
     }
     assertValidity() { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
     addRecoveryBit(rec) {
         return new Signature(this.r, this.s, rec);
     }
-    hasHighS() { return moreThanHalfN(this.s); }
+    hasHighS() { return high(this.s); }
     normalizeS() {
-        return this.hasHighS() ? new Signature(this.r, mod(this.s, N), this.recovery) : this;
+        return this.hasHighS() ? new Signature(this.r, M(this.s, N), this.recovery) : this;
     }
     recoverPublicKey(msgh) {
         const { r, s, recovery: rec } = this; // secg.org/sec1-v2.pdf 4.1.6
@@ -246,8 +257,8 @@ class Signature {
         const head = (rec & 1) === 0 ? '02' : '03'; // head is 0x02 or 0x03
         const R = Point.fromHex(head + n2h(radj)); // concat head + hex repr of r
         const ir = inv(radj, N); // r^-1
-        const u1 = mod(-h * ir, N); // -hr^-1
-        const u2 = mod(s * ir, N); // sr^-1
+        const u1 = M(-h * ir, N); // -hr^-1
+        const u2 = M(s * ir, N); // sr^-1
         return G.mulAddQUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
     }
     toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
@@ -259,7 +270,7 @@ const bits2int = (bytes) => {
     return delta > 0 ? num >> BigInt(delta) : num; // matches bits2int. bits2int can produce res>N.
 };
 const bits2int_modN = (bytes) => {
-    return mod(bits2int(bytes), N); // with 0: BAD for trunc as per RFC vectors
+    return M(bits2int(bytes), N); // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num) => n2b(num); // int to octets
 const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
@@ -268,8 +279,8 @@ let _hmacSync; // Can be redefined by use in utils; built-ins don't provide it
 const optS = { lowS: true }; // opts for sign()
 const optV = { lowS: true }; // standard opts for verify()
 const prepSig = (msgh, priv, opts = optS) => {
-    if (['der', 'recovered', 'canonical'].some(k => k in opts)) // Ban legacy options
-        err('sign() legacy options not supported');
+    if (['der', 'recovered', 'canonical'].some(k => k in opts))
+        err('option not supported'); // legacy opts
     let { lowS } = opts; // generates low-s sigs by default
     if (lowS == null)
         lowS = true; // RFC6979 3.2: we skip step A
@@ -293,16 +304,16 @@ const prepSig = (msgh, priv, opts = optS) => {
             return; // Check 0 < k < CURVE.n
         const ik = inv(k, N); // k^-1 mod n, NOT mod P
         const q = G.mul(k).aff(); // q = Gk
-        const r = mod(q.x, N); // r = q.x mod n
+        const r = M(q.x, N); // r = q.x mod n
         if (r === 0n)
             return; // r=0 invalid
-        const s = mod(ik * mod(m + mod(d * r, N), N), N); // s = k^-1(m + rd) mod n
+        const s = M(ik * M(m + M(d * r, N), N), N); // s = k^-1(m + rd) mod n
         if (s === 0n)
             return; // s=0 invalid
         let normS = s; // normalized S
         let rec = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit
-        if (lowS && moreThanHalfN(s)) { // if lowS was passed, ensure s is always
-            normS = mod(-s, N); // in the bottom half of CURVE.n
+        if (lowS && high(s)) { // if lowS was passed, ensure s is always
+            normS = M(-s, N); // in the bottom half of CURVE.n
             rec ^= 1;
         }
         return new Signature(r, normS, rec); // use normS, not s
@@ -387,7 +398,7 @@ const verify = (sig, msgh, pub, opts = optV) => {
     if (lowS == null)
         lowS = true; // Default lowS=true
     if ('strict' in opts)
-        err('verify() legacy options not supported'); // legacy param
+        err('option not supported'); // legacy param
     let sig_, h, P; // secg.org/sec1-v2.pdf 4.1.4
     const rs = sig && typeof sig === 'object' && 'r' in sig; // Previous ver supported DER sigs. We
     if (!rs && (toU8(sig).length !== 2 * fLen)) // throw error when DER is suspected now.
@@ -403,13 +414,13 @@ const verify = (sig, msgh, pub, opts = optV) => {
     if (!sig_)
         return false;
     const { r, s } = sig_;
-    if (lowS && moreThanHalfN(s))
+    if (lowS && high(s))
         return false; // lowS bans sig.s >= CURVE.n/2
     let R;
     try {
         const is = inv(s, N); // s^-1
-        const u1 = mod(h * is, N); // u1 = hs^-1 mod n
-        const u2 = mod(r * is, N); // u2 = rs^-1 mod n
+        const u1 = M(h * is, N); // u1 = hs^-1 mod n
+        const u2 = M(r * is, N); // u2 = rs^-1 mod n
         R = G.mulAddQUns(P, u1, u2).aff(); // R = u1⋅G + u2⋅P
     }
     catch (error) {
@@ -417,7 +428,7 @@ const verify = (sig, msgh, pub, opts = optV) => {
     }
     if (!R)
         return false; // stop if R is identity / zero point
-    const v = mod(R.x, N); // R.x must be in N's field, not P's
+    const v = M(R.x, N); // R.x must be in N's field, not P's
     return v === r; // mod(R.x, n) == r
 };
 const getSharedSecret = (privA, pubB, isCompressed = true) => {
@@ -428,13 +439,13 @@ const hashToPrivateKey = (hash) => {
     const minLen = fLen + 8; // being neglible.
     if (hash.length < minLen || hash.length > 1024)
         err('expected proper params');
-    const num = mod(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
+    const num = M(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
     return n2b(num);
 };
 const etc = {
     hexToBytes: h2b, bytesToHex: b2h, // share API with noble-curves.
     concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
-    mod, invert: inv, // math utilities
+    mod: M, invert: inv, // math utilities
     hmacSha256Async: async (key, ...msgs) => {
         const c = cr(); // async HMAC-SHA256, no sync built-in!
         const s = c && c.subtle; // For React Native support, see README.

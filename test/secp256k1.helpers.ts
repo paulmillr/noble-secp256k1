@@ -2,6 +2,7 @@ export * as secp from '../index.js';
 import * as secp256k1 from '../index.js';
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
+import { isBytes } from '@noble/hashes/utils';
 secp256k1.etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => hmac(sha256, key, secp256k1.etc.concatBytes(...msgs))
 
 const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc;
@@ -31,7 +32,7 @@ export const DER = {
     // parse DER signature
     const { Err: E } = DER;
     const data = typeof hex === 'string' ? h2b(hex) : hex;
-    if (!(data instanceof Uint8Array)) throw new Error('ui8a expected');
+    if (!isBytes(data)) throw new Error('ui8a expected');
     let l = data.length;
     if (l < 2 || data[0] != 0x30) throw new E('Invalid signature tag');
     if (data[1] !== l - 2) throw new E('Invalid signature: incorrect length');
