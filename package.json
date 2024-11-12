@@ -18,7 +18,7 @@
     "build:mingz": "npm run --silent build:min | gzip -c8",
     "build:release": "npm run --silent build:min > test/build/noble-secp256k1.min.js; npm run --silent build:mingz > test/build/noble-secp256k1.min.js.gz",
     "test": "node test/index.js",
-    "test:webcrypto": "node test/secp256k1.webcrypto.test.js",
+    "test:webcrypto": "node test/index.webcrypto.js",
     "bench": "node test/benchmark.js",
     "loc": "echo \"`npm run --silent build:min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent build:mingz | wc -c`B gzipped\""
   },
