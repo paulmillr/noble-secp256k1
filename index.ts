@@ -202,7 +202,7 @@ class Signature {                                       // ECDSA Signature class
   }
   hasHighS() { return high(this.s); }
   normalizeS() {
-    return high(this.s) ? new Signature(this.r, M(this.s, N), this.recovery) : this
+    return high(this.s) ? new Signature(this.r, M(-this.s, N), this.recovery) : this;
   }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
