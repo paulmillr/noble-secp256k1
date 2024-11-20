@@ -290,14 +290,8 @@ const prepSig = (msgh, priv, opts = optS) => {
     const d = toPriv(priv); // validate private key, convert to bigint
     const seed = [i2o(d), h1o]; // Step D of RFC6979 3.2
     let ent = opts.extraEntropy; // RFC6979 3.6: additional k' (optional)
-    if (ent) { // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
-        if (ent === true)
-            ent = etc.randomBytes(fLen); // if true, use CSPRNG to generate data
-        const e = toU8(ent); // convert Hex|Bytes to Bytes
-        if (e.length !== fLen)
-            err(); // Expected 32 bytes of extra data
-        seed.push(e);
-    }
+    if (ent) // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
+        seed.push(ent === true ? etc.randomBytes(fLen) : toU8(ent)); // true == fetch from CSPRNG
     const m = h1i; // convert msg to bigint
     const k2sig = (kBytes) => {
         const k = bits2int(kBytes); // RFC6979 method.
