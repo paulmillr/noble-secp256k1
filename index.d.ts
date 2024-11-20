@@ -75,7 +75,7 @@ declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
 }) => boolean;
 declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Bytes;
 declare const etc: {
-    hexToBytes: (hex: string) => Uint8Array;
+    hexToBytes: (hex: string) => Bytes;
     bytesToHex: (b: Bytes) => string;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
     bytesToNumberBE: (b: Bytes) => bigint;

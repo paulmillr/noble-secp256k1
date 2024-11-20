@@ -19,15 +19,16 @@ const au8 = (a, l) => // assert is Uint8Array (of specific length)
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
 const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const isPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+const aPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {
     constructor(px, py, pz) {
         this.px = px;
         this.py = py;
         this.pz = pz;
-    } //3d=less inversions
+        Object.freeze(this);
+    }
     static fromAffine(p) {
-        return ((p.x === 0n) && (p.y === 0n)) ? Point.ZERO : new Point(p.x, p.y, 1n);
+        return ((p.x === 0n) && (p.y === 0n)) ? I : new Point(p.x, p.y, 1n);
     }
     static fromHex(hex) {
         hex = toU8(hex); // convert hex string to Uint8Array
@@ -53,7 +54,7 @@ class Point {
     get y() { return this.aff().y; } // should be used with care.
     equals(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
-        const { px: X2, py: Y2, pz: Z2 } = isPoint(other); // isPoint() checks class equality
+        const { px: X2, py: Y2, pz: Z2 } = aPoint(other); // isPoint() checks class equality
         const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
         const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
@@ -62,7 +63,7 @@ class Point {
     double() { return this.add(this); } // Point doubling: P+P, complete formula.
     add(other) {
         const { px: X1, py: Y1, pz: Z1 } = this; // free formula from Renes-Costello-Batina
-        const { px: X2, py: Y2, pz: Z2 } = isPoint(other); // https://eprint.iacr.org/2015/1060, algo 1
+        const { px: X2, py: Y2, pz: Z2 } = aPoint(other); // https://eprint.iacr.org/2015/1060, algo 1
         const { a, b } = CURVE; // Cost: 12M + 0S + 3*a + 3*b3 + 23add
         let X3 = 0n, Y3 = 0n, Z3 = 0n;
         const b3 = M(b * 3n);
@@ -159,8 +160,7 @@ Point.ZERO = new Point(0n, 1n, 0n); // Identity / zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
 const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
-// We use optimized technique to convert hex string to byte array
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 };
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
 const _ch = (ch) => {
     if (ch >= C._0 && ch <= C._9)
         return ch - C._0; // '2' => 50-48
@@ -245,7 +245,7 @@ class Signature {
     }
     hasHighS() { return high(this.s); }
     normalizeS() {
-        return this.hasHighS() ? new Signature(this.r, M(this.s, N), this.recovery) : this;
+        return high(this.s) ? new Signature(this.r, M(this.s, N), this.recovery) : this;
     }
     recoverPublicKey(msgh) {
         const { r, s, recovery: rec } = this; // secg.org/sec1-v2.pdf 4.1.6
@@ -385,6 +385,7 @@ function hmacDrbg(asynchronous) {
         };
     }
 }
+;
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
 const signAsync = async (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
@@ -437,11 +438,10 @@ const getSharedSecret = (privA, pubB, isCompressed = true) => {
 };
 const hashToPrivateKey = (hash) => {
     hash = toU8(hash); // produces private keys with modulo bias
-    const minLen = fLen + 8; // being neglible.
-    if (hash.length < minLen || hash.length > 1024)
-        err('expected proper params');
-    const num = M(b2n(hash), N - 1n) + 1n; // takes at least n+8 bytes
-    return n2b(num);
+    if (hash.length < fLen + 8 || hash.length > 1024)
+        err('expected 40-1024b'); // being neglible.
+    const num = M(b2n(hash), N - 1n);
+    return n2b(num + 1n); // takes at least n+8 bytes
 };
 const etc = {
     hexToBytes: h2b, bytesToHex: b2h, // share API with noble-curves.

@@ -22,14 +22,16 @@ const au8 = (a: unknown, l?: number): Bytes =>          // assert is Uint8Array 
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const toU8 = (a: Hex, len?: number) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
 const M = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const isPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+const aPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
 class Point {                                           // Point in 3d xyz projective coordinates
-  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {} //3d=less inversions
+  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) { //3d=less inversions
+    Object.freeze(this);
+  }
   static readonly BASE = new Point(Gx, Gy, 1n);         // Generator / base point
   static readonly ZERO = new Point(0n, 1n, 0n);         // Identity / zero point
   static fromAffine(p: AffinePoint) {                   // (0, 0) => (0, 1, 0), not (0, 0, 1)
-    return ((p.x === 0n) && (p.y === 0n)) ? Point.ZERO : new Point(p.x, p.y, 1n);
+    return ((p.x === 0n) && (p.y === 0n)) ? I : new Point(p.x, p.y, 1n);
   }
   static fromHex(hex: Hex): Point {                     // Convert Uint8Array or hex string to Point
     hex = toU8(hex);                                    // convert hex string to Uint8Array
@@ -52,7 +54,7 @@ class Point {                                           // Point in 3d xyz proje
   get y() { return this.aff().y; }                      // should be used with care.
   equals(other: Point): boolean {                       // Equality check: compare points
     const { px: X1, py: Y1, pz: Z1 } = this;
-    const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // isPoint() checks class equality
+    const { px: X2, py: Y2, pz: Z2 } = aPoint(other);   // isPoint() checks class equality
     const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
     const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
     return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
@@ -61,7 +63,7 @@ class Point {                                           // Point in 3d xyz proje
   double() { return this.add(this); }                   // Point doubling: P+P, complete formula.
   add(other: Point) {                                   // Point addition: P+Q, complete, exception
     const { px: X1, py: Y1, pz: Z1 } = this;            // free formula from Renes-Costello-Batina
-    const { px: X2, py: Y2, pz: Z2 } = isPoint(other);  // https://eprint.iacr.org/2015/1060, algo 1
+    const { px: X2, py: Y2, pz: Z2 } = aPoint(other);   // https://eprint.iacr.org/2015/1060, algo 1
     const { a, b } = CURVE;                             // Cost: 12M + 0S + 3*a + 3*b3 + 23add
     let X3 = 0n, Y3 = 0n, Z3 = 0n;
     const b3 = M(b * 3n);
@@ -179,11 +181,11 @@ const sqrt = (n: bigint) => {                           // √n = n^((p+1)/4) fo
 };
 const toPriv = (p: PrivKey): bigint => {                // normalize private key to bigint
   if (!isB(p)) p = b2n(toU8(p, fLen));                  // convert to bigint when bytes
-  return ge(p) ? p : err('private key invalid 3');   // check if bigint is in range
+  return ge(p) ? p : err('private key invalid 3');      // check if bigint is in range
 };
 const high = (n: bigint): boolean => n > (N >> 1n);     // if a number is bigger than CURVE.n/2
 const getPublicKey = (privKey: PrivKey, isCompressed = true) => {   // Make public key from priv
-  return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);        // 33b or 65b output
+  return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);    // 33b or 65b output
 }
 type SignatureWithRecovery = Signature & { recovery: number }
 class Signature {                                       // ECDSA Signature class
@@ -200,7 +202,7 @@ class Signature {                                       // ECDSA Signature class
   }
   hasHighS() { return high(this.s); }
   normalizeS() {
-    return this.hasHighS() ? new Signature(this.r, M(this.s, N), this.recovery) : this
+    return high(this.s) ? new Signature(this.r, M(this.s, N), this.recovery) : this
   }
   recoverPublicKey(msgh: Hex): Point {                  // ECDSA public key recovery
     const { r, s, recovery: rec } = this;               // secg.org/sec1-v2.pdf 4.1.6
@@ -328,16 +330,16 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
       return res!;
     };
   }
-}
+};
 // ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
 const signAsync = async (msgh: Hex, priv: PrivKey, opts = optS): Promise<SignatureWithRecovery> => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);  // Re-run drbg until k2sig returns ok
-}
+};
 const sign = (msgh: Hex, priv: PrivKey, opts = optS): SignatureWithRecovery => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
-}
+};
 type SigLike = { r: bigint, s: bigint };
 const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean => {
   let { lowS } = opts;                                  // ECDSA signature verification
@@ -365,16 +367,15 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts = optV): boolean =
   if (!R) return false;                                 // stop if R is identity / zero point
   const v = M(R.x, N);                                  // R.x must be in N's field, not P's
   return v === r;                                       // mod(R.x, n) == r
-}
+};
 const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true): Bytes => {
   return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
-}
+};
 const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compliant key generation
   hash = toU8(hash);                                    // produces private keys with modulo bias
-  const minLen = fLen + 8;                              // being neglible.
-  if (hash.length < minLen || hash.length > 1024) err('expected proper params');
-  const num = M(b2n(hash), N - 1n) + 1n;                // takes at least n+8 bytes
-  return n2b(num);
+  if (hash.length < fLen + 8 || hash.length > 1024) err('expected 40-1024b'); // being neglible.
+  const num = M(b2n(hash), N - 1n);
+  return n2b(num + 1n);                // takes at least n+8 bytes
 }
 const etc = {                                           // Not placed in utils because they
   hexToBytes: h2b, bytesToHex: b2h,                     // share API with noble-curves.
@@ -394,7 +395,7 @@ const etc = {                                           // Not placed in utils b
     if (!crypto || !crypto.getRandomValues) err('crypto.getRandomValues must be defined');
     return crypto.getRandomValues(u8n(len));
   },
-}
+};
 const utils = {                                         // utilities
   normPrivateKeyToScalar: toPriv,
   isValidPrivateKey: (key: Hex) => { try { return !!toPriv(key); } catch (e) { return false; } },
