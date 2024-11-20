@@ -236,13 +236,21 @@ describe('secp256k1', () => {
   });
 
   describe('sign()', () => {
-    should('create deterministic signatures with RFC 6979', () => {
+    should('create deterministic signatures with RFC 6979', async () => {
       for (const vector of ecdsa.valid) {
         let usig = secp.sign(vector.m, vector.d);
         let sig = usig.toCompactHex();
         const vsig = vector.signature;
         deepStrictEqual(sig.slice(0, 64), vsig.slice(0, 64));
         deepStrictEqual(sig.slice(64, 128), vsig.slice(64, 128));
+
+        if (secp.signAsync) {
+          let usig = await secp.signAsync(vector.m, vector.d);
+          let sig = usig.toCompactHex();
+          const vsig = vector.signature;
+          deepStrictEqual(sig.slice(0, 64), vsig.slice(0, 64));
+          deepStrictEqual(sig.slice(64, 128), vsig.slice(64, 128));
+        }
       }
     });
 
@@ -282,7 +290,7 @@ describe('secp256k1', () => {
         deepStrictEqual(sigToDER(secp.Signature.fromCompact(rs)), exp);
       }
     });
-    should('handle {extraData} option', () => {
+    should('handle {extraEntropy} option', () => {
       const ent1 = '0000000000000000000000000000000000000000000000000000000000000000';
       const ent2 = '0000000000000000000000000000000000000000000000000000000000000001';
       const ent3 = '6e723d3fd94ed5d2b6bdd4f123364b0f3ca52af829988a63f8afe91d29db1c33';
@@ -305,22 +313,31 @@ describe('secp256k1', () => {
   });
 
   describe('verify()', () => {
-    should('verify signature', () => {
+    should('verify signature', async () => {
       const MSG = '01'.repeat(32);
       const PRIV_KEY = 0x2n;
-      const signature = secp.sign(MSG, PRIV_KEY);
       const publicKey = secp.getPublicKey(PRIV_KEY);
       deepStrictEqual(publicKey.length, 33);
+      const signature = secp.sign(MSG, PRIV_KEY);
       deepStrictEqual(secp.verify(signature, MSG, publicKey), true);
+      if (secp.signAsync) {
+        const signature = await secp.signAsync(MSG, PRIV_KEY);
+        deepStrictEqual(secp.verify(signature, MSG, publicKey), true);
+
+      }
     });
-    should(' not verify signature with wrong public key', () => {
+    should(' not verify signature with wrong public key', async () => {
       const MSG = '01'.repeat(32);
       const PRIV_KEY = '01'.repeat(32);
       const WRONG_PRIV_KEY = '02'.repeat(32);
-      const signature = secp.sign(MSG, PRIV_KEY);
       const publicKey = Point.fromPrivateKey(WRONG_PRIV_KEY).toHex();
       deepStrictEqual(publicKey.length, 66);
+      const signature = secp.sign(MSG, PRIV_KEY);
       deepStrictEqual(secp.verify(signature, MSG, publicKey), false);
+      if (secp.signAsync) {
+        const signature = await secp.signAsync(MSG, PRIV_KEY);
+        deepStrictEqual(secp.verify(signature, MSG, publicKey), false);
+      }
     });
     should('not verify signature with wrong hash', () => {
       const MSG = '01'.repeat(32);
@@ -333,10 +350,14 @@ describe('secp256k1', () => {
     });
     should('verify random signatures', () =>
       fc.assert(
-        fc.property(FC_BIGINT, fc.hexaString({ minLength: 64, maxLength: 64 }), (privKey, msg) => {
+        fc.asyncProperty(FC_BIGINT, fc.hexaString({ minLength: 64, maxLength: 64 }), async (privKey, msg) => {
           const pub = secp.getPublicKey(privKey);
           const sig = secp.sign(msg, privKey);
           deepStrictEqual(secp.verify(sig, msg, pub), true);
+          if (secp.signAsync) {
+            const sig = await secp.signAsync(msg, privKey);
+            deepStrictEqual(secp.verify(sig, msg, pub), true);
+          }
         })
       )
     );
