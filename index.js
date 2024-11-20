@@ -159,14 +159,15 @@ Point.ZERO = new Point(0n, 1n, 0n); // Identity / zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
 const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
+// We use optimized technique to convert hex string to byte array
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 };
-const ch = (char) => {
-    if (char >= C._0 && char <= C._9)
-        return char - C._0; // '0' will resolve to 48-48, '1' to 49-48 (1)
-    if (char >= C.A && char <= C.F)
-        return char - (C.A - 10); // 'A' will resolve to 65-(65-10), 'F' to 70-(70-10)
-    if (char >= C.a && char <= C.f)
-        return char - (C.a - 10); // similar to upcase
+const _ch = (ch) => {
+    if (ch >= C._0 && ch <= C._9)
+        return ch - C._0; // '2' => 50-48
+    if (ch >= C.A && ch <= C.F)
+        return ch - (C.A - 10); // 'B' => 66-(65-10)
+    if (ch >= C.a && ch <= C.f)
+        return ch - (C.a - 10); // 'b' => 98-(97-10)
     return;
 };
 const h2b = (hex) => {
@@ -178,8 +179,8 @@ const h2b = (hex) => {
         return err(e);
     const array = u8n(al);
     for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) { // treat each char as ASCII
-        const n1 = ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-        const n2 = ch(hex.charCodeAt(hi + 1)); // parse second char
+        const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+        const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
         if (n1 === undefined || n2 === undefined)
             return err(e);
         array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9

@@ -126,27 +126,27 @@ class Point {                                           // Point in 3d xyz proje
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 const b2h = (b: Bytes): string => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const;
-const ch = (char: number): number | undefined => {      // ASCII to base16
-  if (char >= C._0 && char <= C._9) return char - C._0;     // '0' will resolve to 48-48, '1' to 49-48 (1)
-  if (char >= C.A && char <= C.F) return char - (C.A - 10); // 'A' will resolve to 65-(65-10), 'F' to 70-(70-10)
-  if (char >= C.a && char <= C.f) return char - (C.a - 10); // similar to upcase
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
+const _ch = (ch: number): number | undefined => {
+  if (ch >= C._0 && ch <= C._9) return ch - C._0;       // '2' => 50-48
+  if (ch >= C.A && ch <= C.F) return ch - (C.A - 10);   // 'B' => 66-(65-10)
+  if (ch >= C.a && ch <= C.f) return ch - (C.a - 10);   // 'b' => 98-(97-10)
   return;
 };
-const h2b = (hex: string): Uint8Array => {              // hex to bytes
+const h2b = (hex: string): Bytes => {                   // hex to bytes
   const e = 'hex invalid';
   if (!isS(hex)) return err(e);
   const hl = hex.length, al = hl / 2;
   if (hl % 2) return err(e);
   const array = u8n(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {    // treat each char as ASCII
-    const n1 = ch(hex.charCodeAt(hi));                  // parse first char, multiply it by 16
-    const n2 = ch(hex.charCodeAt(hi + 1));              // parse second char
+    const n1 = _ch(hex.charCodeAt(hi));                 // parse first char, multiply it by 16
+    const n2 = _ch(hex.charCodeAt(hi + 1));             // parse second char
     if (n1 === undefined || n2 === undefined) return err(e);
     array[ai] = n1 * 16 + n2;                           // example: 'A9' => 10*16 + 9
   }
   return array;
-}
+};
 const b2n = (b: Bytes): bigint => BigInt('0x' + (b2h(b) || '0')); // bytes to number
 const slc = (b: Bytes, from: number, to: number) => b2n(b.slice(from, to)); // slice bytes num
 const n2b = (num: bigint): Bytes => {                   // number to 32b. Must be 0 <= num < B256
@@ -218,12 +218,12 @@ class Signature {                                       // ECDSA Signature class
   toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
   toCompactHex() { return n2h(this.r) + n2h(this.s); }  // hex 64b compact repr
 }
-const bits2int = (bytes: Uint8Array): bigint => {       // RFC6979: ensure ECDSA msg is X bytes.
+const bits2int = (bytes: Bytes): bigint => {            // RFC6979: ensure ECDSA msg is X bytes.
   const delta = bytes.length * 8 - 256; // RFC suggests optional truncating via bits2octets
   const num = b2n(bytes); // FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits, which
   return delta > 0 ? num >> BigInt(delta) : num; // matches bits2int. bits2int can produce res>N.
 };
-const bits2int_modN = (bytes: Uint8Array): bigint => {  // int2octets can't be used; pads small msgs
+const bits2int_modN = (bytes: Bytes): bigint => {       // int2octets can't be used; pads small msgs
   return M(bits2int(bytes), N);                         // with 0: BAD for trunc as per RFC vectors
 };
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
