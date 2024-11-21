@@ -103,7 +103,7 @@ class Point {                                           // Point in 3d xyz proje
     const { px: x, py: y, pz: z } = this;               // (x, y, z) ∋ (x=x/z, y=y/z)
     if (this.equals(I)) return { x: 0n, y: 0n };        // fast-path for zero point
     if (z === 1n) return { x, y };                      // if z is 1, pass affine coordinates as-is
-    const iz = inv(z);                                  // z^-1: invert z
+    const iz = inv(z, P);                               // z^-1: invert z
     if (M(z * iz) !== 1n) err('inverse invalid');       // (z * z^-1) must be 1, otherwise bad math
     return { x: M(x * iz), y: M(y * iz) };              // x = x*z^-1; y = y*z^-1
   }
@@ -161,7 +161,7 @@ const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Arra
   arrs.forEach(a => {r.set(a, pad); pad += a.length});  // ensure they have proper type
   return r;
 };
-const inv = (num: bigint, md = P): bigint => {          // modular inversion
+const inv = (num: bigint, md: bigint): bigint => {      // modular inversion
   if (num === 0n || md <= 0n) err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
   let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
   while (a !== 0n) {                                    // uses euclidean gcd algorithm

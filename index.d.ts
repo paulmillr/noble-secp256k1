@@ -81,7 +81,7 @@ declare const etc: {
     bytesToNumberBE: (b: Bytes) => bigint;
     numberToBytesBE: (num: bigint) => Bytes;
     mod: (a: bigint, b?: bigint) => bigint;
-    invert: (num: bigint, md?: bigint) => bigint;
+    invert: (num: bigint, md: bigint) => bigint;
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256Sync: HmacFnSync;
     hashToPrivateKey: (hash: Hex) => Bytes;
