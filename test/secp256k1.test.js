@@ -168,6 +168,13 @@ describe('secp256k1', () => {
         throws(() => Point.BASE.multiply(num));
       }
     });
+
+    should('.fromAffine', () => {
+      const xy = { x: 0n, y: 0n };
+      const p = Point.fromAffine(xy);
+      deepStrictEqual(p, Point.ZERO);
+      deepStrictEqual(p.toAffine(), xy);
+    });
   });
 
   // multiply() should equal multiplyUnsafe()
@@ -199,42 +206,6 @@ describe('secp256k1', () => {
         })
       );
     });
-
-    should('.hasHighS(), .normalizeS()', () => {
-      const priv = 'c509ae2138ddca15f6b33062cd3bf76351c79f58c82ee2c2236d835bdea19d13';
-      const msg = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
-
-      const hi =
-        'a6bf36d52da4eef85a513a88d81996a47804a2390c9910c0bd35488effca36bf8bf1f9232ab0efe4a93704ae871aa953b34d1000cef59c9d33fcc696f935108d';
-      const lo =
-        'a6bf36d52da4eef85a513a88d81996a47804a2390c9910c0bd35488effca36bf740e06dcd54f101b56c8fb5178e556ab0761cce5e053039e8bd597f5d70130b4';
-      const hi_ = new secp.Signature(
-        75421779095773161492578598757717572512754773103551662129966816753283695785663n,
-        63299015578620006752099543153250095157058828301739590985992016204296254460045n,
-        0
-      );
-      const lo_ = new secp.Signature(
-        75421779095773161492578598757717572512754773103551662129966816753283695785663n,
-        52493073658696188671471441855437812695778735977335313396613146937221907034292n,
-        0
-      );
-
-      const pub = secp.getPublicKey(priv);
-      const sig = secp.sign(msg, priv, { lowS: false });
-      deepStrictEqual(sig.hasHighS(), true);
-      deepStrictEqual(sig, hi_);
-      deepStrictEqual(sig.toCompactHex(), hi);
-
-      const lowSig = sig.normalizeS();
-      deepStrictEqual(lowSig.hasHighS(), false);
-      deepStrictEqual(lowSig, lo_);
-      deepStrictEqual(lowSig.toCompactHex(), lo);
-
-      deepStrictEqual(secp.verify(sig, msg, pub, { lowS: false }), true);
-      deepStrictEqual(secp.verify(sig, msg, pub, { lowS: true }), false);
-      deepStrictEqual(secp.verify(lowSig, msg, pub, { lowS: true }), true);
-      deepStrictEqual(secp.verify(lowSig, msg, pub, { lowS: false }), true);
-    });
   });
 
   describe('sign()', () => {
@@ -254,6 +225,14 @@ describe('secp256k1', () => {
           deepStrictEqual(sig.slice(64, 128), vsig.slice(64, 128));
         }
       }
+    });
+
+    should('sign legacy options', () => {
+      const msg = '12'.repeat(32);
+      const priv = '34'.repeat(32);
+      throws(() => { secp.sign(msg, priv, { der: true }) });
+      throws(() => { secp.sign(msg, priv, { canonical: true }) });
+      throws(() => { secp.sign(msg, priv, { recovered: true }) });
     });
 
     should('not create invalid deterministic signatures with RFC 6979', () => {
@@ -338,6 +317,42 @@ describe('secp256k1', () => {
         res,
         '2bdf40f42ac0e42ee12750d03bb12b75306dae58eb3c961c5a80d78efae93e595295b66e8eb28f1eb046bb129a976340312159ec0c20b97342667572e4a8379a'
       );
+    });
+
+    should('.hasHighS(), .normalizeS()', () => {
+      const priv = 'c509ae2138ddca15f6b33062cd3bf76351c79f58c82ee2c2236d835bdea19d13';
+      const msg = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
+
+      const hi =
+        'a6bf36d52da4eef85a513a88d81996a47804a2390c9910c0bd35488effca36bf8bf1f9232ab0efe4a93704ae871aa953b34d1000cef59c9d33fcc696f935108d';
+      const lo =
+        'a6bf36d52da4eef85a513a88d81996a47804a2390c9910c0bd35488effca36bf740e06dcd54f101b56c8fb5178e556ab0761cce5e053039e8bd597f5d70130b4';
+      const hi_ = new secp.Signature(
+        75421779095773161492578598757717572512754773103551662129966816753283695785663n,
+        63299015578620006752099543153250095157058828301739590985992016204296254460045n,
+        0
+      );
+      const lo_ = new secp.Signature(
+        75421779095773161492578598757717572512754773103551662129966816753283695785663n,
+        52493073658696188671471441855437812695778735977335313396613146937221907034292n,
+        0
+      );
+
+      const pub = secp.getPublicKey(priv);
+      const sig = secp.sign(msg, priv, { lowS: false });
+      deepStrictEqual(sig.hasHighS(), true);
+      deepStrictEqual(sig, hi_);
+      deepStrictEqual(sig.toCompactHex(), hi);
+
+      const lowSig = sig.normalizeS();
+      deepStrictEqual(lowSig.hasHighS(), false);
+      deepStrictEqual(lowSig, lo_);
+      deepStrictEqual(lowSig.toCompactHex(), lo);
+
+      deepStrictEqual(secp.verify(sig, msg, pub, { lowS: false }), true);
+      deepStrictEqual(secp.verify(sig, msg, pub, { lowS: true }), false);
+      deepStrictEqual(secp.verify(lowSig, msg, pub, { lowS: true }), true);
+      deepStrictEqual(secp.verify(lowSig, msg, pub, { lowS: false }), true);
     });
   });
 

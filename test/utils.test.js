@@ -1,64 +1,9 @@
 import { deepStrictEqual, throws } from 'assert';
+import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
-import * as secp256k1 from '../index.js';
-
-const { bytesToHex, hexToBytes } = secp256k1.etc;
-
-// Everything except undefined, string, Uint8Array
-const TYPE_TEST_BASE = [
-  null,
-  [1, 2, 3],
-  { a: 1, b: 2, c: 3 },
-  NaN,
-  0.1234,
-  1.0000000000001,
-  10e9999,
-  new Uint32Array([1, 2, 3]),
-  100n,
-  new Set([1, 2, 3]),
-  new Map([['aa', 'bb']]),
-  new Uint8ClampedArray([1, 2, 3]),
-  new Int16Array([1, 2, 3]),
-  new Float32Array([1]),
-  new BigInt64Array([1n, 2n, 3n]),
-  new ArrayBuffer(100),
-  new DataView(new ArrayBuffer(100)),
-  { constructor: { name: 'Uint8Array' }, length: '1e30' },
-  () => {},
-  async () => {},
-  class Test {},
-  Symbol.for('a'),
-  new Proxy(new Uint8Array(), {})
-];
-
-const TYPE_TEST_OPT = [
-  '',
-  new Uint8Array(),
-  new (class Test {})(),
-  class Test {},
-  () => {},
-  0,
-  0.1234,
-  NaN,
-  null,
-];
-
-const TYPE_TEST_NOT_BOOL = [false, true];
-const TYPE_TEST_NOT_BYTES = ['', 'test', '1', new Uint8Array([]), new Uint8Array([1, 2, 3])];
-const TYPE_TEST_NOT_HEX = [
-  ' 1 2 3 4 5',
-  '010203040x',
-  'abcdefgh',
-  '1 2 3 4 5 ',
-  'bee',
-  new String('1234'),
-];
-const TYPE_TEST_NOT_INT = [-0.0, 0, 1];
-
-const TYPE_TEST = {
-  bytes: TYPE_TEST_BASE.concat(TYPE_TEST_NOT_INT, TYPE_TEST_NOT_BOOL),
-  hex: TYPE_TEST_BASE.concat(TYPE_TEST_NOT_INT, TYPE_TEST_NOT_BOOL, TYPE_TEST_NOT_HEX),
-};
+import * as items from '../index.js';
+import { TYPE_TEST } from './utils.js';
+const { bytesToHex, concatBytes, hexToBytes, mod, invert } = items.etc;
 
 describe('utils', () => {
   const staticHexVectors = [
@@ -69,6 +14,7 @@ describe('utils', () => {
   ];
   should('hexToBytes', () => {
     for (let v of staticHexVectors) deepStrictEqual(hexToBytes(v.hex), v.bytes);
+    for (let v of staticHexVectors) deepStrictEqual(hexToBytes(v.hex.toUpperCase()), v.bytes);
     for (let v of TYPE_TEST.hex) {
       throws(() => hexToBytes(v));
     }
@@ -79,6 +25,76 @@ describe('utils', () => {
       throws(() => bytesToHex(v));
     }
   });
+  should('hexToBytes <=> bytesToHex roundtrip', () =>
+    fc.assert(
+      fc.property(fc.hexaString({ minLength: 2, maxLength: 64 }), (hex) => {
+        if (hex.length % 2 !== 0) return;
+        deepStrictEqual(hex, bytesToHex(hexToBytes(hex)));
+        deepStrictEqual(hex, bytesToHex(hexToBytes(hex.toUpperCase())));
+        deepStrictEqual(hexToBytes(hex), Uint8Array.from(Buffer.from(hex, 'hex')));
+      })
+    )
+  );
+  should('concatBytes', () => {
+    const a = 1;
+    const b = 2;
+    const c = 0xff;
+    const aa = Uint8Array.from([a]);
+    const bb = Uint8Array.from([b]);
+    const cc = Uint8Array.from([c]);
+    deepStrictEqual(concatBytes(), new Uint8Array());
+    deepStrictEqual(concatBytes(aa, bb), Uint8Array.from([a, b]));
+    deepStrictEqual(concatBytes(aa, bb, cc), Uint8Array.from([a, b, c]));
+    for (let v of TYPE_TEST.bytes)
+      throws(() => {
+        concatBytes(v);
+      });
+  });
+  should('concatBytes random', () =>
+    fc.assert(
+      fc.property(fc.uint8Array(), fc.uint8Array(), fc.uint8Array(), (a, b, c) => {
+        const expected = Uint8Array.from(Buffer.concat([a, b, c]));
+        deepStrictEqual(concatBytes(a.slice(), b.slice(), c.slice()), expected);
+      })
+    )
+  );
 });
 
-should.run();
+describe('utils math', () => {
+  should('mod', () => {
+    deepStrictEqual(mod(11n, 10n), 1n);
+    deepStrictEqual(mod(-1n, 10n), 9n);
+    deepStrictEqual(mod(0n, 10n), 0n);
+  });
+  should('invert', () => {
+    deepStrictEqual(invert(512n, 1023n), 2n);
+    deepStrictEqual(
+      invert(2n ** 255n, 2n ** 255n - 19n),
+      21330121701610878104342023554231983025602365596302209165163239159352418617876n
+    );
+    throws(() => {
+      invert();
+    });
+    throws(() => {
+      invert(1n);
+    }); // no default modulus
+    throws(() => {
+      invert(0n, 12n);
+    });
+    throws(() => {
+      invert(1n, -12n);
+    });
+    throws(() => {
+      invert(512n, 1023);
+    });
+    throws(() => {
+      invert(512, 1023n);
+    });
+  });
+});
+
+// ESM is broken.
+import url from 'node:url';
+if (import.meta.url === url.pathToFileURL(process.argv[1]).href) {
+  should.run();
+}
