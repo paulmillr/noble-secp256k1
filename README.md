@@ -234,13 +234,14 @@ CURVE; // curve prime; order; equation params, generator coordinates
 ## Security
 
 The module is production-ready.
-It is cross-tested against [noble-curves](https://github.com/paulmillr/noble-curves),
-and has similar security.
 
 1. The current version is rewrite of v1, which has been audited by cure53:
    [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
 2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
    run the fuzzer by yourself to check.
+
+Even though [noble-curves](https://github.com/paulmillr/noble-curves)
+provide improved security compared to the current module, we cross-test against curves.
 
 Our EC multiplication is hardened to be algorithmically constant time.
 We're using built-in JS `BigInt`, which is potentially vulnerable to
