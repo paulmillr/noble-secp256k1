@@ -313,16 +313,6 @@ Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
 
     elliptic#ecdh x 971 ops/sec
 
-## Contributing
-
-1. Clone the repository.
-2. `npm install` to install build dependencies like TypeScript
-3. `npm run build` to compile TypeScript code
-4. `npm test` to run jest on `test/index.ts`
-
-Special thanks to [Roman Koblov](https://github.com/romankoblov), who have
-helped to improve scalar multiplication speed.
-
 ## Upgrading
 
 noble-secp256k1 v2 features improved security and smaller attack surface.
@@ -367,6 +357,19 @@ Other changes for upgrading from @noble/secp256k1 1.7 to 2.0:
 - `Point` (2d xy) has been changed to `ProjectivePoint` (3d xyz)
 - `utils` were split into `utils` (same api as in noble-curves) and
   `etc` (`hmacSha256Sync` and others)
+
+## Contributing & testing
+
+* `npm install && npm run build && npm test` will build the code and run tests.
+* `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
+* `npm run loc` will count total output size, important to be less than 4KB
+
+Check out [github.com/paulmillr/guidelines](https://github.com/paulmillr/guidelines)
+for general coding practices and rules.
+
+See [paulmillr.com/noble](https://paulmillr.com/noble/)
+for useful resources, articles, documentation and demos
+related to the library.
 
 ## License
 
