@@ -267,6 +267,8 @@ class Signature {
 }
 const bits2int = (bytes) => {
     const delta = bytes.length * 8 - 256; // RFC suggests optional truncating via bits2octets
+    if (delta > 1024)
+        err('msg invalid'); // our CUSTOM check, "just-in-case"
     const num = b2n(bytes); // FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits, which
     return delta > 0 ? num >> BigInt(delta) : num; // matches bits2int. bits2int can produce res>N.
 };
@@ -434,8 +436,8 @@ const hashToPrivateKey = (hash) => {
     hash = toU8(hash); // produces private keys with modulo bias
     if (hash.length < fLen + 8 || hash.length > 1024)
         err('expected 40-1024b'); // being neglible.
-    const num = M(b2n(hash), N - 1n);
-    return n2b(num + 1n); // takes at least n+8 bytes
+    const num = M(b2n(hash), N - 1n); // takes n+8 bytes
+    return n2b(num + 1n); // returns (hash mod n-1)+1
 };
 const etc = {
     hexToBytes: h2b, bytesToHex: b2h, // share API with noble-curves.
