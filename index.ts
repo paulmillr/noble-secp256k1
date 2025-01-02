@@ -406,7 +406,7 @@ const utils = {                                         // utilities
   normPrivateKeyToScalar: toPriv as (p: PrivKey) => bigint,
   isValidPrivateKey: (key: Hex): boolean => { try { return !!toPriv(key); } catch (e) { return false; } },
   randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 16)), // FIPS 186 B.4.1.
-  precompute(w=8, p: Point = G): Point { p.multiply(3n); w; return p; }, // no-op
+  precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 };
 Object.defineProperties(etc, { hmacSha256Sync: {        // Allow setting it once, ignore then
   configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },

@@ -90,7 +90,7 @@ declare const utils: {
     normPrivateKeyToScalar: (p: PrivKey) => bigint;
     isValidPrivateKey: (key: Hex) => boolean;
     randomPrivateKey: () => Bytes;
-    precompute(w?: number, p?: Point): Point;
+    precompute: (w?: number, p?: Point) => Point;
 };
 export { getPublicKey, sign, signAsync, verify, CURVE, // Remove the export to easily use in REPL
 getSharedSecret, etc, utils, Point as ProjectivePoint, Signature };
