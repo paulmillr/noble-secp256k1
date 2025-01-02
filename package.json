@@ -1,6 +1,6 @@
 {
   "name": "@noble/secp256k1",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Fastest 4KB JS implementation of secp256k1 ECDH & ECDSA signatures compliant with RFC6979",
   "files": [
     "index.js",
