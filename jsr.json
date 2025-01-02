@@ -1,6 +1,6 @@
 {
   "name": "@noble/secp256k1",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "exports": "./index.ts",
   "publish": {
     "include": [
@@ -9,5 +9,6 @@
       "index.ts",
       "jsr.json"
     ]
-  }
+  },
+  "license": "MIT"
 }
