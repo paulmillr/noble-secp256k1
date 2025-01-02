@@ -1,13 +1,23 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-const B256 = 2n ** 256n;                                // secp256k1 is short weierstrass curve
+/**
+ * ECDSA & ECDH over secp256k1 short weierstrass curve.
+ * @module
+ */
+const B256 = 2n ** 256n;
 const P = B256 - 0x1000003d1n;                          // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn;  // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
+/**
+ * secp256k1 curve parameters. Equation is x³ + ax + b.
+ * Gx and Gy are generator coordinates. p is field order, n is group order.
+ */
 const CURVE: { p: bigint; n: bigint; a: bigint; b: bigint; Gx: bigint; Gy: bigint } = {
-  p: P, n: N, a: 0n, b: 7n, Gx, Gy };     // exported variables incl. a, b
+  p: P, n: N, a: 0n, b: 7n, Gx, Gy };                   // exported variables incl. a, b
 const fLen = 32;                                        // field / group byte length
-type Bytes = Uint8Array; type Hex = Bytes | string; type PrivKey = Hex | bigint;
+export type Bytes = Uint8Array;
+export type Hex = Bytes | string;
+export type PrivKey = Hex | bigint;
 const curve = (x: bigint) => M(M(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const isB = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
@@ -26,8 +36,10 @@ const M = (a: bigint, b: bigint = P) => {               // mod division
   const r = a % b; return r >= 0n ? r : b + r;
 };
 const aPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
-interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
-class Point {                                           // Point in 3d xyz projective coordinates
+/** Point in 2d xy affine coordinates. */
+interface AffinePoint { x: bigint, y: bigint }
+/** Point in 3d xyz projective coordinates. */
+class Point {
   constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) { //3d=less inversions
     Object.freeze(this);
   }
@@ -187,11 +199,14 @@ const toPriv = (p: PrivKey): bigint => {                // normalize private key
   return ge(p) ? p : err('private key invalid 3');      // check if bigint is in range
 };
 const high = (n: bigint): boolean => n > (N >> 1n);     // if a number is bigger than CURVE.n/2
-const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => { // Make public key from priv
-  return Point.fromPrivateKey(privKey).toRawBytes(isCompressed); // 33b or 65b output
+/** Create public key from private. Output is compressed 33b or uncompressed 65b. */
+const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => {
+  return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);
 }
-type SignatureWithRecovery = Signature & { recovery: number }
-class Signature {                                       // ECDSA Signature class
+/** Signature which allows recovering pubkey from it. */
+export type SignatureWithRecovery = Signature & { recovery: number }
+/** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
+class Signature {
   constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
     this.assertValidity();                              // recovery bit is optional when
   }                                                     // constructed outside.
@@ -333,16 +348,32 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
     };
   }
 };
-// ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
+/** ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k. */
+/**
+ * Sign a msg hash using secp256k1. Async.
+ * @param msgh - message HASH, not message itself e.g. sha256(message)
+ * @param priv - private key
+ */
 const signAsync = async (msgh: Hex, priv: PrivKey, opts: OptS = optS): Promise<SignatureWithRecovery> => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);  // Re-run drbg until k2sig returns ok
 };
+/**
+ * Sign a msg hash using secp256k1.
+ * @param msgh - message HASH, not message itself e.g. sha256(message)
+ * @param priv - private key
+ */
 const sign = (msgh: Hex, priv: PrivKey, opts: OptS = optS): SignatureWithRecovery => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   return hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
 };
 type SigLike = { r: bigint, s: bigint };
+/**
+ * Verify a signature using secp256k1.
+ * @param sig - signature, 64-byte or Signature instance
+ * @param msgh - message HASH, not message itself e.g. sha256(message)
+ * @param pub - public key
+ */
 const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = optV): boolean => {
   let { lowS } = opts;                                  // ECDSA signature verification
   if (lowS == null) lowS = true;                        // Default lowS=true
@@ -370,6 +401,14 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = optV): boo
   const v = M(R.x, N);                                  // R.x must be in N's field, not P's
   return v === r;                                       // mod(R.x, n) == r
 };
+/**
+ * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
+ * Result is **NOT hashed**. Use hash on it if you need.
+ * @param privA private key A
+ * @param pubB public key B
+ * @param isCompressed 33-byte or 65-byte output
+ * @returns public key C
+ */
 const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true): Bytes => {
   return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
 };
@@ -379,8 +418,9 @@ const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compli
   const num = M(b2n(hash), N - 1n);                     // takes n+8 bytes
   return n2b(num + 1n);                                 // returns (hash mod n-1)+1
 }
-const etc = {                                           // Not placed in utils because they
-  hexToBytes: h2b as (hex: string) => Bytes,            // share API with noble-curves.
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
+const etc = {
+  hexToBytes: h2b as (hex: string) => Bytes,
   bytesToHex: b2h as (bytes: Bytes) => string,
   concatBytes: concatB as (...arrs: Bytes[]) => Bytes,
   bytesToNumberBE: b2n as (a: Bytes) => bigint,
@@ -402,6 +442,7 @@ const etc = {                                           // Not placed in utils b
     return crypto.getRandomValues(u8n(len));
   },
 };
+/** Curve-specific utilities for private keys. */
 const utils = {                                         // utilities
   normPrivateKeyToScalar: toPriv as (p: PrivKey) => bigint,
   isValidPrivateKey: (key: Hex): boolean => { try { return !!toPriv(key); } catch (e) { return false; } },

@@ -6,7 +6,7 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
   signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 📦 Pure ESM, can be imported without transpilers
-- 🪶 4KB gzipped, 450 lines of code
+- 🪶 4KB gzipped, 490 lines of code
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.

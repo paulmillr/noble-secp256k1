@@ -1,9 +1,17 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-const B256 = 2n ** 256n; // secp256k1 is short weierstrass curve
+/**
+ * ECDSA & ECDH over secp256k1 short weierstrass curve.
+ * @module
+ */
+const B256 = 2n ** 256n;
 const P = B256 - 0x1000003d1n; // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
+/**
+ * secp256k1 curve parameters. Equation is x³ + ax + b.
+ * Gx and Gy are generator coordinates. p is field order, n is group order.
+ */
 const CURVE = {
     p: P, n: N, a: 0n, b: 7n, Gx, Gy
 }; // exported variables incl. a, b
@@ -25,6 +33,7 @@ const M = (a, b = P) => {
     return r >= 0n ? r : b + r;
 };
 const aPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+/** Point in 3d xyz projective coordinates. */
 class Point {
     constructor(px, py, pz) {
         this.px = px;
@@ -230,9 +239,11 @@ const toPriv = (p) => {
     return ge(p) ? p : err('private key invalid 3'); // check if bigint is in range
 };
 const high = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
+/** Create public key from private. Output is compressed 33b or uncompressed 65b. */
 const getPublicKey = (privKey, isCompressed = true) => {
-    return Point.fromPrivateKey(privKey).toRawBytes(isCompressed); // 33b or 65b output
+    return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);
 };
+/** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
     constructor(r, s, recovery) {
         this.r = r;
@@ -387,15 +398,31 @@ function hmacDrbg(asynchronous) {
     }
 }
 ;
-// ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k
+/** ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k. */
+/**
+ * Sign a msg hash using secp256k1. Async.
+ * @param msgh - message HASH, not message itself e.g. sha256(message)
+ * @param priv - private key
+ */
 const signAsync = async (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
     return hmacDrbg(true)(seed, k2sig); // Re-run drbg until k2sig returns ok
 };
+/**
+ * Sign a msg hash using secp256k1.
+ * @param msgh - message HASH, not message itself e.g. sha256(message)
+ * @param priv - private key
+ */
 const sign = (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
     return hmacDrbg(false)(seed, k2sig); // Re-run drbg until k2sig returns ok
 };
+/**
+ * Verify a signature using secp256k1.
+ * @param sig - signature, 64-byte or Signature instance
+ * @param msgh - message HASH, not message itself e.g. sha256(message)
+ * @param pub - public key
+ */
 const verify = (sig, msgh, pub, opts = optV) => {
     let { lowS } = opts; // ECDSA signature verification
     if (lowS == null)
@@ -434,6 +461,14 @@ const verify = (sig, msgh, pub, opts = optV) => {
     const v = M(R.x, N); // R.x must be in N's field, not P's
     return v === r; // mod(R.x, n) == r
 };
+/**
+ * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
+ * Result is **NOT hashed**. Use hash on it if you need.
+ * @param privA private key A
+ * @param pubB public key B
+ * @param isCompressed 33-byte or 65-byte output
+ * @returns public key C
+ */
 const getSharedSecret = (privA, pubB, isCompressed = true) => {
     return Point.fromHex(pubB).mul(toPriv(privA)).toRawBytes(isCompressed); // ECDH
 };
@@ -444,8 +479,9 @@ const hashToPrivateKey = (hash) => {
     const num = M(b2n(hash), N - 1n); // takes n+8 bytes
     return n2b(num + 1n); // returns (hash mod n-1)+1
 };
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
-    hexToBytes: h2b, // share API with noble-curves.
+    hexToBytes: h2b,
     bytesToHex: b2h,
     concatBytes: concatB,
     bytesToNumberBE: b2n,
@@ -469,6 +505,7 @@ const etc = {
         return crypto.getRandomValues(u8n(len));
     },
 };
+/** Curve-specific utilities for private keys. */
 const utils = {
     normPrivateKeyToScalar: toPriv,
     isValidPrivateKey: (key) => { try {
