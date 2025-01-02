@@ -15,8 +15,11 @@ const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; 
 const CURVE: { p: bigint; n: bigint; a: bigint; b: bigint; Gx: bigint; Gy: bigint } = {
   p: P, n: N, a: 0n, b: 7n, Gx, Gy };                   // exported variables incl. a, b
 const fLen = 32;                                        // field / group byte length
+/** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
+/** Hex-encoded string or Uint8Array. */
 export type Hex = Bytes | string;
+/** Hex-encoded string, Uint8Array or bigint. */
 export type PrivKey = Hex | bigint;
 const curve = (x: bigint) => M(M(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
@@ -37,7 +40,7 @@ const M = (a: bigint, b: bigint = P) => {               // mod division
 };
 const aPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 /** Point in 2d xy affine coordinates. */
-interface AffinePoint { x: bigint, y: bigint }
+export interface AffinePoint { x: bigint, y: bigint }
 /** Point in 3d xyz projective coordinates. */
 class Point {
   constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) { //3d=less inversions

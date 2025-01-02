@@ -10,11 +10,14 @@ declare const CURVE: {
     Gx: bigint;
     Gy: bigint;
 };
+/** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
+/** Hex-encoded string or Uint8Array. */
 export type Hex = Bytes | string;
+/** Hex-encoded string, Uint8Array or bigint. */
 export type PrivKey = Hex | bigint;
 /** Point in 2d xy affine coordinates. */
-interface AffinePoint {
+export interface AffinePoint {
     x: bigint;
     y: bigint;
 }
