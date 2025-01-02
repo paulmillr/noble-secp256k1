@@ -3,7 +3,8 @@
   "compilerOptions": {
     "outDir": ".",
     "sourceMap": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "isolatedDeclarations": true
   },
   "include": ["index.ts"],
   "exclude": ["node_modules", "lib"]

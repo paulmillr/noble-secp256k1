@@ -4,7 +4,9 @@ const P = B256 - 0x1000003d1n; // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const CURVE = { p: P, n: N, a: 0n, b: 7n, Gx, Gy }; // exported variables incl. a, b
+const CURVE = {
+    p: P, n: N, a: 0n, b: 7n, Gx, Gy
+}; // exported variables incl. a, b
 const fLen = 32; // field / group byte length
 const curve = (x) => M(M(x * x) * x + CURVE.b); // x³ + ax + b weierstrass formula; a=0
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
@@ -18,7 +20,10 @@ const au8 = (a, l) => // assert is Uint8Array (of specific length)
     err('Uint8Array expected') : a;
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
 const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
-const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
+const M = (a, b = P) => {
+    const r = a % b;
+    return r >= 0n ? r : b + r;
+};
 const aPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 class Point {
     constructor(px, py, pz) {
@@ -440,9 +445,13 @@ const hashToPrivateKey = (hash) => {
     return n2b(num + 1n); // returns (hash mod n-1)+1
 };
 const etc = {
-    hexToBytes: h2b, bytesToHex: b2h, // share API with noble-curves.
-    concatBytes: concatB, bytesToNumberBE: b2n, numberToBytesBE: n2b,
-    mod: M, invert: inv, // math utilities
+    hexToBytes: h2b, // share API with noble-curves.
+    bytesToHex: b2h,
+    concatBytes: concatB,
+    bytesToNumberBE: b2n,
+    numberToBytesBE: n2b,
+    mod: M,
+    invert: inv, // math utilities
     hmacSha256Async: async (key, ...msgs) => {
         const c = cr(); // async HMAC-SHA256, no sync built-in!
         const s = c && c.subtle; // For React Native support, see README.
@@ -452,7 +461,7 @@ const etc = {
         return u8n(await s.sign('HMAC', k, concatB(...msgs)));
     },
     hmacSha256Sync: _hmacSync, // For TypeScript. Actual logic is below
-    hashToPrivateKey,
+    hashToPrivateKey: hashToPrivateKey,
     randomBytes: (len = 32) => {
         const crypto = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
         if (!crypto || !crypto.getRandomValues)

@@ -37,9 +37,9 @@ declare class Point {
     aff(): AffinePoint;
     ok(): Point;
     toHex(isCompressed?: boolean): string;
-    toRawBytes(isCompressed?: boolean): Uint8Array;
+    toRawBytes(isCompressed?: boolean): Bytes;
 }
-declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Uint8Array;
+declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;
 type SignatureWithRecovery = Signature & {
     recovery: number;
 };
@@ -49,39 +49,38 @@ declare class Signature {
     readonly recovery?: number | undefined;
     constructor(r: bigint, s: bigint, recovery?: number | undefined);
     static fromCompact(hex: Hex): Signature;
-    assertValidity(): this;
+    assertValidity(): Signature;
     addRecoveryBit(rec: number): SignatureWithRecovery;
     hasHighS(): boolean;
     normalizeS(): Signature;
     recoverPublicKey(msgh: Hex): Point;
-    toCompactRawBytes(): Uint8Array;
+    toCompactRawBytes(): Bytes;
     toCompactHex(): string;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: {
-    lowS?: boolean | undefined;
-    extraEntropy?: boolean | Hex | undefined;
-}) => Promise<SignatureWithRecovery>;
-declare const sign: (msgh: Hex, priv: PrivKey, opts?: {
-    lowS?: boolean | undefined;
-    extraEntropy?: boolean | Hex | undefined;
-}) => SignatureWithRecovery;
+type OptS = {
+    lowS?: boolean;
+    extraEntropy?: boolean | Hex;
+};
+type OptV = {
+    lowS?: boolean;
+};
+declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: OptS) => Promise<SignatureWithRecovery>;
+declare const sign: (msgh: Hex, priv: PrivKey, opts?: OptS) => SignatureWithRecovery;
 type SigLike = {
     r: bigint;
     s: bigint;
 };
-declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: {
-    lowS?: boolean | undefined;
-}) => boolean;
+declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: OptV) => boolean;
 declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Bytes;
 declare const etc: {
     hexToBytes: (hex: string) => Bytes;
-    bytesToHex: (b: Bytes) => string;
-    concatBytes: (...arrs: Bytes[]) => Uint8Array;
-    bytesToNumberBE: (b: Bytes) => bigint;
-    numberToBytesBE: (num: bigint) => Bytes;
-    mod: (a: bigint, b?: bigint) => bigint;
-    invert: (num: bigint, md: bigint) => bigint;
+    bytesToHex: (bytes: Bytes) => string;
+    concatBytes: (...arrs: Bytes[]) => Bytes;
+    bytesToNumberBE: (a: Bytes) => bigint;
+    numberToBytesBE: (n: bigint) => Bytes;
+    mod: (a: bigint, md?: bigint) => bigint;
+    invert: (num: bigint, md?: bigint) => bigint;
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256Sync: HmacFnSync;
     hashToPrivateKey: (hash: Hex) => Bytes;
