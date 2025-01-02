@@ -1,6 +1,6 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
- * ECDSA & ECDH over secp256k1 short weierstrass curve.
+ * 4KB JS implementation of secp256k1 signatures & ECDH. Compliant with RFC6979.
  * @module
  */
 const B256 = 2n ** 256n;
