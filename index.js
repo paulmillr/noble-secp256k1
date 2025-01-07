@@ -33,7 +33,7 @@ const M = (a, b = P) => {
     return r >= 0n ? r : b + r;
 };
 const aPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
-/** Point in 3d xyz projective coordinates. */
+/** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 class Point {
     constructor(px, py, pz) {
         this.px = px;
@@ -41,9 +41,11 @@ class Point {
         this.pz = pz;
         Object.freeze(this);
     }
+    /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
     static fromAffine(p) {
         return ((p.x === 0n) && (p.y === 0n)) ? I : new Point(p.x, p.y, 1n);
     }
+    /** Convert Uint8Array or hex string to Point. */
     static fromHex(hex) {
         hex = toU8(hex); // convert hex string to Uint8Array
         let p = undefined;
@@ -63,9 +65,11 @@ class Point {
             p = new Point(x, slc(tail, fLen, 2 * fLen), 1n);
         return p ? p.ok() : err('Point invalid: not on curve'); // Verify the result
     }
-    static fromPrivateKey(k) { return G.mul(toPriv(k)); } // Create point from a private key.
+    /** Create point from a private key. */
+    static fromPrivateKey(k) { return G.mul(toPriv(k)); }
     get x() { return this.aff().x; } // .x, .y will call expensive toAffine:
     get y() { return this.aff().y; } // should be used with care.
+    /** Equality check: compare points P&Q. */
     equals(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
         const { px: X2, py: Y2, pz: Z2 } = aPoint(other); // isPoint() checks class equality
@@ -73,12 +77,19 @@ class Point {
         const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
     }
-    negate() { return new Point(this.px, M(-this.py), this.pz); } // Flip point over y coord
-    double() { return this.add(this); } // Point doubling: P+P, complete formula.
+    /** Flip point over y coordinate. */
+    negate() { return new Point(this.px, M(-this.py), this.pz); }
+    /** Point doubling: P+P, complete formula. */
+    double() { return this.add(this); }
+    /**
+     * Point addition: P+Q, complete, exception-free formula
+     * (Renes-Costello-Batina, algo 1 of [2015/1060](https://eprint.iacr.org/2015/1060)).
+     * Cost: 12M + 0S + 3*a + 3*b3 + 23add.
+     */
     add(other) {
-        const { px: X1, py: Y1, pz: Z1 } = this; // free formula from Renes-Costello-Batina
-        const { px: X2, py: Y2, pz: Z2 } = aPoint(other); // https://eprint.iacr.org/2015/1060, algo 1
-        const { a, b } = CURVE; // Cost: 12M + 0S + 3*a + 3*b3 + 23add
+        const { px: X1, py: Y1, pz: Z1 } = this;
+        const { px: X2, py: Y2, pz: Z2 } = aPoint(other);
+        const { a, b } = CURVE;
         let X3 = 0n, Y3 = 0n, Z3 = 0n;
         const b3 = M(b * 3n);
         let t0 = M(X1 * X2), t1 = M(Y1 * Y2), t2 = M(Z1 * Z2), t3 = M(X1 + Y1); // step 1
@@ -139,8 +150,9 @@ class Point {
     mulAddQUns(R, u1, u2) {
         return this.mul(u1, false).add(R.mul(u2, false)).ok(); // Unsafe: do NOT use for stuff related
     } // to private keys. Doesn't use Shamir trick
+    /** Convert point to 2d xy affine point. (x, y, z) ∋ (x=x/z, y=y/z) */
     toAffine() {
-        const { px: x, py: y, pz: z } = this; // (x, y, z) ∋ (x=x/z, y=y/z)
+        const { px: x, py: y, pz: z } = this;
         if (this.equals(I))
             return { x: 0n, y: 0n }; // fast-path for zero point
         if (z === 1n)
@@ -150,6 +162,7 @@ class Point {
             err('inverse invalid'); // (z * z^-1) must be 1, otherwise bad math
         return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
     }
+    /** Checks if the point is valid and on-curve. */
     assertValidity() {
         const { x, y } = this.aff(); // convert to 2d xy affine point.
         if (!fe(x) || !fe(y))
@@ -169,8 +182,10 @@ class Point {
         return h2b(this.toHex(isCompressed)); // re-use toHex(), convert hex to bytes
     }
 }
-Point.BASE = new Point(Gx, Gy, 1n); // Generator / base point
-Point.ZERO = new Point(0n, 1n, 0n); // Identity / zero point
+/** Generator / base point */
+Point.BASE = new Point(Gx, Gy, 1n);
+/** Identity / zero point */
+Point.ZERO = new Point(0n, 1n, 0n);
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
 const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
@@ -239,7 +254,7 @@ const toPriv = (p) => {
     return ge(p) ? p : err('private key invalid 3'); // check if bigint is in range
 };
 const high = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
-/** Create public key from private. Output is compressed 33b or uncompressed 65b. */
+/** Creates 33/65-byte public key from 32-byte private key. */
 const getPublicKey = (privKey, isCompressed = true) => {
     return Point.fromPrivateKey(privKey).toRawBytes(isCompressed);
 };
@@ -251,11 +266,13 @@ class Signature {
         this.recovery = recovery;
         this.assertValidity(); // recovery bit is optional when
     } // constructed outside.
+    /** Create signature from 64b compact (r || s) representation. */
     static fromCompact(hex) {
         hex = toU8(hex, 64); // compact repr is (32b r)||(32b s)
         return new Signature(slc(hex, 0, fLen), slc(hex, fLen, 2 * fLen));
     }
     assertValidity() { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
+    /** Create new signature, with added recovery bit. */
     addRecoveryBit(rec) {
         return new Signature(this.r, this.s, rec);
     }
@@ -263,6 +280,7 @@ class Signature {
     normalizeS() {
         return high(this.s) ? new Signature(this.r, M(-this.s, N), this.recovery) : this;
     }
+    /** ECDSA public key recovery. Requires msg hash and recovery id. */
     recoverPublicKey(msgh) {
         const { r, s, recovery: rec } = this; // secg.org/sec1-v2.pdf 4.1.6
         if (![0, 1, 2, 3].includes(rec))
@@ -278,8 +296,10 @@ class Signature {
         const u2 = M(s * ir, N); // sr^-1
         return G.mulAddQUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
     }
-    toCompactRawBytes() { return h2b(this.toCompactHex()); } // Uint8Array 64b compact repr
-    toCompactHex() { return n2h(this.r) + n2h(this.s); } // hex 64b compact repr
+    /** Uint8Array 64b compact (r || s) representation. */
+    toCompactRawBytes() { return h2b(this.toCompactHex()); }
+    /** Hex string 64b compact (r || s) representation. */
+    toCompactHex() { return n2h(this.r) + n2h(this.s); }
 }
 const bits2int = (bytes) => {
     const delta = bytes.length * 8 - 256; // RFC suggests optional truncating via bits2octets
@@ -401,8 +421,12 @@ function hmacDrbg(asynchronous) {
 /** ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k. */
 /**
  * Sign a msg hash using secp256k1. Async.
+ * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
+ * Worst case: if randomness source for extraEntropy is bad, it would be as secure as if
+ * the option has not been used.
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param priv - private key
+ * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
  */
 const signAsync = async (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
@@ -410,8 +434,14 @@ const signAsync = async (msgh, priv, opts = optS) => {
 };
 /**
  * Sign a msg hash using secp256k1.
+ * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
+ * Worst case: if randomness source for extraEntropy is bad, it would be as secure as if
+ * the option has not been used.
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param priv - private key
+ * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
+ * @example
+ * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toCompactRawBytes();
  */
 const sign = (msgh, priv, opts = optS) => {
     const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
@@ -422,6 +452,7 @@ const sign = (msgh, priv, opts = optS) => {
  * @param sig - signature, 64-byte or Signature instance
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param pub - public key
+ * @param opts - { lowS: true } is default, prohibits s >= CURVE.n/2 to prevent malleability
  */
 const verify = (sig, msgh, pub, opts = optV) => {
     let { lowS } = opts; // ECDSA signature verification
