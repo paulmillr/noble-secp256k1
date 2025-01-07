@@ -253,7 +253,7 @@ const bits2int_modN = (bytes: Bytes): bigint => {       // int2octets can't be u
 const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
-  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
+  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 type OptS = { lowS?: boolean; extraEntropy?: boolean | Hex; };
@@ -433,7 +433,7 @@ const etc = {
   hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
     const c = cr();                                     // async HMAC-SHA256, no sync built-in!
     const s = c && c.subtle;                            // For React Native support, see README.
-    if (!s) return err('etc.hmacSha256Async not set');  // Uses webcrypto built-in cryptography.
+    if (!s) return err('etc.hmacSha256Async or crypto.subtle must be defined');  // Uses webcrypto built-in cryptography.
     const k = await s.importKey('raw', key, {name:'HMAC',hash:{name:'SHA-256'}}, false, ['sign']);
     return u8n(await s.sign('HMAC', k, concatB(...msgs)));
   },
