@@ -1,4 +1,4 @@
-import { deepStrictEqual, throws } from 'assert';
+import { deepStrictEqual, throws } from 'node:assert';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import * as items from '../index.js';
