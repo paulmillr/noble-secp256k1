@@ -31,7 +31,9 @@ Curves are drop-in replacement and have more features: Common.js, Schnorr signat
 
 > `npm install @noble/secp256k1`
 
-> `deno add @noble/secp256k1`
+> `deno add jsr:@noble/secp256k1`
+
+> `deno doc jsr:@noble/secp256k1` # command-line documentation
 
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
