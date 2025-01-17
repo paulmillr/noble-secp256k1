@@ -3,7 +3,8 @@ on:
   - push
   - pull_request
 jobs:
-  node_polyfill: Node v${{ matrix.node }}
+  node_polyfill:
+    name: Node v${{ matrix.node }}
     runs-on: ubuntu-24.04-arm
     strategy:
       matrix:
