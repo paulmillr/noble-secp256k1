@@ -5,6 +5,6 @@ on:
 jobs:
   test-js:
     name: "JS v0.2.2" # v0.2.2 == commit below
-    uses: paulmillr/jsbt/.github/workflows/test-js.yml@f8ffe1674d6372863c9e3e24247dad0812d0f320
+    uses: paulmillr/jsbt/.github/workflows/test-js.yml@12b09585360ade2d674d23faf46f5411f91f80ee
     with:
       skip-node18: true
