@@ -10,7 +10,7 @@ jobs:
       MSHOULD_FAST: 1
     strategy:
       matrix: # LTS on Jan 2025. Hardcoded is more secure
-        node: [18.20.5, 20.18.1, 22.13.0]
+        node: [20.18.1, 22.13.0]
     steps:
       - uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2 # v4
         with:
