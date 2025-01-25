@@ -51,9 +51,9 @@ import * as secp from "@noble/secp256k1";
   const signature = await secp.signAsync(msgHash, privKey); // Sync methods below
   const isValid = secp.verify(signature, msgHash, pubKey);
 
-  const alicesPubkey = secp.getPublicKey(secp.utils.randomPrivateKey());
-  secp.getSharedSecret(privKey, alicesPubkey); // Elliptic curve diffie-hellman
-  signature.recoverPublicKey(msgHash); // Public key recovery
+  const alicesPub = secp.getPublicKey(secp.utils.randomPrivateKey());
+  const shared = secp.getSharedSecret(privKey, alicesPub); // Diffie-Hellman
+  const pub2 = signature.recoverPublicKey(msgHash); // Public key recovery
 })();
 ```
 
