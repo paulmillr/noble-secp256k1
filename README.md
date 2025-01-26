@@ -38,15 +38,14 @@ Curves are drop-in replacement and have more features: Common.js, Schnorr signat
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
 ```js
-import * as secp from "@noble/secp256k1";
+import * as secp from '@noble/secp256k1';
 // import * as secp from "https://unpkg.com/@noble/secp256k1"; // Unpkg
 (async () => {
   // Uint8Arrays or hex strings are accepted:
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
   const privKey = secp.utils.randomPrivateKey(); // Secure random private key
   // sha256 of 'hello world'
-  const msgHash =
-    "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+  const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
   const pubKey = secp.getPublicKey(privKey);
   const signature = await secp.signAsync(msgHash, privKey); // Sync methods below
   const isValid = secp.verify(signature, msgHash, pubKey);
@@ -62,26 +61,23 @@ Additional polyfills for some environments:
 ```ts
 // 1. Enable synchronous methods.
 // Only async methods are available by default, to keep the library dependency-free.
-import { hmac } from "@noble/hashes/hmac";
-import { sha256 } from "@noble/hashes/sha256";
-secp.etc.hmacSha256Sync = (k, ...m) =>
-  hmac(sha256, k, secp.etc.concatBytes(...m));
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
+secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
 // Sync methods can be used now:
 // secp.sign(msgHash, privKey);
 
 // 2. node.js 18 and older, requires polyfilling globalThis.crypto
-import { webcrypto } from "node:crypto";
+import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 // 3. React Native needs crypto.getRandomValues polyfill and sha512
-import "react-native-get-random-values";
-import { hmac } from "@noble/hashes/hmac";
-import { sha256 } from "@noble/hashes/sha256";
-secp.etc.hmacSha256Sync = (k, ...m) =>
-  hmac(sha256, k, secp.etc.concatBytes(...m));
-secp.etc.hmacSha256Async = (k, ...m) =>
-  Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
+import 'react-native-get-random-values';
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
+secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
+secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
 ```
 
 ## API
@@ -241,45 +237,38 @@ CURVE; // curve prime; order; equation params, generator coordinates
 ## Security
 
 The module is production-ready.
-While [noble-curves](https://github.com/paulmillr/noble-curves) provide improved security,
-we cross-test against curves.
 
-1. The current version has not been independently audited. It is a rewrite of v1, which has been audited by cure53 in Apr 2021:
-   [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
-2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
-   you can also run the fuzzer by yourself.
+We cross-test against sister project [noble-curves](https://github.com/paulmillr/noble-curves), which was audited and provides improved security.
+
+- The current version has not been independently audited. It is a rewrite of v1, which has been audited by cure53 in Apr 2021:
+  [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
+- It's being fuzzed [in a separate repository](https://github.com/paulmillr/fuzzing)
 
 ### Constant-timeness
 
-_JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard to
-achieve [timing attack](https://en.wikipedia.org/wiki/Timing_attack) resistance
+We're targetting algorithmic constant time. _JIT-compiler_ and _Garbage Collector_ make "constant time"
+extremely hard to achieve [timing attack](https://en.wikipedia.org/wiki/Timing_attack) resistance
 in a scripting language. Which means _any other JS library can't have
 constant-timeness_. Even statically typed Rust, a language without GC,
 [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security)
 for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones.
-Use low-level libraries & languages. Nonetheless we're targetting algorithmic constant time.
+Use low-level libraries & languages.
 
 ### Supply chain security
 
-1. **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures.
-2. **Releases** are transparent and built on GitHub CI. Make sure to verify [provenance](https://docs.npmjs.com/generating-provenance-statements) logs
-3. **Rare releasing** is followed.
-   The less often it is done, the less code dependents would need to audit
-4. **Dependencies** are minimal:
-   - All deps are prevented from automatic updates and have locked-down version ranges. Every update is checked with `npm-diff`
-   - Updates themselves are rare, to ensure rogue updates are not catched accidentally
-5. devDependencies are only used if you want to contribute to the repo. They are disabled for end-users:
-   - [noble-hashes](https://github.com/paulmillr/noble-hashes) is used, by the same author, to provide hashing functionality tests
-   - micro-bmark and micro-should are developed by the same author and follow identical security practices
-   - fast-check (property-based testing) and typescript are used for code quality, vector generation and ts compilation.
-     The packages are big, which makes it hard to audit their source code thoroughly and fully
+- **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures
+- **Releases** are transparent and built on GitHub CI. Make sure to verify [provenance](https://docs.npmjs.com/generating-provenance-statements) logs
+- **Rare releasing** is followed to ensure less re-audit need for end-users
+- **Dependencies** are minimized and locked-down: any dependency could get hacked and users will be downloading malware with every install.
+  - We make sure to use as few dependencies as possible
+  - Automatic dep updates are prevented by locking-down version ranges; diffs are checked with `npm-diff`
+- **Dev Dependencies** are disabled for end-users; they are only used to develop / build the source code
 
-We consider infrastructure attacks like rogue NPM modules very important;
-that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings.
-If your app uses 500 dependencies, any dep could get hacked and you'll be
-downloading malware with every install. Our goal is to minimize this attack vector.
+For this package, there are 0 dependencies; and a few dev dependencies:
 
-If you see anything unusual: investigate and report.
+- [noble-hashes](https://github.com/paulmillr/noble-hashes) provides cryptographic hashing functionality
+- micro-bmark, micro-should and jsbt are used for benchmarking / testing / build tooling and developed by the same author
+- prettier, fast-check and typescript are used for code quality / test generation / ts compilation. It's hard to audit their source code thoroughly and fully because of their size
 
 ### Randomness
 
@@ -288,6 +277,18 @@ We're deferring to built-in
 which is considered cryptographically secure (CSPRNG).
 
 In the past, browsers had bugs that made it weak: it may happen again.
+Implementing a userspace CSPRNG to get resilient to the weakness
+is even worse: there is no reliable userspace source of quality entropy.
+
+### Quantum computers
+
+Cryptographically relevant quantum computer, if built, will allow to
+break elliptic curve cryptography (both ECDSA / EdDSA & ECDH) using Shor's algorithm.
+
+Consider switching to newer / hybrid algorithms, such as SPHINCS+. They are available in
+[noble-post-quantum](https://github.com/paulmillr/noble-post-quantum).
+
+NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https://nvlpubs.nist.gov/nistpubs/ir/2024/NIST.IR.8547.ipd.pdf). Australian ASD prohibits it [after 2030](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-cryptography).
 
 ## Speed
 
