@@ -229,6 +229,7 @@ const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => {
 class Signature {
   constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
     this.assertValidity();                              // recovery bit is optional when
+    Object.freeze(this);
   }                                                     // constructed outside.
   /** Create signature from 64b compact (r || s) representation. */
   static fromCompact(hex: Hex): Signature {
@@ -526,5 +527,8 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export { getPublicKey, sign, signAsync, verify, CURVE,  // Remove the export to easily use in REPL
-  getSharedSecret, etc, utils, Point as ProjectivePoint, Signature } // envs like browser console
+export {
+  CURVE, etc, getPublicKey, // Remove the export to easily use in REPL
+  getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify
+}; // envs like browser console
+

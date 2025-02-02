@@ -163,5 +163,5 @@ declare const utils: {
     randomPrivateKey: () => Bytes;
     precompute: (w?: number, p?: Point) => Point;
 };
-export { getPublicKey, sign, signAsync, verify, CURVE, // Remove the export to easily use in REPL
-getSharedSecret, etc, utils, Point as ProjectivePoint, Signature };
+export { CURVE, etc, getPublicKey, // Remove the export to easily use in REPL
+getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };

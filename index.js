@@ -265,6 +265,7 @@ class Signature {
         this.s = s;
         this.recovery = recovery;
         this.assertValidity(); // recovery bit is optional when
+        Object.freeze(this);
     } // constructed outside.
     /** Create signature from 64b compact (r || s) representation. */
     static fromCompact(hex) {
@@ -598,5 +599,5 @@ const wNAF = (n) => {
     }
     return { p, f }; // return both real and fake points for JIT
 }; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export { getPublicKey, sign, signAsync, verify, CURVE, // Remove the export to easily use in REPL
-getSharedSecret, etc, utils, Point as ProjectivePoint, Signature }; // envs like browser console
+export { CURVE, etc, getPublicKey, // Remove the export to easily use in REPL
+getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify }; // envs like browser console
