@@ -47,7 +47,13 @@ const aPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 export interface AffinePoint { x: bigint, y: bigint }
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 class Point {
-  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {
+  readonly px: bigint;
+  readonly py: bigint;
+  readonly pz: bigint
+  constructor(px: bigint, py: bigint, pz: bigint) {
+    this.px = px;
+    this.py = py;
+    this.pz = pz;
     Object.freeze(this);
   }
   /** Generator / base point */
@@ -227,7 +233,13 @@ const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => {
 }
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
-  constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
+  readonly r: bigint;
+  readonly s: bigint;
+  readonly recovery?: number;
+  constructor(r: bigint, s: bigint, recovery?: number) {
+    this.r = r;
+    this.s = s;
+    if (recovery != null) this.recovery = recovery;
     this.assertValidity();                              // recovery bit is optional when
     Object.freeze(this);
   }                                                     // constructed outside.
@@ -278,7 +290,7 @@ declare const globalThis: Record<string, any> | undefined; // Typescript symbol 
 const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
+type Sha256FnSync = undefined | ((...msgs: Bytes[]) => Bytes);
 type OptS = { lowS?: boolean; extraEntropy?: boolean | Hex; };
 type OptV = { lowS?: boolean };
 const optS: OptS = { lowS: true }; // opts for sign()
@@ -348,9 +360,9 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
     };
   } else {
     const h = (...b: Bytes[]) => {                      // asynchronous=false; same, but synchronous
-      const f = _hmacSync;
-      if (!f) err('etc.hmacSha256Sync not set');
-      return f!(k, v, ...b);                            // hmac(k)(v, ...values)
+      const fn = etc.hmacSha256Sync;
+      if (typeof fn !== 'function') err('etc.hmacSha256Sync not set');
+      return fn!(k, v, ...b);   // hmac(k)(v, ...values)
     };
     const reseed = (seed = u8n()) => {                  // HMAC-DRBG reseed() function. Steps D-G
       k = h(u8n([0x00]), seed);                         // k = hmac(k || v || 0x00 || seed)
@@ -426,7 +438,7 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = optV): boo
   if (!sig_) return false;
   const { r, s } = sig_;
   if (lowS && high(s)) return false;                    // lowS bans sig.s >= CURVE.n/2
-  let R: AffinePoint;
+  let R: AffinePoint;                                   // Actual verification code begins here
   try {
     const is = inv(s, N);                               // s^-1
     const u1 = M(h * is, N);                            // u1 = hs^-1 mod n
@@ -454,8 +466,14 @@ const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compli
   const num = M(b2n(hash), N - 1n);                     // takes n+8 bytes
   return n2b(num + 1n);                                 // returns (hash mod n-1)+1
 }
+const crRandom = (len = 32): Bytes => {                 // CSPRNG (random number generator)
+  const c = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
+  if (!c || !c.getRandomValues) err('crypto.getRandomValues must be defined');
+  return c.getRandomValues(u8n(len));
+};
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
+  au8: au8 as (a: unknown, l?: number) => Bytes,
   hexToBytes: h2b as (hex: string) => Bytes,
   bytesToHex: b2h as (bytes: Bytes) => string,
   concatBytes: concatB as (...arrs: Bytes[]) => Bytes,
@@ -464,19 +482,15 @@ const etc = {
   mod: M as (a: bigint, md?: bigint) => bigint,
   invert: inv as (num: bigint, md?: bigint) => bigint,  // math utilities
   hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
-    const c = cr();                                     // async HMAC-SHA256, no sync built-in!
-    const s = c && c.subtle;                            // For React Native support, see README.
-    if (!s) return err('etc.hmacSha256Async or crypto.subtle must be defined');  // Uses webcrypto built-in cryptography.
+    const s = subtle();
     const k = await s.importKey('raw', key, {name:'HMAC',hash:{name:'SHA-256'}}, false, ['sign']);
     return u8n(await s.sign('HMAC', k, concatB(...msgs)));
   },
-  hmacSha256Sync: _hmacSync as HmacFnSync,              // For TypeScript. Actual logic is below
+  hmacSha256Sync: undefined as HmacFnSync,              // For TypeScript. Actual logic is below
   hashToPrivateKey: hashToPrivateKey as (hash: Hex) => Bytes,
-  randomBytes: (len = 32): Bytes => {                   // CSPRNG (random number generator)
-    const crypto = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
-    if (!crypto || !crypto.getRandomValues) err('crypto.getRandomValues must be defined');
-    return crypto.getRandomValues(u8n(len));
-  },
+  sqrt: sqrt satisfies (n: bigint) => bigint as (n: bigint) => bigint,
+  err: err satisfies (m?: string) => never as (m?: string) => never,
+  randomBytes: crRandom satisfies (len?: number) => Bytes as (len?: number) => Bytes,
 };
 /** Curve-specific utilities for private keys. */
 const utils = {                                         // utilities
@@ -485,9 +499,10 @@ const utils = {                                         // utilities
   randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 16)), // FIPS 186 B.4.1.
   precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 };
-Object.defineProperties(etc, { hmacSha256Sync: {        // Allow setting it once, ignore then
-  configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
-} });
+const subtle = () => {
+  const c = cr();
+  return c && c.subtle || err('crypto.subtle must be defined');
+}
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),
   const points: Point[] = [];                           // 10x sign(), 2x verify(). To achieve this,
@@ -531,4 +546,196 @@ export {
   CURVE, etc, getPublicKey, // Remove the export to easily use in REPL
   getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify
 }; // envs like browser console
+
+
+
+// import { type Bytes, type Hex, type PrivKey, CURVE, etc, utils as eutils, ProjectivePoint as Point } from './index.ts';
+
+// const { p: P, n: N } = CURVE;
+// const { mod: M, sqrt, concatBytes: concatB, numberToBytesBE: n2b, bytesToNumberBE: num, au8, err } = etc;
+// const { normPrivateKeyToScalar: toPriv } = eutils;
+// const G = Point.BASE;
+
+// Schnorr signatures are superior to ECDSA from above. Below is Schnorr-specific BIP0340 code.
+// https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki
+
+const etc_schnorr = {
+  sha256Async: async (...msgs: Bytes[]): Promise<Bytes> => {
+    return u8n(await subtle().digest("SHA-256", concatB(...msgs)));
+  },
+  sha256Sync: undefined as Sha256FnSync,
+  randomBytes: crRandom,
+};
+
+const utf8 = (m: string) => Uint8Array.from(m, (c) => c.charCodeAt(0))
+const taggedHash = (tag: string, ...messages: Bytes[]): Bytes => {
+  const fn = etc_schnorr.sha256Sync;
+  if (typeof fn !== 'function') return err('etc_schnorr.sha256Sync not set');
+  const tagH = fn(utf8(tag));
+  return fn(concatB(tagH, tagH, ...messages));
+};
+const taggedHashAsync = async (tag: string, ...messages: Bytes[]): Promise<Bytes> => {
+  const fn = etc_schnorr.sha256Async;
+  const tagH = await fn(utf8(tag));
+  return await fn(concatB(tagH, tagH, ...messages));
+};
+
+// ECDSA compact points are 33-byte. Schnorr is 32: we strip first byte 0x02 or 0x03
+const pointToBytes = (point: Point): Uint8Array<ArrayBuffer> => point.toRawBytes(true).slice(1);
+const modP = (x: bigint) => M(x, P);
+const modN = (x: bigint) => M(x, N);
+const hasEvenY = (p: Point) => (p.y & 1n) !== 1n;
+// Calculate point, scalar and bytes
+function schnorrGetExtPubKey(priv: PrivKey) {
+  let d_ = toPriv(priv); // same method executed in fromPrivateKey
+  let p = Point.fromPrivateKey(d_); // P = d'⋅G; 0 < d' < n check is done inside
+  const scalar = hasEvenY(p) ? d_ : modN(-d_);
+  return { scalar: scalar, bytes: pointToBytes(p) };
+}
+function inRange(num: bigint, max: bigint): boolean {
+  return 1n <= num && num < max; // 1..num..max
+}
+/**
+ * lift_x from BIP340. Convert 32-byte x coordinate to elliptic curve point.
+ * @returns valid point checked for being on-curve
+ */
+function lift_x(x: bigint): Point {
+  if (!inRange(x, P)) err('expected x >= p'); // Fail if x ≥ p.
+  const xx = modP(x * x);
+  const c = modP(xx * x + BigInt(7)); // Let c = x³ + 7 mod p.
+  let y = sqrt(c); // Let y = c^(p+1)/4 mod p.
+  if (y % 2n !== 0n) y = modP(-y); // Return the unique point P such that x(P) = x and
+  const p = new Point(x, y, 1n); // y(P) = y if y mod 2 = 0 or y(P) = p-y otherwise.
+  p.assertValidity();
+  return p;
+}
+const TG = {
+  cl: 'BIP0340/challenge',
+  aux: 'BIP0340/aux',
+  nonce: 'BIP0340/nonce'
+} as const;
+const challenge = (...args: Bytes[]): bigint =>
+  modN(b2n(taggedHash(TG.cl, ...args)));
+const challengeAsync = async (...args: Bytes[]): Promise<bigint> =>
+  modN(b2n(await taggedHashAsync(TG.cl, ...args)));
+
+/**
+ * Schnorr public key is just `x` coordinate of Point as per BIP340.
+ */
+function getPublicKeySch(privateKey: Hex): Bytes {
+  return schnorrGetExtPubKey(privateKey).bytes; // d'=int(sk). Fail if d'=0 or d'≥n. Ret bytes(d'⋅G)
+}
+
+// Common preparation function for both sync and async signing
+function prepareSchnorrSign(message: Bytes, privateKey: PrivKey, auxRand: Bytes) {
+  const m = au8(message);
+  const { bytes: px, scalar: d } = schnorrGetExtPubKey(privateKey); 
+  const a = au8(auxRand, 32);
+  return { m, px, d, a };
+}
+
+function extractK(rand: Bytes) {
+  const k_ = modN(b2n(rand)); // Let k' = int(rand) mod n
+  if (k_ === 0n) err('sign failed: k is zero'); // Fail if k' = 0.
+  const res = schnorrGetExtPubKey(k_); // Let R = k'⋅G.
+  return { rx: res.bytes, k: res.scalar }
+}
+
+// Common signature creation helper
+function createSchnorrSignature(k: bigint, rx: Bytes, e: bigint, d: bigint): Bytes {
+  const sig = new Uint8Array(64);
+  sig.set(rx, 0);
+  sig.set(n2b(modN(k + e * d)), 32);
+  return sig;
+}
+
+/**
+ * Creates Schnorr signature as per BIP340. Verifies itself before returning anything.
+ * auxRand is optional and is not the sole source of k generation: bad CSPRNG won't be dangerous.
+ */
+function signSch(
+  message: Bytes,
+  privateKey: PrivKey,
+  auxRand: Bytes = etc_schnorr.randomBytes(32)
+): Bytes {
+  const { m, px, d, a } = prepareSchnorrSign(message, privateKey, auxRand);
+  const aux = taggedHash(TG.aux, a);
+  const t = n2b(d ^ b2n(aux)); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+  const rand = taggedHash(TG.nonce, t, px, m); // Let rand = hash/nonce(t || bytes(P) || m)
+  const { rx, k } = extractK(rand);
+  const e = challenge(rx, px, m); // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
+  const sig = createSchnorrSignature(k, rx, e, d);
+  if (!verifySch(sig, m, px)) err('invalid signature produced');
+  return sig;
+}
+async function signAsyncSch(message: Bytes, privateKey: PrivKey, auxRand: Bytes = etc_schnorr.randomBytes(32)): Promise<Bytes> {
+  const { m, px, d, a } = prepareSchnorrSign(message, privateKey, auxRand);
+  const aux = await taggedHashAsync(TG.aux, a);
+  const t = n2b(d ^ b2n(aux)); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+  const rand = await taggedHashAsync(TG.nonce, t, px, m); // Let rand = hash/nonce(t || bytes(P) || m)
+  const { rx, k } = extractK(rand);
+  const e = await challengeAsync(rx, px, m); // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
+  const sig = createSchnorrSignature(k, rx, e, d);
+  // If Verify(bytes(P), m, sig) (see below) returns failure, abort
+  if (!(await verifyAsyncSch(sig, m, px))) err('invalid signature produced');
+  return sig;
+}
+
+function prepVerif(signature: Bytes, message: Bytes, publicKey: Bytes) {
+  const sig = au8(signature, 64);
+  const m = au8(message);
+  const pub = au8(publicKey, 32);
+  const P = lift_x(b2n(pub)); // P = lift_x(int(pk)); fail if that fails
+  const r = b2n(sig.subarray(0, 32)); // Let r = int(sig[0:32]); fail if r ≥ p.
+  if (!inRange(r, CURVE.p)) return false;
+  const s = b2n(sig.subarray(32, 64)); // Let s = int(sig[32:64]); fail if s ≥ n.
+  if (!inRange(s, N)) return false;
+  const input = concatB(n2b(r), pointToBytes(P), m);
+  return { input, P, r, s }
+}
+
+function endVerif(P: Point, r: bigint, s: bigint, e: bigint) {
+  const R = G.mulAddQUns(P, s, modN(-e)); // R = s⋅G - e⋅P
+  if (!R || !hasEvenY(R) || R.toAffine().x !== r) return false; // -eP == (n-e)P
+  return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
+}
+
+/**
+ * Verifies Schnorr signature.
+ * Will swallow errors & return false except for initial type validation of arguments.
+ */
+function verifySch(signature: Bytes, message: Bytes, publicKey: Bytes): boolean {
+  try {
+    const obj = prepVerif(signature, message, publicKey) || err('failed');
+    const { input, P, r, s } = obj
+    const e = challenge(input); // int(challenge(bytes(r)||bytes(P)||m))%n
+    return endVerif(P, r, s, e);
+  } catch (error) {
+    return false;
+  }
+}
+async function verifyAsyncSch(signature: Bytes, message: Bytes, publicKey: Bytes): Promise<boolean> {
+  try {
+    const obj = prepVerif(signature, message, publicKey) || err('failed');
+    const { input, P, r, s } = obj
+    const e = await challengeAsync(input); // int(challenge(bytes(r)||bytes(P)||m))%n
+    return endVerif(P, r, s, e);
+  } catch (error) {
+    return false;
+  }
+}
+
+export const schnorr: {
+  getPublicKey: typeof getPublicKeySch;
+  sign: typeof signSch;
+  verify: typeof verifySch;
+  signAsync: typeof signAsyncSch;
+  verifyAsync: typeof verifyAsyncSch;
+} = {
+  getPublicKey: getPublicKeySch,
+  sign: signSch,
+  verify: verifySch,
+  signAsync: signAsyncSch,
+  verifyAsync: verifyAsyncSch,
+}
 

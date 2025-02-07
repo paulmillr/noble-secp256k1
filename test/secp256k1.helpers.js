@@ -1,9 +1,10 @@
-import * as secp_1 from '../index.js';
-export { secp_1 as secp };
-import * as secp256k1 from '../index.js';
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
+import * as secp256k1 from '../index.js';
+import * as secp_1 from '../index.js';
+export { secp_1 as secp };
 secp256k1.etc.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.etc.concatBytes(...msgs));
+secp256k1.etc.sha256Sync = (...msgs) => sha256(...msgs);
 const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc;
 export const DER = {
     // asn.1 DER encoding utils
