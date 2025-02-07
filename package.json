@@ -5,7 +5,10 @@
   "files": [
     "index.js",
     "index.d.ts",
-    "index.ts"
+    "index.ts",
+    "schnorr.js",
+    "schnorr.d.ts",
+    "schnorr.ts"    
   ],
   "type": "module",
   "main": "index.js",
@@ -37,7 +40,7 @@
     "fast-check": "3.0.0",
     "micro-bmark": "0.4.0",
     "micro-should": "0.5.1",
-    "typescript": "5.5.2"
+    "typescript": "5.8.0-beta"
   },
   "keywords": [
     "secp256k1",

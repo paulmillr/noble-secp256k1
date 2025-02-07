@@ -4,8 +4,11 @@
     "outDir": ".",
     "sourceMap": false,
     "declarationMap": false,
-    "isolatedDeclarations": true
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true // TS 5.8+
   },
-  "include": ["index.ts"],
+  "include": ["index.ts", "schnorr.ts"],
   "exclude": ["node_modules", "lib"]
 }
