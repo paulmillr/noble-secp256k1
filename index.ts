@@ -278,8 +278,11 @@ const i2o = (num: bigint): Bytes => n2b(num);           // int to octets
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs with crypto
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+const subtle = () => {
+  const c = cr();
+  return c && c.subtle || err('crypto.subtle must be defined');
+};
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
-let _hmacSync: HmacFnSync;    // Can be redefined by use in utils; built-ins don't provide it
 type OptS = { lowS?: boolean; extraEntropy?: boolean | Hex; };
 type OptV = { lowS?: boolean };
 const optS: OptS = { lowS: true }; // opts for sign()
@@ -349,9 +352,9 @@ function hmacDrbg<T>(asynchronous: boolean) { // HMAC-DRBG async
     };
   } else {
     const h = (...b: Bytes[]) => {                      // asynchronous=false; same, but synchronous
-      const f = _hmacSync;
-      if (!f) err('etc.hmacSha256Sync not set');
-      return f!(k, v, ...b);                            // hmac(k)(v, ...values)
+      const fn = etc.hmacSha256Sync;
+      if (typeof fn !== 'function') err('etc.hmacSha256Sync not set');
+      return fn!(k, v, ...b);                            // hmac(k)(v, ...values)
     };
     const reseed = (seed = u8n(0)) => {                 // HMAC-DRBG reseed() function. Steps D-G
       k = h(u8fr([0x00]), seed);                        // k = hmac(k || v || 0x00 || seed)
@@ -427,7 +430,7 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = optV): boo
   if (!sig_) return false;
   const { r, s } = sig_;
   if (lowS && high(s)) return false;                    // lowS bans sig.s >= CURVE.n/2
-  let R: AffinePoint;
+  let R: AffinePoint;                                   // Actual verification code begins here
   try {
     const is = inv(s, N);                               // s^-1
     const u1 = M(h * is, N);                            // u1 = hs^-1 mod n
@@ -454,7 +457,7 @@ const hashToPrivateKey = (hash: Hex): Bytes => {        // FIPS 186 B.4.1 compli
   if (hash.length < fLen + 8 || hash.length > 1024) err('expected 40-1024b'); // being neglible.
   const num = M(b2n(hash), N - 1n);                     // takes n+8 bytes
   return n2b(num + 1n);                                 // returns (hash mod n-1)+1
-}
+};
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
   hexToBytes: h2b as (hex: string) => Bytes,
@@ -465,13 +468,11 @@ const etc = {
   mod: M as (a: bigint, md?: bigint) => bigint,
   invert: inv as (num: bigint, md?: bigint) => bigint,  // math utilities
   hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
-    const c = cr();                                     // async HMAC-SHA256, no sync built-in!
-    const s = c && c.subtle;                            // For React Native support, see README.
-    if (!s) return err('etc.hmacSha256Async or crypto.subtle must be defined');  // Uses webcrypto built-in cryptography.
+    const s = subtle();
     const k = await s.importKey('raw', key, {name:'HMAC',hash:{name:'SHA-256'}}, false, ['sign']);
     return u8n(await s.sign('HMAC', k, concatB(...msgs)));
   },
-  hmacSha256Sync: _hmacSync as HmacFnSync,              // For TypeScript. Actual logic is below
+  hmacSha256Sync: undefined as HmacFnSync,              // For TypeScript. Actual logic is below
   hashToPrivateKey: hashToPrivateKey as (hash: Hex) => Bytes,
   randomBytes: (len = 32): Bytes => {                   // CSPRNG (random number generator)
     const crypto = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
@@ -486,9 +487,6 @@ const utils = {                                         // utilities
   randomPrivateKey: (): Bytes => hashToPrivateKey(etc.randomBytes(fLen + 16)), // FIPS 186 B.4.1.
   precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 };
-Object.defineProperties(etc, { hmacSha256Sync: {        // Allow setting it once, ignore then
-  configurable: false, get() { return _hmacSync; }, set(f) { if (!_hmacSync) _hmacSync = f; },
-} });
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),
   const points: Point[] = [];                           // 10x sign(), 2x verify(). To achieve this,
