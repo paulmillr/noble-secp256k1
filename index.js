@@ -26,8 +26,9 @@ const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.cons
 const au8 = (a, l) => // assert is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array expected') : a;
-const u8n = (data) => new Uint8Array(data); // creates Uint8Array
-const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
+const u8n = (len) => new Uint8Array(len); // creates Uint8Array
+const u8fr = (buf) => Uint8Array.from(buf);
+const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8fr(au8(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;
@@ -362,12 +363,12 @@ function hmacDrbg(asynchronous) {
     const _e = 'drbg: tried 1000 values';
     if (asynchronous) { // asynchronous=true
         const h = (...b) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
-        const reseed = async (seed = u8n()) => {
-            k = await h(u8n([0x00]), seed); // k = hmac(K || V || 0x00 || seed)
+        const reseed = async (seed = u8n(0)) => {
+            k = await h(u8fr([0x00]), seed); // k = hmac(K || V || 0x00 || seed)
             v = await h(); // v = hmac(K || V)
             if (seed.length === 0)
                 return;
-            k = await h(u8n([0x01]), seed); // k = hmac(K || V || 0x01 || seed)
+            k = await h(u8fr([0x01]), seed); // k = hmac(K || V || 0x01 || seed)
             v = await h(); // v = hmac(K || V)
         };
         const gen = async () => {
@@ -393,12 +394,12 @@ function hmacDrbg(asynchronous) {
                 err('etc.hmacSha256Sync not set');
             return f(k, v, ...b); // hmac(k)(v, ...values)
         };
-        const reseed = (seed = u8n()) => {
-            k = h(u8n([0x00]), seed); // k = hmac(k || v || 0x00 || seed)
+        const reseed = (seed = u8n(0)) => {
+            k = h(u8fr([0x00]), seed); // k = hmac(k || v || 0x00 || seed)
             v = h(); // v = hmac(k || v)
             if (seed.length === 0)
                 return;
-            k = h(u8n([0x01]), seed); // k = hmac(k || v || 0x01 || seed)
+            k = h(u8fr([0x01]), seed); // k = hmac(k || v || 0x01 || seed)
             v = h(); // v = hmac(k || v)
         };
         const gen = () => {
