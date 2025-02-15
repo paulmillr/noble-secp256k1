@@ -4,6 +4,7 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 
 - ✍️ [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
   signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
+- 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 📦 Pure ESM, can be imported without transpilers
 - 🪶 4KB gzipped, 530 lines of code
@@ -128,8 +129,8 @@ which means you'll need to do something like `sha256(message)` before signing.
    Default `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
 2. `extraEntropy: true` enables hedged signatures with improved protection against fault attacks
    - Check out blog post
-[Deterministic signatures are not your friends](https://paulmillr.com/posts/deterministic-signatures/)
-and [spec draft](https://datatracker.ietf.org/doc/draft-irtf-cfrg-det-sigs-with-noise/)
+     [Deterministic signatures are not your friends](https://paulmillr.com/posts/deterministic-signatures/)
+     and [spec draft](https://datatracker.ietf.org/doc/draft-irtf-cfrg-det-sigs-with-noise/)
    - Follows section 3.6 of RFC6979:
    - No disadvantage: if an entropy generator is broken, sigs would be the same
      as they are without the option
