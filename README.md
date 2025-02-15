@@ -126,14 +126,13 @@ which means you'll need to do something like `sha256(message)` before signing.
 
 1. `lowS: false` allows to create malleable signatures, for compatibility with openssl.
    Default `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
-2. `extraEntropy: true` improves security by adding entropy, follows section 3.6 of RFC6979:
+2. `extraEntropy: true` enables hedged signatures with improved protection against fault attacks
+   - Check out blog post
+[Deterministic signatures are not your friends](https://paulmillr.com/posts/deterministic-signatures/)
+and [spec draft](https://datatracker.ietf.org/doc/draft-irtf-cfrg-det-sigs-with-noise/)
+   - Follows section 3.6 of RFC6979:
    - No disadvantage: if an entropy generator is broken, sigs would be the same
      as they are without the option
-   - It would help a lot in case there is an error somewhere in `k` gen.
-     Exposing `k` could leak private keys
-   - Sigs with extra entropy would have different `r` / `s`, which means they
-     would still be valid, but may break some test vectors if you're
-     cross-testing against other libs
 
 ### verify
 
