@@ -78,8 +78,8 @@ declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;
 declare class Signature {
     readonly r: bigint;
     readonly s: bigint;
-    readonly recovery?: number | undefined;
-    constructor(r: bigint, s: bigint, recovery?: number | undefined);
+    readonly recovery?: number;
+    constructor(r: bigint, s: bigint, recovery?: number);
     /** Create signature from 64b compact (r || s) representation. */
     static fromCompact(hex: Hex): Signature;
     assertValidity(): Signature;
@@ -144,6 +144,7 @@ declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: OptV) => 
 declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Bytes;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
+    au8: (a: unknown, l?: number) => Bytes;
     hexToBytes: (hex: string) => Bytes;
     bytesToHex: (bytes: Bytes) => string;
     concatBytes: (...arrs: Bytes[]) => Bytes;
@@ -154,6 +155,8 @@ declare const etc: {
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256Sync: HmacFnSync;
     hashToPrivateKey: (hash: Hex) => Bytes;
+    sqrt: (n: bigint) => bigint;
+    err: (m?: string) => never;
     randomBytes: (len?: number) => Bytes;
 };
 /** Curve-specific utilities for private keys. */
@@ -165,3 +168,26 @@ declare const utils: {
 };
 export { CURVE, etc, getPublicKey, // Remove the export to easily use in REPL
 getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };
+/**
+ * Schnorr public key is just `x` coordinate of Point as per BIP340.
+ */
+declare function getPublicKeySch(privateKey: Hex): Bytes;
+/**
+ * Creates Schnorr signature as per BIP340. Verifies itself before returning anything.
+ * auxRand is optional and is not the sole source of k generation: bad CSPRNG won't be dangerous.
+ */
+declare function signSch(message: Bytes, privateKey: PrivKey, auxRand?: Bytes): Bytes;
+declare function signAsyncSch(message: Bytes, privateKey: PrivKey, auxRand?: Bytes): Promise<Bytes>;
+/**
+ * Verifies Schnorr signature.
+ * Will swallow errors & return false except for initial type validation of arguments.
+ */
+declare function verifySch(signature: Bytes, message: Bytes, publicKey: Bytes): boolean;
+declare function verifyAsyncSch(signature: Bytes, message: Bytes, publicKey: Bytes): Promise<boolean>;
+export declare const schnorr: {
+    getPublicKey: typeof getPublicKeySch;
+    sign: typeof signSch;
+    verify: typeof verifySch;
+    signAsync: typeof signAsyncSch;
+    verifyAsync: typeof verifyAsyncSch;
+};
