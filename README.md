@@ -97,6 +97,8 @@ type Hex = Uint8Array | string;
 import { getPublicKey, utils, ProjectivePoint } from '@noble/secp256k1';
 const privKey = utils.randomPrivateKey();
 const pubKey33b = getPublicKey(privKey);
+
+// Variants
 const pubKey65b = getPublicKey(privKey, false);
 const pubKeyPoint = ProjectivePoint.fromPrivateKey(privKey);
 const samePoint = ProjectivePoint.fromHex(pubKeyPoint.toHex());
@@ -113,6 +115,7 @@ import { utf8ToBytes } from '@noble/hashes/utils';
 const msg = 'noble cryptography';
 const msgHash = sha256(utf8ToBytes(msg));
 const priv = secp.utils.randomPrivateKey();
+
 const sigA = secp.sign(msgHash, priv);
 
 // Variants
@@ -147,9 +150,8 @@ const msgHash = hex('736403f76264eccc1b77ba58dc8fc690e76b2b1532ba82c736a60f38620
 // const priv = 'd60937c2a1ece169888d4c48717dfcc0e1a7af915505823148cca11859210e9c';
 const pubKey = hex('020b6d70b68873ff8fd729adf5cf4bf45021b34236f991768249cba06b11136ec6');
 
+// verify
 const isValid = secp.verify(sig, msgHash, pubKey);
-
-// Variants
 const isValidLoose = secp.verify(sig, msgHash, pubKey, { lowS: false });
 ```
 

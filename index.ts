@@ -240,7 +240,7 @@ class Signature {
   constructor(r: bigint, s: bigint, recovery?: number) {
     this.r = r;
     this.s = s;
-    if (this.recovery != null) this.recovery = recovery;
+    if (recovery != null) this.recovery = recovery;
     this.assertValidity();                              // recovery bit is optional when
     Object.freeze(this);
   }                                                     // constructed outside.
