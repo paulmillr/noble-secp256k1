@@ -48,7 +48,13 @@ const aPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 export interface AffinePoint { x: bigint, y: bigint }
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 class Point {
-  constructor(readonly px: bigint, readonly py: bigint, readonly pz: bigint) {
+  readonly px: bigint;
+  readonly py: bigint;
+  readonly pz: bigint;
+  constructor(px: bigint, py: bigint, pz: bigint) {
+    this.px = px;
+    this.py = py;
+    this.pz = pz;
     Object.freeze(this);
   }
   /** Generator / base point */
@@ -228,7 +234,13 @@ const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => {
 }
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
-  constructor(readonly r: bigint, readonly s: bigint, readonly recovery?: number) {
+  readonly r: bigint;
+  readonly s: bigint;
+  readonly recovery?: number;
+  constructor(r: bigint, s: bigint, recovery?: number) {
+    this.r = r;
+    this.s = s;
+    if (this.recovery != null) this.recovery = recovery;
     this.assertValidity();                              // recovery bit is optional when
     Object.freeze(this);
   }                                                     // constructed outside.
