@@ -94,81 +94,100 @@ type Hex = Uint8Array | string;
 ### getPublicKey
 
 ```ts
-function getPublicKey(privateKey: Hex, isCompressed?: boolean): Uint8Array;
+import { getPublicKey, utils, ProjectivePoint } from '@noble/secp256k1';
+const privKey = utils.randomPrivateKey();
+const pubKey33b = getPublicKey(privKey);
+const pubKey65b = getPublicKey(privKey, false);
+const pubKeyPoint = ProjectivePoint.fromPrivateKey(privKey);
+const samePoint = ProjectivePoint.fromHex(pubKeyPoint.toHex());
 ```
 
-Generates 33-byte compressed public key from 32-byte private key.
-
-- If you need uncompressed 65-byte public key, set second argument to `false`.
-- Use `ProjectivePoint.fromPrivateKey(privateKey)` for Point instance.
-- Use `ProjectivePoint.fromHex(publicKey)` to convert Hex / Uint8Array into Point.
+Generates 33-byte compressed (default) or 65-byte public key from 32-byte private key.
 
 ### sign
 
 ```ts
-function sign(
-  messageHash: Hex, // message hash (not message) which would be signed
-  privateKey: Hex, // private key which will sign the hash
-  opts?: { lowS: boolean; extraEntropy: boolean | Hex } // optional params
-): Signature;
-function signAsync(
-  messageHash: Hex,
-  privateKey: Hex,
-  opts?: { lowS: boolean; extraEntropy: boolean | Hex }
-): Promise<Signature>;
+import * as secp from '@noble/secp256k1';
+import { sha256 } from '@noble/hashes/sha256';
+import { utf8ToBytes } from '@noble/hashes/utils';
+const msg = 'noble cryptography';
+const msgHash = sha256(utf8ToBytes(msg));
+const priv = secp.utils.randomPrivateKey();
+const sigA = secp.sign(msgHash, priv);
 
-sign(msgHash, privKey, { lowS: false }); // Malleable signature
-sign(msgHash, privKey, { extraEntropy: true }); // Improved security
+// Variants
+const sigB = await secp.signAsync(msgHash, priv);
+const sigC = secp.sign(msgHash, priv, { extraEntropy: true }); // hedged sig
+const sigC2 = secp.sign(msgHash, priv, { extraEntropy: Uint8Array.from([0xca, 0xfe]) });
+const sigD = secp.sign(msgHash, priv, { lowS: false }); // malleable sig
 ```
 
-Generates low-s deterministic-k RFC6979 ECDSA signature. Assumes hash of message,
+Generates low-s deterministic-k RFC6979 ECDSA signature. Requries hash of message,
 which means you'll need to do something like `sha256(message)` before signing.
 
-1. `lowS: false` allows to create malleable signatures, for compatibility with openssl.
-   Default `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
-2. `extraEntropy: true` enables hedged signatures with improved protection against fault attacks
-   - Check out blog post
-     [Deterministic signatures are not your friends](https://paulmillr.com/posts/deterministic-signatures/)
-     and [spec draft](https://datatracker.ietf.org/doc/draft-irtf-cfrg-det-sigs-with-noise/)
-   - Follows section 3.6 of RFC6979:
-   - No disadvantage: if an entropy generator is broken, sigs would be the same
-     as they are without the option
+`extraEntropy: true` enables hedged signatures. They incorporate
+extra randomness into RFC6979 (described in section 3.6),
+to provide additional protection against fault attacks.
+Check out blog post [Deterministic signatures are not your friends](https://paulmillr.com/posts/deterministic-signatures/).
+Even if their RNG is broken, they will fall back to determinism.
+
+Default behavior `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
+Setting `lowS: false` allows to create malleable signatures, which is default openssl behavior.
+Non-malleable signatures can still be successfully verified in openssl.
 
 ### verify
 
 ```ts
-function verify(
-  signature: Hex | Signature, // returned by the `sign` function
-  messageHash: Hex, // message hash (not message) that must be verified
-  publicKey: Hex, // public (not private) key
-  opts?: { lowS: boolean } // optional params; { lowS: true } by default
-): boolean;
+import * as secp from '@noble/secp256k1';
+const hex = secp.etc.hexToBytes;
+const sig = hex(
+  'ddc633c5b48a1a6725c31201892715dda3058350f7b444e89d32c33c90d9c9e218d7eaf02c2254e88c3b33d755394b08bcc7efd13df02338510b750b64572983'
+);
+const msgHash = hex('736403f76264eccc1b77ba58dc8fc690e76b2b1532ba82c736a60f3862082db3');
+// const priv = 'd60937c2a1ece169888d4c48717dfcc0e1a7af915505823148cca11859210e9c';
+const pubKey = hex('020b6d70b68873ff8fd729adf5cf4bf45021b34236f991768249cba06b11136ec6');
+
+const isValid = secp.verify(sig, msgHash, pubKey);
+
+// Variants
+const isValidLoose = secp.verify(sig, msgHash, pubKey, { lowS: false });
 ```
 
-Verifies ECDSA signature and ensures it has lowS (compatible with BTC/ETH).
-`lowS: false` turns off malleability check, but makes it OpenSSL-compatible.
+Verifies ECDSA signature.
+Default behavior `lowS: true` prohibits malleable signatures which have (`sig.s >= CURVE.n/2n`) and
+is compatible with BTC / ETH.
+Setting `lowS: false` allows to create signatures, which is default openssl behavior.
 
 ### getSharedSecret
 
 ```ts
-function getSharedSecret(
-  privateKeyA: Uint8Array | string, // Alices's private key
-  publicKeyB: Uint8Array | string, // Bob's public key
-  isCompressed = true // optional arg. (default) true=33b key, false=65b.
-): Uint8Array;
+import * as secp from '@noble/secp256k1';
+const bobsPriv = secp.utils.randomPrivateKey();
+const alicesPub = secp.getPublicKey(secp.utils.randomPrivateKey());
+
+// ECDH between Alice and Bob
+const shared33b = secp.getSharedSecret(bobsPriv, alicesPub);
+const shared65b = secp.getSharedSecret(bobsPriv, alicesPub, false);
+const sharedPoint = secp.ProjectivePoint.fromHex(alicesPub).multiply(bobsPriv);
 ```
 
 Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between
 key A and different key B.
 
-Use `ProjectivePoint.fromHex(publicKeyB).multiply(privateKeyA)` for Point instance
-
 ### recoverPublicKey
 
 ```ts
-signature.recoverPublicKey(
-  msgHash: Uint8Array | string
-): Uint8Array | undefined;
+import * as secp from '@noble/secp256k1';
+
+import { sha256 } from '@noble/hashes/sha256';
+import { utf8ToBytes } from '@noble/hashes/utils';
+const msg = 'noble cryptography';
+const msgHash = sha256(utf8ToBytes(msg));
+const priv = secp.utils.randomPrivateKey();
+const pub1 = secp.getPubkicKey(priv);
+const sig = secp.sign(msgHash, priv);
+
+const pub2 = sig.recoverPublicKey(msgHash);
 ```
 
 Recover public key from Signature instance with `recovery` bit set.
