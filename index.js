@@ -264,7 +264,8 @@ class Signature {
     constructor(r, s, recovery) {
         this.r = r;
         this.s = s;
-        this.recovery = recovery;
+        if (recovery != null)
+            this.recovery = recovery;
         this.assertValidity(); // recovery bit is optional when
         Object.freeze(this);
     } // constructed outside.

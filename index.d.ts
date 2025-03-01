@@ -78,8 +78,8 @@ declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;
 declare class Signature {
     readonly r: bigint;
     readonly s: bigint;
-    readonly recovery?: number | undefined;
-    constructor(r: bigint, s: bigint, recovery?: number | undefined);
+    readonly recovery?: number;
+    constructor(r: bigint, s: bigint, recovery?: number);
     /** Create signature from 64b compact (r || s) representation. */
     static fromCompact(hex: Hex): Signature;
     assertValidity(): Signature;
