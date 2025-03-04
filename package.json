@@ -14,9 +14,8 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc",
-    "build:min": "cd test/build; npm install; npm run terser",
-    "build:mingz": "npm run --silent build:min | gzip -c8",
-    "build:release": "npm run --silent build:min > test/build/noble-secp256k1.min.js; npm run --silent build:mingz > test/build/noble-secp256k1.min.js.gz",
+    "build:release": "npx jsbt esbuild test/build",
+    "build:smaller": "cd test/build; npm install terser@5.29.2; terser --ecma 2020 -m -c < ../../index.js",
     "test": "node test/index.js",
     "test:bun": "bun test/index.js",
     "test:deno": "deno --allow-env --allow-read test/index.js",
