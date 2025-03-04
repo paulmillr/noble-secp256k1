@@ -56,23 +56,20 @@ import * as secp from '@noble/secp256k1';
 })();
 ```
 
-Additional polyfills for some environments:
+### Enabling synchronous methods
+
+Only async methods are available by default, to keep the library dependency-free.
+To enable sync methods:
 
 ```ts
-// 1. Enable synchronous methods.
-// Only async methods are available by default, to keep the library dependency-free.
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
 secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
-// Sync methods can be used now:
-// secp.sign(msgHash, privKey);
+```
 
-// 2. node.js 18 and older, requires polyfilling globalThis.crypto
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (!globalThis.crypto) globalThis.crypto = webcrypto;
+### React Native: polyfill getRandomValues and sha512
 
-// 3. React Native needs crypto.getRandomValues polyfill and sha512
+```ts
 import 'react-native-get-random-values';
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
@@ -80,16 +77,24 @@ secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m
 secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
 ```
 
-## API
-
-There are 3 main methods: `getPublicKey(privateKey)`,
-`sign(messageHash, privateKey)` and
-`verify(signature, messageHash, publicKey)`.
-We accept Hex type everywhere:
+### nodejs v18 and older: polyfill webcrypto
 
 ```ts
-type Hex = Uint8Array | string;
+import { webcrypto } from 'node:crypto';
+// @ts-ignore
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 ```
+
+## API
+
+There are 3 main methods:
+
+* `getPublicKey(privateKey)`
+* `sign(messageHash, privateKey)` and `signAsync(messageHash, privateKey)`
+* `verify(signature, messageHash, publicKey)`
+
+Functions generally accept Uint8Array.
+There are optional utilities which convert hex strings, utf8 strings or bigints to u8a.
 
 ### getPublicKey
 
