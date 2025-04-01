@@ -500,14 +500,16 @@ const utils = {                                         // utilities
   precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8;                                            // Precomputes-related code. W = window size
+const scalarBits = 256;
+const pwindows = Math.ceil(scalarBits / W) + 1;         // W=8 33
+const pwindowSize = 2 ** (W - 1);                       // W=8 128
 const precompute = () => {                              // They give 12x faster getPublicKey(),
   const points: Point[] = [];                           // 10x sign(), 2x verify(). To achieve this,
-  const windows = 256 / W + 1;                          // app needs to spend 40ms+ to calculate
   let p = G, b = p;                                     // a lot of points related to base point G.
-  for (let w = 0; w < windows; w++) {                   // Points are stored in array and used
+  for (let w = 0; w < pwindows; w++) {                  // Points are stored in array and used
     b = p;                                              // any time Gx multiplication is done.
     points.push(b);                                     // They consume 16-32 MiB of RAM.
-    for (let i = 1; i < 2 ** (W - 1); i++) { b = b.add(p); points.push(b); }
+    for (let i = 1; i < pwindowSize; i++) { b = b.add(p); points.push(b); } // i=1, bc we skip 0
     p = b.double();                                     // Precomputes don't speed-up getSharedKey,
   }                                                     // which multiplies user point by scalar,
   return points;                                        // when precomputes are using base point
@@ -516,30 +518,29 @@ let Gpows: Point[] | undefined = undefined;             // precomputes for base 
 const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method.
                                                         // Compared to other point mult methods,
   const comp = Gpows || (Gpows = precompute());         // stores 2x less points using subtraction
-  const neg = (cnd: boolean, p: Point) => { let n = p.negate(); return cnd ? n : p; } // negate
+  const ctneg = (cnd: boolean, p: Point) => { let n = p.negate(); return cnd ? n : p; } // negate
   let p = I, f = G;                                     // f must be G, or could become I in the end
-  const windows = 1 + 256 / W;                          // W=8 17 windows
-  const wsize = 2 ** (W - 1);                           // W=8 128 window size
-  const mask = BigInt(2 ** W - 1);                      // W=8 will create mask 0b11111111
-  const maxNum = 2 ** W;                                // W=8 256
+  const pow_2_w = 2 ** W;                               // W=8 256
+  const maxNum = pow_2_w;                               // W=8 256
+  const mask = BigInt(pow_2_w - 1);                     // W=8 255 == mask 0b11111111
   const shiftBy = BigInt(W);                            // W=8 8
-  for (let w = 0; w < windows; w++) {
-    const off = w * wsize;
+  for (let w = 0; w < pwindows; w++) {
     let wbits = Number(n & mask);                       // extract W bits.
     n >>= shiftBy;                                      // shift number by W bits.
-    if (wbits > wsize) { wbits -= maxNum; n += 1n; }    // split if bits > max: +224 => 256-32
-    const off1 = off, off2 = off + Math.abs(wbits) - 1; // offsets, evaluate both
-    const cnd1 = w % 2 !== 0, cnd2 = wbits < 0;         // conditions, evaluate both
+    if (wbits > pwindowSize) {wbits -= maxNum; n += 1n;}// split if bits > max: +224 => 256-32
+    const off = w * pwindowSize;
+    const offF = off, offP = off + Math.abs(wbits) - 1; // offsets, evaluate both
+    const isEven = w % 2 !== 0, isNeg = wbits < 0;      // conditions, evaluate both
     if (wbits === 0) {
-      f = f.add(neg(cnd1, comp[off1]));                 // bits are 0: add garbage to fake point
+      f = f.add(ctneg(isEven, comp[offF]));             // bits are 0: add garbage to fake point
     } else {                                            //          ^ can't add off2, off2 = I
-      p = p.add(neg(cnd2, comp[off2]));                 // bits are 1: add to result point
+      p = p.add(ctneg(isNeg, comp[offP]));              // bits are 1: add to result point
     }
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
+// !! Remove the export to easily use in REPL / browser console
 export {
-  CURVE, etc, getPublicKey, // Remove the export to easily use in REPL
+  CURVE, etc, getPublicKey,
   getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify
-}; // envs like browser console
-
+};

@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "build:release": "npx jsbt esbuild test/build",
-    "build:smaller": "cd test/build; npm install terser@5.29.2; terser --ecma 2020 -m -c < ../../index.js",
+    "build:smaller": "cd test/build; npm install terser@5.29.2; npx terser --ecma 2020 -m -c < ../../index.js",
     "test": "node test/index.js",
     "test:bun": "bun test/index.js",
     "test:deno": "deno --allow-env --allow-read test/index.js",
