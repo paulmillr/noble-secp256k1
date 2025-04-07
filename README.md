@@ -10,7 +10,10 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
-Curves are drop-in replacement and have more features: Common.js, Schnorr signatures, DER encoding or support for different hash functions. To upgrade from v1 to v2, see [Upgrading](#upgrading).
+Curves are drop-in replacement and have more features:
+Schnorr, MSM, DER encoding, Endomorphism, custom point precomputes, prehashing, common.js.
+
+To upgrade from v1 to v2, see [Upgrading](#upgrading).
 
 ### This library belongs to _noble_ cryptography
 
