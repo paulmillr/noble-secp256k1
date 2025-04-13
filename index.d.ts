@@ -87,7 +87,6 @@ declare class Signature {
     addRecoveryBit(rec: number): SignatureWithRecovery;
     hasHighS(): boolean;
     normalizeS(): Signature;
-    /** ECDSA public key recovery. Requires msg hash and recovery id. */
     recoverPublicKey(msgh: Hex): Point;
     /** Uint8Array 64b compact (r || s) representation. */
     toCompactRawBytes(): Bytes;

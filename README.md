@@ -42,7 +42,6 @@ We support all major platforms and runtimes. For node.js <= 18 and React Native,
 
 ```js
 import * as secp from '@noble/secp256k1';
-// import * as secp from "https://unpkg.com/@noble/secp256k1"; // Unpkg
 (async () => {
   // Uint8Arrays or hex strings are accepted:
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
@@ -322,33 +321,19 @@ NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https
 
 ## Speed
 
-Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need even higher performance.
+    npm run bench
 
-Benchmarks measured with Apple M2 on MacOS 13 with node.js 20.
+Benchmarks measured with Apple M4. [noble-curves](https://github.com/paulmillr/noble-curves) enable faster performance.
 
-    getPublicKey(utils.randomPrivateKey()) x 6,430 ops/sec @ 155μs/op
-    sign x 3,367 ops/sec @ 296μs/op
-    verify x 600 ops/sec @ 1ms/op
-    getSharedSecret x 505 ops/sec @ 1ms/op
-    recoverPublicKey x 612 ops/sec @ 1ms/op
-    Point.fromHex (decompression) x 9,185 ops/sec @ 108μs/op
-
-Compare to other libraries on M1 (`openssl` uses native bindings, not JS):
-
-    elliptic#getPublicKey x 1,940 ops/sec
-    sjcl#getPublicKey x 211 ops/sec
-
-    elliptic#sign x 1,808 ops/sec
-    sjcl#sign x 199 ops/sec
-    openssl#sign x 4,243 ops/sec
-    ecdsa#sign x 116 ops/sec
-
-    elliptic#verify x 812 ops/sec
-    sjcl#verify x 166 ops/sec
-    openssl#verify x 4,452 ops/sec
-    ecdsa#verify x 80 ops/sec
-
-    elliptic#ecdh x 971 ops/sec
+```
+getPublicKey(utils.randomPrivateKey()) x 8,770 ops/sec @ 114μs/op
+signAsync x 4,848 ops/sec @ 206μs/op
+sign x 7,261 ops/sec @ 137μs/op
+verify x 817 ops/sec @ 1ms/op
+getSharedSecret x 688 ops/sec @ 1ms/op
+recoverPublicKey x 839 ops/sec @ 1ms/op
+Point.fromHex (decompression) x 12,937 ops/sec @ 77μs/op
+```
 
 ## Upgrading
 

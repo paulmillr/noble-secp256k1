@@ -20,8 +20,10 @@ const curve = (x) => M(M(x * x) * x + CURVE.b); // x³ + ax + b weierstrass form
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const isB = (n) => typeof n === 'bigint'; // is big integer
 const isS = (s) => typeof s === 'string'; // is string
-const fe = (n) => isB(n) && 0n < n && n < P; // is field element (invertible)
-const ge = (n) => isB(n) && 0n < n && n < N; // is group element
+const arange = (n, min, max, msg = 'bad number: out of range') => isB(n) && min <= n && n < max ? n : err(msg);
+const afield0 = (n) => arange(n, 0n, P); // assert field element or 0
+const afield = (n) => arange(n, 1n, P); // assert field element
+const agroup = (n) => arange(n, 1n, N); // assert group elem
 const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
 const au8 = (a, l) => // assert is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
@@ -33,13 +35,13 @@ const M = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
-const aPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 class Point {
     constructor(px, py, pz) {
-        this.px = px;
-        this.py = py;
-        this.pz = pz;
+        this.px = afield0(px);
+        this.py = afield(py); // y can't be 0 in Projective
+        this.pz = afield0(pz);
         Object.freeze(this);
     }
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
@@ -53,8 +55,7 @@ class Point {
         const head = hex[0], tail = hex.subarray(1); // first byte is prefix, rest is data
         const x = slc(tail, 0, fLen), len = hex.length; // next 32 bytes are x coordinate
         if (len === 33 && [0x02, 0x03].includes(head)) { // compressed points: 33b, start
-            if (!fe(x))
-                err('Point hex invalid: x not FE'); // with byte 0x02 or 0x03. Check if 0<x<P
+            afield(x); // with byte 0x02 or 0x03. check 1<=x<P.
             let y = sqrt(curve(x)); // x³ + ax + b is right side of equation
             const isYOdd = (y & 1n) === 1n; // y² is equivalent left-side. Calculate y²:
             const headOdd = (head & 1) === 1; // y = √y²; there are two solutions: y, -y
@@ -73,7 +74,7 @@ class Point {
     /** Equality check: compare points P&Q. */
     equals(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
-        const { px: X2, py: Y2, pz: Z2 } = aPoint(other); // isPoint() checks class equality
+        const { px: X2, py: Y2, pz: Z2 } = apoint(other); // isPoint() checks class equality
         const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
         const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
@@ -89,7 +90,7 @@ class Point {
      */
     add(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
-        const { px: X2, py: Y2, pz: Z2 } = aPoint(other);
+        const { px: X2, py: Y2, pz: Z2 } = apoint(other);
         const { a, b } = CURVE;
         let X3 = 0n, Y3 = 0n, Z3 = 0n;
         const b3 = M(b * 3n);
@@ -135,8 +136,7 @@ class Point {
     mul(n, safe = true) {
         if (!safe && n === 0n)
             return I; // in unsafe mode, allow zero
-        if (!ge(n))
-            err('scalar invalid'); // must be 0 < n < CURVE.n
+        agroup(n); // must be 1 <= n < CURVE.n
         if (this.equals(G))
             return wNAF(n).p; // use precomputes for base point
         let p = I, f = G; // init result point & fake point
@@ -166,8 +166,8 @@ class Point {
     /** Checks if the point is valid and on-curve. */
     assertValidity() {
         const { x, y } = this.aff(); // convert to 2d xy affine point.
-        if (!fe(x) || !fe(y))
-            err('Point invalid: x or y'); // x and y must be in range 0 < n < P
+        afield(x);
+        afield(y); // must be in range 1 <= x,y < P
         return M(y * y) === curve(x) ? // y² = x³ + ax + b, must be equal
             this : err('Point invalid: not on curve');
     }
@@ -249,10 +249,10 @@ const sqrt = (n) => {
     }
     return M(r * r) === n ? r : err('sqrt invalid'); // check if result is valid
 };
-const toPriv = (p) => {
-    if (!isB(p))
-        p = b2n(toU8(p, fLen)); // convert to bigint when bytes
-    return ge(p) ? p : err('private key invalid 3'); // check if bigint is in range
+const toPriv = (pr) => {
+    if (!isB(pr))
+        pr = b2n(toU8(pr, fLen)); // convert to bigint when bytes
+    return arange(pr, 1n, N, 'private key invalid 3'); // check if bigint is in range
 };
 const high = (n) => n > (N >> 1n); // if a number is bigger than CURVE.n/2
 /** Creates 33/65-byte public key from 32-byte private key. */
@@ -262,43 +262,28 @@ const getPublicKey = (privKey, isCompressed = true) => {
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
     constructor(r, s, recovery) {
-        this.r = r;
-        this.s = s;
+        this.r = agroup(r); // 1 <= r < N
+        this.s = agroup(s); // 1 <= s < N
         if (recovery != null)
             this.recovery = recovery;
-        this.assertValidity(); // recovery bit is optional when
         Object.freeze(this);
     } // constructed outside.
     /** Create signature from 64b compact (r || s) representation. */
     static fromCompact(hex) {
-        hex = toU8(hex, 64); // compact repr is (32b r)||(32b s)
-        return new Signature(slc(hex, 0, fLen), slc(hex, fLen, 2 * fLen));
+        const b = toU8(hex, 64); // compact repr is (32b r)||(32b s)
+        return new Signature(slc(b, 0, fLen), slc(b, fLen, 2 * fLen));
     }
-    assertValidity() { return ge(this.r) && ge(this.s) ? this : err(); } // 0 < r or s < CURVE.n
+    assertValidity() { return this; } // legacy, no-op, now done in constructor
     /** Create new signature, with added recovery bit. */
     addRecoveryBit(rec) {
         return new Signature(this.r, this.s, rec);
     }
     hasHighS() { return high(this.s); }
     normalizeS() {
-        return high(this.s) ? new Signature(this.r, M(-this.s, N), this.recovery) : this;
+        const { r, s, recovery } = this;
+        return high(s) ? new Signature(r, M(-s, N), recovery) : this;
     }
-    /** ECDSA public key recovery. Requires msg hash and recovery id. */
-    recoverPublicKey(msgh) {
-        const { r, s, recovery: rec } = this; // secg.org/sec1-v2.pdf 4.1.6
-        if (![0, 1, 2, 3].includes(rec))
-            err('recovery id invalid'); // check recovery id
-        const h = bits2int_modN(toU8(msgh, fLen)); // Truncate hash
-        const radj = rec === 2 || rec === 3 ? r + N : r; // If rec was 2 or 3, q.x is bigger than n
-        if (radj >= P)
-            err('q.x invalid'); // ensure q.x is still a field element
-        const head = (rec & 1) === 0 ? '02' : '03'; // head is 0x02 or 0x03
-        const R = Point.fromHex(head + n2h(radj)); // concat head + hex repr of r
-        const ir = inv(radj, N); // r^-1
-        const u1 = M(-h * ir, N); // -hr^-1
-        const u2 = M(s * ir, N); // sr^-1
-        return G.mulAddQUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
-    }
+    recoverPublicKey(msgh) { return recover(this, msgh); }
     /** Uint8Array 64b compact (r || s) representation. */
     toCompactRawBytes() { return h2b(this.toCompactHex()); }
     /** Hex string 64b compact (r || s) representation. */
@@ -339,7 +324,7 @@ const prepSig = (msgh, priv, opts = optS) => {
     const m = h1i; // convert msg to bigint
     const k2sig = (kBytes) => {
         const k = bits2int(kBytes); // RFC6979 method.
-        if (!ge(k))
+        if (!(1n <= k && k < N))
             return; // Check 0 < k < CURVE.n
         const ik = inv(k, N); // k^-1 mod n, NOT mod P
         const q = G.mul(k).aff(); // q = Gk
@@ -471,9 +456,9 @@ const verify = (sig, msgh, pub, opts = optV) => {
     if (!rs && (toU8(sig).length !== 2 * fLen)) // throw error when DER is suspected now.
         err('signature must be 64 bytes');
     try {
-        sig_ = rs ? new Signature(sig.r, sig.s).assertValidity() : Signature.fromCompact(sig);
+        sig_ = rs ? new Signature(sig.r, sig.s) : Signature.fromCompact(sig);
         h = bits2int_modN(toU8(msgh)); // Truncate hash
-        P = pub instanceof Point ? pub.ok() : Point.fromHex(pub); // Validate public key
+        P = Point.fromHex(pub); // Validate public key
     }
     catch (e) {
         return false;
@@ -497,6 +482,21 @@ const verify = (sig, msgh, pub, opts = optV) => {
         return false; // stop if R is identity / zero point
     const v = M(R.x, N); // R.x must be in N's field, not P's
     return v === r; // mod(R.x, n) == r
+};
+/** ECDSA public key recovery. Requires msg hash and recovery id. */
+const recover = (point, msgh) => {
+    const { r, s, recovery: rec } = point; // secg.org/sec1-v2.pdf 4.1.6
+    if (![0, 1, 2, 3].includes(rec))
+        err('recovery id invalid'); // check recovery id
+    const h = bits2int_modN(toU8(msgh, fLen)); // Truncate hash
+    const radj = rec === 2 || rec === 3 ? r + N : r; // If rec was 2 or 3, q.x is bigger than n
+    afield(radj); // ensure q.x is still a field element
+    const head = (rec & 1) === 0 ? '02' : '03'; // head is 0x02 or 0x03
+    const R = Point.fromHex(head + n2h(radj)); // concat head + hex repr of r
+    const ir = inv(radj, N); // r^-1
+    const u1 = M(-h * ir, N); // -hr^-1
+    const u2 = M(s * ir, N); // sr^-1
+    return G.mulAddQUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
 };
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
