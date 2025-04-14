@@ -1,12 +1,12 @@
-import * as fc from 'fast-check';
-import * as secp from '..';
-import { readFileSync } from 'fs';
 import { createHash } from 'crypto';
+import * as fc from 'fast-check';
+import { readFileSync } from 'fs';
 import * as sysPath from 'path';
-import * as ecdsa from './vectors/ecdsa.json';
+import * as secp from '..';
 import * as ecdh from './vectors/ecdh.json';
-import * as privates from './vectors/privates.json';
+import * as ecdsa from './vectors/ecdsa.json';
 import * as points from './vectors/points.json';
+import * as privates from './vectors/privates.json';
 import * as wp from './vectors/wychenproof.json';
 const privatesTxt = readFileSync(sysPath.join(__dirname, 'vectors', 'privates-2.txt'), 'utf-8');
 const schCsv = readFileSync(sysPath.join(__dirname, 'vectors', 'schnorr.csv'), 'utf-8');
@@ -113,6 +113,10 @@ describe('secp256k1', () => {
           expect(secp.Point.fromHex(hex).toHex(true)).toBe(hex);
         })
       );
+    });
+
+    it('fromHex on " 1"', () => {
+      expect(() => secp.Point.fromHex(' 1'.repeat(32))).toThrowError();
     });
 
     it('#add(other)', () => {
