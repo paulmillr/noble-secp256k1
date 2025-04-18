@@ -176,6 +176,7 @@ class Point {
     ok() { return this.assertValidity(); }
     toHex(isCompressed = true) {
         const { x, y } = this.aff(); // convert to 2d xy affine point
+        this.assertValidity();
         const head = isCompressed ? ((y & 1n) === 0n ? '02' : '03') : '04'; // 0x02, 0x03, 0x04 prefix
         return head + n2h(x) + (isCompressed ? '' : n2h(y)); // prefix||x and ||y
     }
