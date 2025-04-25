@@ -396,7 +396,7 @@ function hmacDrbg(asynchronous) {
             if (i++ >= 1000)
                 err(_e);
             v = h(); // v = hmac(k || v)
-            return v;
+            return v; // this diverges from noble-curves: we don't allow arbitrary output len!
         };
         return (seed, pred) => {
             reset();
