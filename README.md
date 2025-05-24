@@ -6,14 +6,14 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
   signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 4KB gzipped, 530 lines of pure ESM, bundler-less code
+- 🪶 3.98KB gzipped (elliptic.js is 12x larger, tiny-secp256k1 is 20-40x larger)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
 Curves are drop-in replacement and have more features:
-Schnorr, MSM, DER encoding, Endomorphism, custom point precomputes, prehashing, common.js.
+MSM, DER encoding, endomorphism, prehashing, custom point precomputes.
 
-To upgrade from v1 to v2, see [Upgrading](#upgrading).
+To upgrade from earlier version, see [Upgrading](#upgrading).
 
 ### This library belongs to _noble_ cryptography
 
@@ -38,7 +38,7 @@ To upgrade from v1 to v2, see [Upgrading](#upgrading).
 
 > `deno doc jsr:@noble/secp256k1` # command-line documentation
 
-We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
+We support all major platforms and runtimes. For React Native, additional polyfills are needed: see below.
 
 ```js
 import * as secp from '@noble/secp256k1';
@@ -337,24 +337,20 @@ Point.fromHex (decompression) x 12,937 ops/sec @ 77μs/op
 
 ## Upgrading
 
-noble-secp256k1 v2 features improved security and smaller attack surface.
+### v1 to v2
+
+noble-secp256k1 v2 improves security and reduces attack surface.
 The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
-That means the library was reduced 4x, to just over 400 lines. In order to
-achieve the goal, **some features were moved** to
-[noble-curves](https://github.com/paulmillr/noble-curves), which is
-even safer and faster drop-in replacement library with same API.
-Switch to curves if you intend to keep using these features:
-
-- DER encoding: toDERHex, toDERRawBytes, signing / verification of DER sigs
-- Schnorr signatures
-- Using `utils.precompute()` for non-base point
-- Support for environments which don't support bigint literals
-- Common.js support
-- Support for node.js 18 and older without [shim](#usage)
-
-Other changes for upgrading from @noble/secp256k1 1.7 to 2.0:
-
+- Disable some features to ensure 4x smaller than v1, 4KB bundle size:
+  - The features are now a part of [noble-curves](https://github.com/paulmillr/noble-curves),
+    **switch to curves if you need them**. Curves is drop-in replacement.
+  - DER encoding: toDERHex, toDERRawBytes, signing / verification of DER sigs
+  - Schnorr signatures
+  - Support for environments which don't support bigint literals
+  - Common.js support
+  - Support for node.js 18 and older without [shim](#usage)
+  - Using `utils.precompute()` for non-base point
 - `getPublicKey`
   - now produce 33-byte compressed signatures by default
   - to use old behavior, which produced 65-byte uncompressed keys, set
