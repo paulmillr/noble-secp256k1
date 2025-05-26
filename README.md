@@ -14,7 +14,7 @@ Curves are drop-in replacement and have more features:
 MSM, DER encoding, endomorphism, prehashing, custom point precomputes.
 To upgrade from earlier version, see [Upgrading](#upgrading).
 
-914-byte version of the library is available for learning purposes in `test/misc/1kb.min.js`,
+898-byte version of the library is available for learning purposes in `test/misc/1kb.min.js`,
 it was created for the article [Learning fast elliptic-curve cryptography](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ cryptography
