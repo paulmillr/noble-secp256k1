@@ -12,8 +12,10 @@ The module is a sister project of [noble-curves](https://github.com/paulmillr/no
 focusing on smaller attack surface & better auditability.
 Curves are drop-in replacement and have more features:
 MSM, DER encoding, endomorphism, prehashing, custom point precomputes.
-
 To upgrade from earlier version, see [Upgrading](#upgrading).
+
+1KB version of the library is available for learning purposes in the article:
+[Learning fast elliptic-curve cryptography](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/)
 
 ### This library belongs to _noble_ cryptography
 
