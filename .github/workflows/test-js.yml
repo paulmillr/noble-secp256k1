@@ -1,10 +1,10 @@
-name: Run tests
+name: Run JS tests
 on:
   - push
   - pull_request
 jobs:
   test-js:
-    name: 'jsbt v0.4.0' # Should match commit below
-    uses: paulmillr/jsbt/.github/workflows/test-js.yml@3b4712c94bff7a5da5c968f783292061e81b218c
+    name: 'jsbt v0.4.1'
+    uses: paulmillr/jsbt/.github/workflows/test-js.yml@2318b9efe24831b4bd4cadf720c96f071c69c64d
     # with:
     #   submodules: false

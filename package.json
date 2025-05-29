@@ -19,7 +19,6 @@
     "test": "node test/index.js",
     "test:bun": "bun test/index.js",
     "test:deno": "deno --allow-env --allow-read test/index.js",
-    "test:webcrypto": "node test/index.webcrypto.js",
     "bench": "node test/benchmark.js",
     "loc": "echo \"`npm run --silent build:min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent build:mingz | wc -c`B gzipped\""
   },
@@ -31,12 +30,13 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@noble/hashes": "1.7.1",
-    "@paulmillr/jsbt": "0.4.0",
+    "@noble/hashes": "2.0.0-beta.1",
+    "@paulmillr/jsbt": "0.4.1",
+    "@types/node": "22.15.23",
     "fast-check": "4.1.1",
-    "micro-bmark": "0.4.0",
+    "micro-bmark": "0.4.2",
     "micro-should": "0.5.3",
-    "typescript": "5.8.2"
+    "typescript": "5.8.3"
   },
   "keywords": [
     "secp256k1",

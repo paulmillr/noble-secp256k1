@@ -99,7 +99,7 @@ class Point {
     }
     if (len === (L2+1) && head === 0x04)                // Uncompressed 65-byte point, 0x04 prefix
       p = new Point(x, slc(tail, L, L2), _1);
-    return p ? p.ok() : err('Point invalid: not on curve');   // Verify the result
+    return p ? p.ok() : err('bad point: not on curve');   // Verify the result
   }
   /** Equality check: compare points P&Q. */
   equals(other: Point): boolean {
@@ -168,7 +168,7 @@ class Point {
     const { x, y } = this.aff();                        // convert to 2d xy affine point.
     afield(x); afield(y);                               // must be in range 1 <= x,y < P
     return M(y * y) === curve(x) ?                      // y² = x³ + ax + b, must be equal
-      this : err('Point invalid: not on curve');
+      this : err('bad point: not on curve');
   }
   toBytes(isCompressed = true): Bytes {                 // Encode point to Uint8Array.
     const { x, y } = this.ok().aff();                   // convert to 2d xy affine point
@@ -194,7 +194,6 @@ class Point {
   }
   toRawBytes(c?: boolean): Bytes { return this.toBytes(c); }
   assertValidity(): Point { return this.ok(); }
-  mulAddQUns(R: Point, u1: bigint, u2: bigint): Point { return mulG2uns(R, u1, u2); }
 }
 /** Generator / base point */
 const G: Point = new Point(Gx, Gy, _1);
@@ -204,9 +203,9 @@ const I: Point = new Point(_0, _1, _0);
 Point.BASE = G;
 Point.ZERO = I;
 // Unsafe multiplication Q = u1⋅G + u2⋅R.
-const mulG2uns = (R: Point, u1: bigint, u2: bigint): Point => {
+const doubleScalarMulUns = (R: Point, u1: bigint, u2: bigint): Point => {
   return G.mul(u1, false).add(R.mul(u2, false)).ok();
-}
+};
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 const b2h = (b: Bytes): string => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
@@ -474,7 +473,7 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = optV): boo
     const is = inv(s, N);                               // s^-1
     const u1 = modN(h * is);                            // u1 = hs^-1 mod n
     const u2 = modN(r * is);                            // u2 = rs^-1 mod n
-    R = mulG2uns(P, u1, u2).aff();                      // R = u1⋅G + u2⋅P
+    R = doubleScalarMulUns(P, u1, u2).aff();            // R = u1⋅G + u2⋅P
   } catch (error) { return false; }
   if (!R) return false;                                 // stop if R is identity / zero point
   const v = modN(R.x);                                  // R.x must be in N's field, not P's
@@ -493,7 +492,7 @@ const recoverPublicKey = (point: SignatureWithRecovery, msgh: Hex): Point => {
   const ir = inv(radj, N);                            // r^-1
   const u1 = modN(-h * ir);                           // -hr^-1
   const u2 = modN(s * ir);                            // sr^-1
-  return mulG2uns(R, u1, u2);                         // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
+  return doubleScalarMulUns(R, u1, u2);               // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
 }
 
 /**

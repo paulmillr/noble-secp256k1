@@ -1,5 +1,5 @@
 /**
- * secp256k1 curve parameters. Equation is x³ + ax + b.
+ * secp256k1 curve parameters. Equation is x³ + ax + b, but a=0 - which makes it x³+b.
  * Gx and Gy are generator coordinates. p is field order, n is group order.
  */
 declare const CURVE: {
@@ -32,22 +32,14 @@ export interface AffinePoint {
 }
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 declare class Point {
+    static BASE: Point;
+    static ZERO: Point;
     readonly px: bigint;
     readonly py: bigint;
     readonly pz: bigint;
     constructor(px: bigint, py: bigint, pz: bigint);
-    /** Generator / base point */
-    static readonly BASE: Point;
-    /** Identity / zero point */
-    static readonly ZERO: Point;
-    /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
-    static fromAffine(p: AffinePoint): Point;
     /** Convert Uint8Array or hex string to Point. */
-    static fromHex(hex: Hex): Point;
-    /** Create point from a private key. */
-    static fromPrivateKey(k: PrivKey): Point;
-    get x(): bigint;
-    get y(): bigint;
+    static fromBytes(bytes: Bytes): Point;
     /** Equality check: compare points P&Q. */
     equals(other: Point): boolean;
     /** Flip point over y coordinate. */
@@ -61,16 +53,22 @@ declare class Point {
      */
     add(other: Point): Point;
     mul(n: bigint, safe?: boolean): Point;
-    mulAddQUns(R: Point, u1: bigint, u2: bigint): Point;
     /** Convert point to 2d xy affine point. (x, y, z) ∋ (x=x/z, y=y/z) */
-    toAffine(): AffinePoint;
-    /** Checks if the point is valid and on-curve. */
-    assertValidity(): Point;
-    multiply(n: bigint): Point;
     aff(): AffinePoint;
+    /** Checks if the point is valid and on-curve. */
     ok(): Point;
+    toBytes(isCompressed?: boolean): Bytes;
+    /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
+    static fromAffine(p: AffinePoint): Point;
+    static fromPrivateKey(k: PrivKey): Point;
+    static fromHex(hex: Hex): Point;
+    get x(): bigint;
+    get y(): bigint;
+    multiply(n: bigint): Point;
+    toAffine(): AffinePoint;
     toHex(isCompressed?: boolean): string;
-    toRawBytes(isCompressed?: boolean): Bytes;
+    toRawBytes(c?: boolean): Bytes;
+    assertValidity(): Point;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
 declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;

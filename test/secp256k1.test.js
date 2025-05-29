@@ -1,4 +1,4 @@
-import { hexToBytes as bytes, bytesToHex as hex } from '@noble/hashes/utils';
+import { hexToBytes as bytes, bytesToHex as hex } from '@noble/hashes/utils.js';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
