@@ -1,5 +1,6 @@
 import { should } from 'micro-should';
 import './basic.test.js';
+import './secp256k1-schnorr.test.js';
 import './secp256k1.test.js';
 import './utils.test.js';
 

@@ -3,7 +3,7 @@ import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
 import * as items from '../index.js';
 import { getTypeTests } from './utils.js';
-const { bytesToHex, concatBytes, hexToBytes, mod, invert } = items.etc;
+const { bytesToHex, concatBytes, hexToBytes, mod, invert } = items.etc2;
 
 function hexa() {
   const items = '0123456789abcdef';

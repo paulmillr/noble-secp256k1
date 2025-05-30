@@ -59,11 +59,11 @@ export const DER = {
 
 export const sigFromDER = (der: string | Uint8Array) => {
   const { r, s } = DER.toSig(der);
-  return new secp256k1.Signature(r, s);
+  return new secp256k1.Signature(r, s).toBytes();
 };
 export const sigToDER = (sig: any) => DER.hexFromSig(sig);
 export const selectHash = (secp: any) => sha256;
 export const normVerifySig = (s: any) => DER.toSig(s);
-export const bytesToNumberBE = secp256k1.etc.bytesToNumberBE;
-export const numberToBytesBE = secp256k1.etc.numberToBytesBE;
-export const mod = secp256k1.etc.mod;
+export const bytesToNumberBE = secp256k1.etc2.bytesToNumberBE;
+export const numberToBytesBE = secp256k1.etc2.numberToBytesBE;
+export const mod = secp256k1.etc2.mod;
