@@ -81,14 +81,6 @@ secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m
 secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
 ```
 
-### nodejs v18 and older: polyfill webcrypto
-
-```ts
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (!globalThis.crypto) globalThis.crypto = webcrypto;
-```
-
 ## API
 
 There are 3 main methods:
@@ -286,9 +278,9 @@ Use low-level libraries & languages.
 ### Supply chain security
 
 - **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures
-- **Releases** are transparent and built on GitHub CI. Make sure to verify [provenance](https://docs.npmjs.com/generating-provenance-statements) logs
-  - Use GitHub CLI to verify single-file builds:
-    `gh attestation verify --owner paulmillr noble-secp256k1.js`
+- **Releases** are transparent and built on GitHub CI.
+  Check out [attested checksums of single-file builds](https://github.com/paulmillr/noble-secp256k1/attestations)
+  and [provenance logs](https://github.com/paulmillr/noble-secp256k1/actions/workflows/release.yml)
 - **Rare releasing** is followed to ensure less re-audit need for end-users
 - **Dependencies** are minimized and locked-down: any dependency could get hacked and users will be downloading malware with every install.
   - We make sure to use as few dependencies as possible
