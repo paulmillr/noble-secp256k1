@@ -1,8 +1,21 @@
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join as joinPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const _dirname = dirname(fileURLToPath(import.meta.url));
+
+export function jsonGZ(path) {
+  const unz = gunzipSync(readFileSync(joinPath(_dirname, path)));
+  return JSON.parse(unz.toString('utf8'));
+}
+
+export function byteify(obj) {
+  return Object.fromEntries(Object.entries(obj).map(([k, v]) => {
+    return [k, hexToBytes(v)];
+  }))
+}
 
 export function json(path) {
   try {
@@ -57,10 +70,6 @@ export const getTypeTests = () => [
   [class Test {}, 'class'],
   [Symbol.for('a'), 'symbol("a")'],
 ];
-export const getTypeTestsNonUi8a = () =>
-  getTypeTests()
-    .filter((test) => !test[1].startsWith('ui8a'))
-    .map((test) => test[0]);
 
 export function repr(item) {
   if (item && item.isProxy) return '[proxy]';

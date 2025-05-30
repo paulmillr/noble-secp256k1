@@ -1,3 +1,4 @@
+import { hexToBytes as bytes } from '@noble/hashes/utils.js';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import { deepStrictEqual, throws } from 'node:assert';
@@ -266,9 +267,9 @@ describe(name, () => {
       fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
         const priv = C.utils.randomPrivateKey();
         const pub = C.getPublicKey(priv);
-        const sig = C.sign(msg, priv);
+        const sig = C.sign(bytes(msg), priv);
         const err = `priv=${toHex(priv)},pub=${toHex(pub)},msg=${msg}`;
-        deepStrictEqual(C.verify(sig, msg, pub), true, err);
+        deepStrictEqual(C.verify(sig, bytes(msg), pub), true, err);
       }),
       { numRuns: NUM_RUNS }
     )
@@ -292,7 +293,7 @@ describe(name, () => {
   });
 
   describe('verify()', () => {
-    const msg = '01'.repeat(32);
+    const msg = bytes('01'.repeat(32));
     should('true for proper signatures', () => {
       const priv = C.utils.randomPrivateKey();
       const sig = C.sign(msg, priv);
@@ -303,7 +304,7 @@ describe(name, () => {
       const priv = C.utils.randomPrivateKey();
       const sig = C.sign(msg, priv);
       const pub = C.getPublicKey(priv);
-      deepStrictEqual(C.verify(sig, '11'.repeat(32), pub), false);
+      deepStrictEqual(C.verify(sig, bytes('11'.repeat(32)), pub), false);
     });
     should('false for wrong keys', () => {
       const priv = C.utils.randomPrivateKey();
@@ -316,10 +317,10 @@ describe(name, () => {
       fc.assert(
         fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
           const priv = C.utils.randomPrivateKey();
-          const sig = C.sign(msg, priv);
+          const sig = C.sign(bytes(msg), priv);
           const sigRS = (sig) => ({ s: sig.s, r: sig.r });
           // Compact
-          deepStrictEqual(sigRS(C.Signature.fromCompact(sig.toCompactHex())), sigRS(sig));
+          // deepStrictEqual(sigRS(C.Signature.fromCompact(sig.toCompactHex())), sigRS(sig));
           deepStrictEqual(sigRS(C.Signature.fromCompact(sig.toCompactRawBytes())), sigRS(sig));
           // DER
           // deepStrictEqual(sigRS(C.Signature.fromDER(sig.toDERHex())), sigRS(sig));
@@ -331,11 +332,12 @@ describe(name, () => {
     should('Signature.addRecoveryBit/Signature.recoveryPublicKey', () =>
       fc.assert(
         fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+          msg = Uint8Array.from(Buffer.from(msg, 'hex'));
           const priv = C.utils.randomPrivateKey();
           const pub = C.getPublicKey(priv);
           const sig = C.sign(msg, priv);
           deepStrictEqual(sig.recoverPublicKey(msg).toRawBytes(), pub);
-          const sig2 = C.Signature.fromCompact(sig.toCompactHex());
+          const sig2 = C.Signature.fromCompact(sig.toCompactRawBytes());
           throws(() => sig2.recoverPublicKey(msg));
           const sig3 = sig2.addRecoveryBit(sig.recovery);
           deepStrictEqual(sig3.recoverPublicKey(msg).toRawBytes(), pub);
@@ -346,6 +348,7 @@ describe(name, () => {
     should('Signature.normalizeS', () =>
       fc.assert(
         fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+          msg = bytes(msg);
           const priv = C.utils.randomPrivateKey();
           const pub = C.getPublicKey(priv);
           const sig = C.sign(msg, priv, { lowS: false });
