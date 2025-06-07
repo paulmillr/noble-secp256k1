@@ -185,10 +185,10 @@ class Point {
     }
     toBytes(isCompressed = true) {
         const { x, y } = this.ok().aff(); // convert to 2d xy affine point
-        const x32b = numberTo32b(x);
+        const x32b = numTo32b(x);
         if (isCompressed)
             return concatBytes(getPrefix(y), x32b);
-        return concatBytes(u8of(0x04), x32b, numberTo32b(y));
+        return concatBytes(u8of(0x04), x32b, numTo32b(y));
     }
     // Can be commented-out:
     is0() { return this.equals(I); }
@@ -247,7 +247,7 @@ const hexToBytes = (hex) => {
 const bytesToNum = (b) => big('0x' + (bytesToHex(b) || '0'));
 const sliceBytesNum = (b, from, to) => bytesToNum(b.subarray(from, to));
 // Number to 32b. Must be 0 <= num < B256. validate, pad, to bytes
-const numberTo32b = (num) => hexToBytes(padh(arange(num, _0, B256), L2));
+const numTo32b = (num) => hexToBytes(padh(arange(num, _0, B256), L2));
 const concatBytes = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
     let pad = 0; // walk through each array,
@@ -295,7 +295,7 @@ class Signature {
     }
     toBytes() {
         const { r, s } = this;
-        return concatBytes(numberTo32b(r), numberTo32b(s));
+        return concatBytes(numTo32b(r), numTo32b(s));
     }
     // Can be commented-out:
     // 0.04kb
@@ -346,7 +346,7 @@ const prepSig = (msgh, priv, opts = optS) => {
     let { lowS, extraEntropy } = opts; // generates low-s sigs by default
     if (lowS == null)
         lowS = true; // RFC6979 3.2: we skip step A
-    const i2o = numberTo32b; // int to octets
+    const i2o = numTo32b; // int to octets
     const h1i = bits2int_modN(msgh); // msg bigint
     const h1o = i2o(h1i); // msg octets
     const d = toPrivScalar(priv); // validate private key, convert to bigint
@@ -518,7 +518,7 @@ const recoverPublicKey = (sig, msgh) => {
     const radj = recovery === 2 || recovery === 3 ? r + N : r; // q.x > n when rec was 2 or 3,
     afield(radj); // ensure q.x is still a field element
     const head = getPrefix(big(recovery)); // head is 0x02 or 0x03
-    const Rb = concatBytes(head, numberTo32b(radj));
+    const Rb = concatBytes(head, numTo32b(radj));
     const R = Point.fromBytes(Rb); // concat head + hex repr of r
     const ir = invert(radj, N); // r^-1
     const u1 = modN(-h * ir); // -hr^-1
@@ -554,14 +554,14 @@ const etc2 = {
     bytesToHex: bytesToHex,
     concatBytes: concatBytes,
     bytesToNumberBE: bytesToNum,
-    numberToBytesBE: numberTo32b,
+    numberToBytesBE: numTo32b,
     mod: M,
     invert: invert, // math utilities
     randomBytes: randomBytes,
 };
 const randomPrivateKey = () => {
     const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes n+8 bytes
-    return numberTo32b(num + _1); // returns (hash mod n-1)+1
+    return numTo32b(num + _1); // returns (hash mod n-1)+1
 }; // FIPS 186 B.4.1.
 /** Curve-specific utilities for private keys. */
 const utils = {
@@ -664,12 +664,12 @@ const extractK = (rand) => {
     const k_ = modN(bytesToNum(rand)); // Let k' = int(rand) mod n
     if (k_ === _0)
         err('sign failed: k is zero'); // Fail if k' = 0.
-    const { px, d } = extpubSchnorr(numberTo32b(k_)); // Let R = k'⋅G.
+    const { px, d } = extpubSchnorr(numTo32b(k_)); // Let R = k'⋅G.
     return { rx: px, k: d };
 };
 // Common signature creation helper
 const createSigSchnorr = (k, px, e, d) => {
-    return concatBytes(px, numberTo32b(modN(k + e * d)));
+    return concatBytes(px, numTo32b(modN(k + e * d)));
 };
 const E_INVSIG = 'invalid signature produced';
 /**
@@ -679,7 +679,7 @@ const E_INVSIG = 'invalid signature produced';
 const signSchnorr = (message, privateKey, auxRand = randomBytes(L)) => {
     const { m, px, d, a } = prepSigSchnorr(message, privateKey, auxRand);
     const aux = taggedHash(T_AUX, a);
-    const t = numberTo32b(d ^ bytesToNum(aux)); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+    const t = numTo32b(d ^ bytesToNum(aux)); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
     const rand = taggedHash(T_NONCE, t, px, m); // Let rand = hash/nonce(t || bytes(P) || m)
     const { rx, k } = extractK(rand);
     const e = challenge(rx, px, m); // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
@@ -691,7 +691,7 @@ const signSchnorr = (message, privateKey, auxRand = randomBytes(L)) => {
 const signAsyncSchnorr = async (message, privateKey, auxRand = randomBytes(L)) => {
     const { m, px, d, a } = prepSigSchnorr(message, privateKey, auxRand);
     const aux = await taggedHashAsync(T_AUX, a);
-    const t = numberTo32b(d ^ bytesToNum(aux)); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+    const t = numTo32b(d ^ bytesToNum(aux)); // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
     const rand = await taggedHashAsync(T_NONCE, t, px, m); // Let rand = hash/nonce(t || bytes(P) || m)
     const { rx, k } = extractK(rand);
     const e = await challengeAsync(rx, px, m); // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
@@ -723,7 +723,7 @@ const verifSchnorr = (signature, message, publicKey, sync = true) => {
         arange(r, _1, P);
         const s = sliceBytesNum(sig, L, L2); // Let s = int(sig[32:64]); fail if s ≥ n.
         arange(s, _1, N);
-        const i = concatBytes(numberTo32b(r), pointToBytes(P_), msg);
+        const i = concatBytes(numTo32b(r), pointToBytes(P_), msg);
         if (sync)
             return finishVerif(P_, r, s, challenge(i)); // int(challenge(bytes(r)||bytes(P)||m))%n
         return challengeAsync(i).then(e => finishVerif(P_, r, s, e));
