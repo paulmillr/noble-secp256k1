@@ -80,6 +80,7 @@ declare class Signature {
     constructor(r: bigint, s: bigint, recovery?: number);
     /** Create signature from 64b compact (r || s) representation. */
     static fromCompact(hex: Hex): Signature;
+    static fromBytes(b: Bytes): Signature;
     assertValidity(): Signature;
     /** Create new signature, with added recovery bit. */
     addRecoveryBit(rec: number): SignatureWithRecovery;
@@ -160,4 +161,4 @@ declare const utils: {
     randomPrivateKey: () => Bytes;
     precompute: (w?: number, p?: Point) => Point;
 };
-export { CURVE, etc, getPublicKey, getSharedSecret, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };
+export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };
