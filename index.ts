@@ -236,7 +236,7 @@ const invert = (num: bigint, md: bigint): bigint => {   // modular inversion
   return b === _1 ? M(x, md) : err('no inverse');       // b is gcd at this point
 };
 const toPrivScalar = (pr: Bytes): bigint => {           // normalize private key to bigint
-  let num = bytesToNum(abytes(pr, L));                         // convert to bigint when bytes
+  let num = bytesToNum(abytes(pr, L));                  // convert to bigint when bytes
   return arange(num, _1, N, 'private key invalid 3');   // check if bigint is in range
 };
 const highS = (n: bigint): boolean => n > (N >> _1);    // if a number is bigger than CURVE.n/2

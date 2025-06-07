@@ -489,7 +489,7 @@ const verify = (sig, msgh, pub, opts = optV) => {
     abytes(sig, L2);
     abytes(msgh);
     abytes(pub); // Validate options, throw
-    try { // Actual verification code begins here
+    try {
         const sigg = Signature.fromBytes(sig); // throw error when DER is suspected now.
         const h = bits2int_modN(msgh); // Truncate hash
         const P = Point.fromBytes(pub); // Validate public key
@@ -560,7 +560,7 @@ const etc2 = {
     randomBytes: randomBytes,
 };
 const randomPrivateKey = () => {
-    const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes n+16 bytes
+    const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes 48 bytes
     return numTo32b(num + _1); // returns (hash mod n-1)+1
 };
 /** Curve-specific utilities for private keys. */
