@@ -448,16 +448,16 @@ const verify = (sig: Bytes | Signature, msgh: Bytes, pub: Bytes, opts: OptV = op
   if (lowS == null) lowS = true;                        // Default lowS=true
   if (sig instanceof Signature) sig = new Signature(sig.r, sig.s).toBytes();
   abytes(sig, L2); abytes(msgh); abytes(pub);           // Validate options, throw
-  try { // Actual verification code begins here
-    const sigg = Signature.fromBytes(sig); // throw error when DER is suspected now.
-    const h = bits2int_modN(msgh);                            // Truncate hash
-    const P = Point.fromBytes(pub);                           // Validate public key
+  try {
+    const sigg = Signature.fromBytes(sig);              // throw error when DER is suspected now.
+    const h = bits2int_modN(msgh);                      // Truncate hash
+    const P = Point.fromBytes(pub);                     // Validate public key
     const { r, s } = sigg;
     if (lowS && highS(s)) return false;                 // lowS bans sig.s >= CURVE.n/2
     const is = invert(s, N);                            // s^-1
     const u1 = modN(h * is);                            // u1 = hs^-1 mod n
     const u2 = modN(r * is);                            // u2 = rs^-1 mod n
-    const R = mulG2uns(P, u1, u2).aff();                      // R = u1⋅G + u2⋅P
+    const R = mulG2uns(P, u1, u2).aff();                // R = u1⋅G + u2⋅P
     if (!R) return false;                               // stop if R is identity / zero point
     const v = modN(R.x);                                // R.x must be in N's field, not P's
     return v === r;                                     // mod(R.x, n) == r
@@ -513,17 +513,16 @@ const etc2 = {
   invert: invert as (num: bigint, md?: bigint) => bigint,  // math utilities
   randomBytes: randomBytes as (len?: number) => Bytes,
 }
-const randomPrivateKey = (): Bytes => {
-  const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes n+8 bytes
-  return numTo32b(num + _1);                         // returns (hash mod n-1)+1
-}; // FIPS 186 B.4.1.
+const randomPrivateKey = (): Bytes => {                 // FIPS 186 B.4.1.
+  const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes 48 bytes
+  return numTo32b(num + _1);                            // returns (hash mod n-1)+1
+};
 /** Curve-specific utilities for private keys. */
 const utils = {                                         // utilities
   isValidPrivateKey: (key: Bytes): boolean => {
     try { return !!toPrivScalar(key); } catch (e) { return false; }
   },
   randomPrivateKey: randomPrivateKey as () => Bytes,
-  // precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8;                                            // Precomputes-related code. W = window size
 const scalarBits = 256;

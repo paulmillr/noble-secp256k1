@@ -560,9 +560,9 @@ const etc2 = {
     randomBytes: randomBytes,
 };
 const randomPrivateKey = () => {
-    const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes n+8 bytes
+    const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes n+16 bytes
     return numTo32b(num + _1); // returns (hash mod n-1)+1
-}; // FIPS 186 B.4.1.
+};
 /** Curve-specific utilities for private keys. */
 const utils = {
     isValidPrivateKey: (key) => {
@@ -574,7 +574,6 @@ const utils = {
         }
     },
     randomPrivateKey: randomPrivateKey,
-    // precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8; // Precomputes-related code. W = window size
 const scalarBits = 256;
