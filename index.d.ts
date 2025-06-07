@@ -46,9 +46,13 @@ declare class Point {
     /** Checks if the point is valid and on-curve. */
     ok(): Point;
     toBytes(isCompressed?: boolean): Bytes;
+    is0(): boolean;
     toHex(c?: boolean): string;
     multiply(n: bigint): Point;
     static fromPrivateKey(k: Bytes): Point;
+    get x(): bigint;
+    get y(): bigint;
+    static fromAffine(ap: AffinePoint): Point;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
 declare const getPublicKey: (privKey: Bytes, isCompressed?: boolean) => Bytes;
@@ -58,9 +62,13 @@ declare class Signature {
     readonly s: bigint;
     readonly recovery?: number;
     constructor(r: bigint, s: bigint, recovery?: number);
-    hasHighS(): boolean;
     static fromBytes(b: Bytes): Signature;
+    toBytes(): Bytes;
+    hasHighS(): boolean;
     toCompactRawBytes(): Bytes;
+    toCompactHex(): string;
+    addRecoveryBit(bit: number): SignatureWithRecovery;
+    recoverPublicKey(msg: Bytes): Point;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 type OptS = {
@@ -80,7 +88,7 @@ type OptV = {
  * @param priv - private key
  * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
  */
-declare const signAsync: (msgh: Bytes, priv: Bytes, opts?: OptS) => Promise<Bytes>;
+declare const signAsync: (msgh: Bytes, priv: Bytes, opts?: OptS) => Promise<SignatureWithRecovery>;
 /**
  * Sign a msg hash using secp256k1.
  * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
@@ -90,9 +98,9 @@ declare const signAsync: (msgh: Bytes, priv: Bytes, opts?: OptS) => Promise<Byte
  * @param priv - private key
  * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
  * @example
- * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toCompactRawBytes();
+ * const sig = sign(sha256('hello'), privKey, { extraEntropy: true });
  */
-declare const sign: (msgh: Bytes, priv: Bytes, opts?: OptS) => Bytes;
+declare const sign: (msgh: Bytes, priv: Bytes, opts?: OptS) => SignatureWithRecovery;
 /**
  * Verify a signature using secp256k1.
  * @param sig - signature, 64-byte or Signature instance
@@ -100,9 +108,9 @@ declare const sign: (msgh: Bytes, priv: Bytes, opts?: OptS) => Bytes;
  * @param pub - public key
  * @param opts - { lowS: true } is default, prohibits s >= CURVE.n/2 to prevent malleability
  */
-declare const verify: (sig: Bytes, msgh: Bytes, pub: Bytes, opts?: OptV) => boolean;
+declare const verify: (sig: Bytes | Signature, msgh: Bytes, pub: Bytes, opts?: OptV) => boolean;
 /** ECDSA public key recovery. Requires msg hash and recovery id. */
-declare const recoverPublicKey: (point: SignatureWithRecovery, msgh: Bytes) => Point;
+declare const recoverPublicKey: (sig: SignatureWithRecovery, msgh: Bytes) => Point;
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
  * Result is **NOT hashed**. Use hash on it if you need.
@@ -115,9 +123,9 @@ declare const getSharedSecret: (privA: Bytes, pubB: Bytes, isCompressed?: boolea
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
-    hmacSha256Sync: HmacFnSync;
+    hmacSha256: HmacFnSync;
     sha256Async: (msg: Bytes) => Promise<Bytes>;
-    sha256Sync: Sha256FnSync;
+    sha256: Sha256FnSync;
 };
 declare const etc2: {
     hexToBytes: (hex: string) => Bytes;

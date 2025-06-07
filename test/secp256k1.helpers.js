@@ -3,9 +3,9 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import * as secp256k1 from '../index.js';
 import * as secp_1 from '../index.js';
 export { secp_1 as secp };
-secp256k1.etc.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp256k1.etc2.concatBytes(...msgs));
-if ('sha256Sync' in secp256k1.etc) {
-    secp256k1.etc.sha256Sync = sha256;
+secp256k1.etc.hmacSha256 = (key, ...msgs) => hmac(sha256, key, secp256k1.etc2.concatBytes(...msgs));
+if ('sha256' in secp256k1.etc) {
+    secp256k1.etc.sha256 = sha256;
 }
 const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc2;
 export const DER = {
@@ -67,7 +67,7 @@ export const DER = {
 };
 export const sigFromDER = (der) => {
     const { r, s } = DER.toSig(der);
-    return new secp256k1.Signature(r, s).toCompactRawBytes();
+    return new secp256k1.Signature(r, s);
 };
 export const sigToDER = (sig) => DER.hexFromSig(sig);
 export const selectHash = (secp) => sha256;
@@ -75,3 +75,4 @@ export const normVerifySig = (s) => DER.toSig(s);
 export const bytesToNumberBE = secp256k1.etc2.bytesToNumberBE;
 export const numberToBytesBE = secp256k1.etc2.numberToBytesBE;
 export const mod = secp256k1.etc2.mod;
+export const schnorr = secp256k1.schnorr;
