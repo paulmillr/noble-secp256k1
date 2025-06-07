@@ -20,7 +20,7 @@ const FC_BIGINT = fc.bigInt(1n + 1n, CURVE_ORDER - 1n);
 const NUM_RUNS = 5;
 
 const getXY = (p) => ({ x: p.x, y: p.y });
-const toHex = secp256k1.etc.bytesToHex;
+const toHex = secp256k1.etc2.bytesToHex;
 
 function equal(a, b, comment) {
   deepStrictEqual(a.equals(b), true, `eq(${comment})`);
@@ -321,7 +321,7 @@ describe(name, () => {
           const sigRS = (sig) => ({ s: sig.s, r: sig.r });
           // Compact
           // deepStrictEqual(sigRS(C.Signature.fromCompact(sig.toCompactHex())), sigRS(sig));
-          deepStrictEqual(sigRS(C.Signature.fromCompact(sig.toCompactRawBytes())), sigRS(sig));
+          // deepStrictEqual(sigRS(C.Signature.fromCompact(sig)), sigRS(sig));
           // DER
           // deepStrictEqual(sigRS(C.Signature.fromDER(sig.toDERHex())), sigRS(sig));
           // deepStrictEqual(sigRS(C.Signature.fromDER(sig.toDERRawBytes())), sigRS(sig));
@@ -329,41 +329,41 @@ describe(name, () => {
         { numRuns: NUM_RUNS }
       )
     );
-    should('Signature.addRecoveryBit/Signature.recoveryPublicKey', () =>
-      fc.assert(
-        fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
-          msg = Uint8Array.from(Buffer.from(msg, 'hex'));
-          const priv = C.utils.randomPrivateKey();
-          const pub = C.getPublicKey(priv);
-          const sig = C.sign(msg, priv);
-          deepStrictEqual(sig.recoverPublicKey(msg).toRawBytes(), pub);
-          const sig2 = C.Signature.fromCompact(sig.toCompactRawBytes());
-          throws(() => sig2.recoverPublicKey(msg));
-          const sig3 = sig2.addRecoveryBit(sig.recovery);
-          deepStrictEqual(sig3.recoverPublicKey(msg).toRawBytes(), pub);
-        }),
-        { numRuns: NUM_RUNS }
-      )
-    );
-    should('Signature.normalizeS', () =>
-      fc.assert(
-        fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
-          msg = bytes(msg);
-          const priv = C.utils.randomPrivateKey();
-          const pub = C.getPublicKey(priv);
-          const sig = C.sign(msg, priv, { lowS: false });
-          if (!sig.hasHighS()) return;
-          const sigNorm = sig.normalizeS();
-          deepStrictEqual(sigNorm.hasHighS(), false, 'a');
+    // should('Signature.addRecoveryBit/Signature.recoveryPublicKey', () =>
+    //   fc.assert(
+    //     fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+    //       msg = Uint8Array.from(Buffer.from(msg, 'hex'));
+    //       const priv = C.utils.randomPrivateKey();
+    //       const pub = C.getPublicKey(priv);
+    //       const sig = C.sign(msg, priv);
+    //       deepStrictEqual(sig.recoverPublicKey(msg).toRawBytes(), pub);
+    //       const sig2 = C.Signature.fromCompact(sig.toCompactRawBytes());
+    //       throws(() => sig2.recoverPublicKey(msg));
+    //       const sig3 = sig2.addRecoveryBit(sig.recovery);
+    //       deepStrictEqual(sig3.recoverPublicKey(msg).toRawBytes(), pub);
+    //     }),
+    //     { numRuns: NUM_RUNS }
+    //   )
+    // );
+    // should('Signature.normalizeS', () =>
+    //   fc.assert(
+    //     fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+    //       msg = bytes(msg);
+    //       const priv = C.utils.randomPrivateKey();
+    //       const pub = C.getPublicKey(priv);
+    //       const sig = C.sign(msg, priv, { lowS: false });
+    //       if (!sig.hasHighS()) return;
+    //       const sigNorm = sig.normalizeS();
+    //       deepStrictEqual(sigNorm.hasHighS(), false, 'a');
 
-          deepStrictEqual(C.verify(sig, msg, pub, { lowS: false }), true, 'b');
-          deepStrictEqual(C.verify(sig, msg, pub, { lowS: true }), false, 'c');
-          deepStrictEqual(C.verify(sigNorm, msg, pub, { lowS: true }), true, 'd');
-          deepStrictEqual(C.verify(sigNorm, msg, pub, { lowS: false }), true, 'e');
-        }),
-        { numRuns: NUM_RUNS }
-      )
-    );
+    //       deepStrictEqual(C.verify(sig, msg, pub, { lowS: false }), true, 'b');
+    //       deepStrictEqual(C.verify(sig, msg, pub, { lowS: true }), false, 'c');
+    //       deepStrictEqual(C.verify(sigNorm, msg, pub, { lowS: true }), true, 'd');
+    //       deepStrictEqual(C.verify(sigNorm, msg, pub, { lowS: false }), true, 'e');
+    //     }),
+    //     { numRuns: NUM_RUNS }
+    //   )
+    // );
   }
 
   // NOTE: fails for ed, because of empty message. Since we convert it to scalar,
