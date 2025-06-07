@@ -8,11 +8,11 @@ const P = B256 - 0x1000003d1n; // curve's field prime
 const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
+const _b = 7n;
 const _0 = 0n;
 const _1 = 1n;
 const L = 32; // field / group byte length
-const L2 = L * 2;
-const _b = 7n;
+const L2 = 64;
 /**
  * secp256k1 curve parameters. Equation is x³ + ax + b, but a=0 - which makes it x³+b.
  * Gx and Gy are generator coordinates. p is field order, n is group order.
@@ -88,7 +88,7 @@ class Point {
         }
         if (len === (L2 + 1) && head === 0x04) // Uncompressed 65-byte point, 0x04 prefix
             p = new Point(x, sliceBytesNum(tail, L, L2), _1);
-        return p ? p.ok() : err('bad point: not on curve'); // Verify the result
+        return p ? p.ok() : err('bad Point: not on curve'); // Verify the result
     }
     /** Equality check: compare points P&Q. */
     equals(other) {
@@ -335,7 +335,7 @@ const cr = () => // We support: 1) browsers 2) node.js 19+ 3) deno, other envs w
  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 const subtle = () => {
     const c = cr();
-    return c && c.subtle || err('crypto.subtle must be defined');
+    return c?.subtle || err('crypto.subtle must be defined');
 };
 const callEtcFn = (name) => {
     // @ts-ignore
