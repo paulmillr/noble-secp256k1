@@ -72,3 +72,4 @@ export const normVerifySig = (s) => DER.toSig(s);
 export const bytesToNumberBE = secp256k1.etc.bytesToNumberBE;
 export const numberToBytesBE = secp256k1.etc.numberToBytesBE;
 export const mod = secp256k1.etc.mod;
+export const schnorr = null;
