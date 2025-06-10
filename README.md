@@ -4,9 +4,10 @@ Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
 
 - ✍️ [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
   signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
+- 🪢 Schnorr signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 3.98KB gzipped (elliptic.js is 12x larger, tiny-secp256k1 is 20-40x larger)
+- 🪶 4KB gzipped (elliptic.js is 12x larger, tiny-secp256k1 is 20-40x larger)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
