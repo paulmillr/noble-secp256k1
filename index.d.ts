@@ -23,6 +23,8 @@ export interface AffinePoint {
 }
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 declare class Point {
+    static BASE: Point;
+    static ZERO: Point;
     readonly px: bigint;
     readonly py: bigint;
     readonly pz: bigint;

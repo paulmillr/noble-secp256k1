@@ -424,7 +424,7 @@ describe('secp256k1', () => {
       Point.fromPrivateKey(
         numberToBytesBE(88572218780422190464634044548753414301110513745532121983949500266768436236425n)
       );
-    eql(Point.fromBytes(p1.toBytes(true)).aff(), p1.aff());
+    eql(Point.fromBytes(p1.toBytes(true)).equals(p1), true);
   });
 
   should('#toBytes() roundtrip', () => {
@@ -669,22 +669,22 @@ describe('verify()', () => {
 });
 
 describe('secp256k1 schnorr.sign()', () => {
+  if (!schnorr) return;
   // index,secret key,public key,aux_rand,message,signature,verification result,comment
   const VECTORS_bip340 = txt('vectors/secp256k1/schnorr.csv', ',').slice(1, -1);
   for (let vec of VECTORS_bip340) {
-    const [index, sec_, pub_, rnd_, msg_, expSig, passes, comment] = vec;
+    const index = vec[0];
+    const [sec, pub, rnd, msg, expSig] = vec.slice(1, 6).map((item) => hexToBytes(item));
+    const passes = vec[6];
+    const comment = vec[7];
     should(`${comment || 'vector ' + index}`, () => {
-      const msg = hexToBytes(msg_);
-      const pub = hexToBytes(pub_);
-      const rnd = hexToBytes(rnd_);
-      if (sec_) {
-        const sec = hexToBytes(sec_);
-        eql(bytesToHex(schnorr.getPublicKey(sec)), pub_.toLowerCase());
+      if (sec.length > 0) {
+        eql(schnorr.getPublicKey(sec), pub);
         const sig = schnorr.sign(msg, sec, rnd);
-        eql(bytesToHex(sig), expSig.toLowerCase());
+        eql(sig, expSig);
         eql(schnorr.verify(sig, msg, pub), true);
       } else {
-        const passed = schnorr.verify(hexToBytes(expSig), msg, pub);
+        const passed = schnorr.verify(expSig, msg, pub);
         eql(passed, passes === 'TRUE');
       }
     });
