@@ -27,11 +27,13 @@ export type SignatureWithRecovery = Signature & { recovery: number }
 const curve = (x: bigint) => M(M(x * x) * x + _b);
 /** lift_x from BIP340 calculates square root. Validates x, then validates root*root. */
 const lift_x = (x: bigint) => {
-  // check 1<=x<P
-  // Let c = x³ + 7 mod p. Fail if x ≥ p.
+  // c = √y
+  // Let c = x³ + 7 mod p. Fail if x ≥ p. (also fail if x < 1)
   const c = curve(afield(x));
-  // y = c^(p+1)/4 mod p (for fields p = 3 mod 4 -- a special, fast case).
-  let r = _1; // Paper: "Square Roots from 1;24,51,10 to Dan Shanks".
+  // y = c^((p+1)/4) mod p
+  // This formula works for fields p = 3 mod 4 -- a special, fast case.
+  // Paper: "Square Roots from 1;24,51,10 to Dan Shanks".
+  let r = _1;
   for (let num = c, e = (P + _1) / 4n; e > _0; e >>= _1) { // powMod: modular exponentiation.
     if (e & _1) r = (r * num) % P;                      // Uses exponentiation by squaring.
     num = (num * num) % P;                              // Not constant-time.
@@ -78,6 +80,7 @@ class Point {
     this.pz = afield0(pz);
     freeze(this);
   }
+  /** Convert Uint8Array to Point. */
   static fromBytes(bytes: Bytes): Point {
     abytes(bytes);
     let p: Point | undefined = undefined;
@@ -92,7 +95,7 @@ class Point {
     }
     if (len === (L2+1) && head === 0x04)                // Uncompressed 65-byte point, 0x04 prefix
       p = new Point(x, sliceBytesNum(tail, L, L2), _1);
-    return p ? p.ok() : err('bad Point: not on curve'); // Verify the result
+    return p ? p.ok() : err('bad point: not on curve');
   }
   /** Equality check: compare points P&Q. */
   equals(other: Point): boolean {
@@ -171,6 +174,13 @@ class Point {
     return concatBytes(u8of(0x04), x32b, numTo32b(y));
   }
 
+  // 0.02kb
+  /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
+  static fromAffine(ap: AffinePoint): Point {
+    const { x, y } = ap;
+    return ((x === _0) && (y === _0)) ? I : new Point(x, y, _1);
+  }
+
   // Can be commented-out:
   is0(): boolean { return this.equals(I); }
   // 0.01kb
@@ -179,27 +189,25 @@ class Point {
   multiply(n: bigint): Point { return this.mul(n); }
   // 0.01kb
   static fromPrivateKey(k: Bytes): Point { return G.mul(toPrivScalar(k)); }
+  // static fromHex(hex: Hex): Point { return Point.fromBytes(toU8(hex)); }
   // 0.01kb
   get x(): bigint { return this.aff().x; }
   get y(): bigint { return this.aff().y; }
-  // 0.02kb
-  static fromAffine(ap: AffinePoint): Point {
-    const { x, y } = ap;
-    if (x === _0 && y === _0) return I;
-    return new Point(x, y, _1);
-  }
+  toAffine(): AffinePoint { return this.aff(); }
+  toRawBytes(c?: boolean): Bytes { return this.toBytes(c); }
+  assertValidity(): Point { return this.ok(); }
 }
 /** Generator / base point */
 const G: Point = new Point(Gx, Gy, _1);
 /** Identity / zero point */
 const I: Point = new Point(_0, _1, _0);
+// Static aliases
 Point.BASE = G;
 Point.ZERO = I;
-// Unsafe multiplication Q = u1⋅G + u2⋅R.
-// Verifies point is not at infinity
+/** `Q = u1⋅G + u2⋅R`. Unsafe (non-CT), but verifies Q is not ZERO */
 const doubleScalarMulUns = (R: Point, u1: bigint, u2: bigint): Point => {
   return G.mul(u1, false).add(R.mul(u2, false)).ok();
-}
+};
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 const bytesToHex = (b: Bytes): string => Array.from(abytes(b)).map(e => padh(e, 2)).join('');
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
@@ -250,7 +258,7 @@ const toPrivScalar = (pr: Bytes): bigint => {
   const num = bytesToNum(abytes(pr, L));
   return arange(num, _1, N, 'private key invalid 3');
 };
-/** For Signature malleability, validates sig.s is bigger than CURVE.n/2. */
+/** For Signature malleability, validates sig.s is bigger than N/2. */
 const highS = (n: bigint): boolean => n > (N >> _1);
 /** Creates 33/65-byte public key from 32-byte private key. */
 const getPublicKey = (privKey: Bytes, isCompressed = true): Bytes => {
@@ -278,6 +286,10 @@ class Signature {
     const { r, s } = this;
     return concatBytes(numTo32b(r), numTo32b(s));
   }
+  /** Create new signature, with added recovery bit. */
+  addRecoveryBit(bit: number): SignatureWithRecovery {
+    return new Signature(this.r, this.s, bit) as SignatureWithRecovery;
+  }
   // Can be commented-out:
 
   // 0.01kb
@@ -285,10 +297,6 @@ class Signature {
   // 0.02kb
   toCompactRawBytes(): Bytes { return this.toBytes(); }
   toCompactHex(): string { return bytesToHex(this.toBytes()); }
-  // 0.01kb
-  addRecoveryBit(bit: number): SignatureWithRecovery {
-    return (new Signature(this.r, this.s, bit)) as SignatureWithRecovery;
-  }
   // 0.10kb
   recoverPublicKey(msg: Bytes): Point {
     return recoverPublicKey(this as unknown as SignatureWithRecovery, msg);
@@ -301,9 +309,8 @@ const bits2int = (bytes: Bytes): bigint => {
   const num = bytesToNum(bytes); // FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits, which
   return delta > 0 ? num >> big(delta) : num; // matches bits2int. bits2int can produce res>N.
 };
-const bits2int_modN = (bytes: Bytes): bigint => {       // int2octets can't be used; pads small msgs
-  return modN(bits2int(abytes(bytes)));                 // with 0: BAD for trunc as per RFC vectors
-};
+/** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
+const bits2int_modN = (bytes: Bytes): bigint => modN(bits2int(abytes(bytes)));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
 const subtle = () => {
@@ -362,7 +369,7 @@ type Pred<T> = (v: Uint8Array) => T | undefined;
 const hmacDrbg = <T>(asynchronous: boolean) => { // HMAC-DRBG async
   let v = u8n(L);  // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
   let k = u8n(L);  // Steps B, C of RFC6979 3.2: set hashLen, in our case always same
-  let i = 0;       // Iterations counter, will throw when over 1000
+  let i = 0;       // Iterations counter, will throw when over max
   const NULL = u8n(0);
   const reset = () => { v.fill(1); k.fill(0); i = 0; };
   const max = 1000;
@@ -427,7 +434,8 @@ const hmacDrbg = <T>(asynchronous: boolean) => { // HMAC-DRBG async
  */
 const signAsync = async (msgh: Bytes, priv: Bytes, opts: OptS = optS): Promise<SignatureWithRecovery> => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
-  const sig = await hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);  // Re-run drbg until k2sig returns ok
+  // Re-run drbg until k2sig returns ok
+  const sig = await hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);
   return sig;
 };
 /**
@@ -444,7 +452,7 @@ const signAsync = async (msgh: Bytes, priv: Bytes, opts: OptS = optS): Promise<S
 const sign = (msgh: Bytes, priv: Bytes, opts: OptS = optS): SignatureWithRecovery => {
   const { seed, k2sig } = prepSig(msgh, priv, opts);    // Extract arguments for hmac-drbg
   // Re-run drbg until k2sig returns ok
-  const sig = hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig) as unknown as SignatureWithRecovery;
+  const sig = hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig) as SignatureWithRecovery;
   return sig;
 };
 /**
@@ -481,14 +489,14 @@ const recoverPublicKey = (sig: SignatureWithRecovery, msgh: Bytes): Point => {
   const h = bits2int_modN(abytes(msgh, L));             // Truncate hash
   const radj = recovery === 2 || recovery === 3 ? r + N : r; // q.x > n when rec was 2 or 3,
   afield(radj);                                       // ensure q.x is still a field element
-  const head = getPrefix(big(recovery));           // head is 0x02 or 0x03
-  const Rb = concatBytes(head, numTo32b(radj));
-  const R = Point.fromBytes(Rb);                      // concat head + hex repr of r
+  const head = getPrefix(big(recovery));              // head is 0x02 or 0x03
+  const Rb = concatBytes(head, numTo32b(radj));       // concat head + r
+  const R = Point.fromBytes(Rb);
   const ir = invert(radj, N);                         // r^-1
   const u1 = modN(-h * ir);                           // -hr^-1
   const u2 = modN(s * ir);                            // sr^-1
   return doubleScalarMulUns(R, u1, u2)                // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
-}
+};
 
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
@@ -525,7 +533,7 @@ const etc2 = {
   randomBytes: randomBytes as (len?: number) => Bytes,
 }
 const randomPrivateKey = (): Bytes => {                 // FIPS 186 B.4.1.
-  const num = M(bytesToNum(randomBytes(L + L / 2)), N - _1); // takes 48 bytes
+  const num = M(bytesToNum(randomBytes(L + 16)), N - _1); // takes 48 bytes
   return numTo32b(num + _1);                            // returns (hash mod n-1)+1
 };
 /** Curve-specific utilities for private keys. */
