@@ -52,24 +52,21 @@ declare class Point {
      * Cost: 12M + 0S + 3*a + 3*b3 + 23add.
      */
     add(other: Point): Point;
-    mul(n: bigint, safe?: boolean): Point;
+    multiply(n: bigint, safe?: boolean): Point;
     /** Convert point to 2d xy affine point. (x, y, z) ∋ (x=x/z, y=y/z) */
-    aff(): AffinePoint;
+    toAffine(): AffinePoint;
     /** Checks if the point is valid and on-curve. */
-    ok(): Point;
+    assertValidity(): Point;
     toBytes(isCompressed?: boolean): Bytes;
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
     static fromAffine(ap: AffinePoint): Point;
     is0(): boolean;
-    toHex(c?: boolean): string;
-    multiply(n: bigint): Point;
+    toHex(isCompressed?: boolean): string;
     static fromPrivateKey(k: Bytes): Point;
     static fromHex(hex: Hex): Point;
     get x(): bigint;
     get y(): bigint;
-    toAffine(): AffinePoint;
     toRawBytes(c?: boolean): Bytes;
-    assertValidity(): Point;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
 declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;

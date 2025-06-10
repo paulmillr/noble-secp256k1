@@ -91,7 +91,7 @@ class Point {
         }
         if (len === (L2 + 1) && head === 0x04) // Uncompressed 65-byte point, 0x04 prefix
             p = new Point(x, sliceBytesNum(tail, L, L2), _1);
-        return p ? p.ok() : err('bad point: not on curve');
+        return p ? p.assertValidity() : err('bad point: not on curve');
     }
     /** Equality check: compare points P&Q. */
     equals(other) {
@@ -156,7 +156,7 @@ class Point {
         Z3 = M(Z3 + t0); // step 40
         return new Point(X3, Y3, Z3);
     }
-    mul(n, safe = true) {
+    multiply(n, safe = true) {
         if (!safe && n === _0)
             return I; // in unsafe mode, allow zero
         agroup(n); // must be 1 <= n < CURVE.n
@@ -172,7 +172,7 @@ class Point {
         return p;
     }
     /** Convert point to 2d xy affine point. (x, y, z) ∋ (x=x/z, y=y/z) */
-    aff() {
+    toAffine() {
         const { px: x, py: y, pz: z } = this;
         if (this.equals(I))
             return { x: _0, y: _0 }; // fast-path for zero point
@@ -184,15 +184,15 @@ class Point {
         return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
     }
     /** Checks if the point is valid and on-curve. */
-    ok() {
-        const { x, y } = this.aff(); // convert to 2d xy affine point.
+    assertValidity() {
+        const { x, y } = this.toAffine(); // convert to 2d xy affine point.
         afield(x);
         afield(y); // must be in range 1 <= x,y < P
         return M(y * y) === curve(x) ? // y² = x³ + ax + b, must be equal
             this : err('bad point: not on curve');
     }
     toBytes(isCompressed = true) {
-        const { x, y } = this.ok().aff(); // convert to 2d xy affine point
+        const { x, y } = this.assertValidity().toAffine(); // convert to 2d xy affine point
         const x32b = numTo32b(x);
         if (isCompressed)
             return concatBytes(getPrefix(y), x32b);
@@ -206,18 +206,14 @@ class Point {
     // Can be commented-out:
     is0() { return this.equals(I); }
     // 0.01kb
-    toHex(c = true) { return bytesToHex(this.toBytes(c)); }
+    toHex(isCompressed = true) { return bytesToHex(this.toBytes(isCompressed)); }
     // 0.01kb
-    multiply(n) { return this.mul(n); }
-    // 0.01kb
-    static fromPrivateKey(k) { return G.mul(toPrivScalar(k)); }
+    static fromPrivateKey(k) { return G.multiply(toPrivScalar(k)); }
     static fromHex(hex) { return Point.fromBytes(toU8(hex)); }
     // 0.01kb
-    get x() { return this.aff().x; }
-    get y() { return this.aff().y; }
-    toAffine() { return this.aff(); }
+    get x() { return this.toAffine().x; }
+    get y() { return this.toAffine().y; }
     toRawBytes(c) { return this.toBytes(c); }
-    assertValidity() { return this.ok(); }
 }
 /** Generator / base point */
 const G = new Point(Gx, Gy, _1);
@@ -228,7 +224,7 @@ Point.BASE = G;
 Point.ZERO = I;
 /** `Q = u1⋅G + u2⋅R`. Unsafe (non-CT), but verifies Q is not ZERO */
 const doubleScalarMulUns = (R, u1, u2) => {
-    return G.mul(u1, false).add(R.mul(u2, false)).ok();
+    return G.multiply(u1, false).add(R.multiply(u2, false)).assertValidity();
 };
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
 const bytesToHex = (b) => Array.from(abytes(b)).map(e => padh(e, 2)).join('');
@@ -291,7 +287,7 @@ const toPrivScalar = (pr) => {
 const highS = (n) => n > (N >> _1);
 /** Creates 33/65-byte public key from 32-byte private key. */
 const getPublicKey = (privKey, isCompressed = true) => {
-    return G.mul(toPrivScalar(privKey)).toBytes(isCompressed);
+    return G.multiply(toPrivScalar(privKey)).toBytes(isCompressed);
 };
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
@@ -387,7 +383,7 @@ const prepSig = (msgh, priv, opts = optS) => {
         const k = bits2int(kBytes); // RFC6979 method.
         if (!(_1 <= k && k < N))
             return; // Check 0 < k < CURVE.n
-        const q = G.mul(k).aff(); // q = Gk
+        const q = G.multiply(k).toAffine(); // q = Gk
         const r = modN(q.x); // r = q.x mod n
         if (r === _0)
             return; // r=0 invalid
@@ -528,7 +524,7 @@ const verify = (sig, msgh, pub, opts = optV) => {
         const is = invert(s, N); // s^-1
         const u1 = modN(h * is); // u1 = hs^-1 mod n
         const u2 = modN(r * is); // u2 = rs^-1 mod n
-        const R = doubleScalarMulUns(P, u1, u2).aff(); // R = u1⋅G + u2⋅P
+        const R = doubleScalarMulUns(P, u1, u2).toAffine(); // R = u1⋅G + u2⋅P
         // stop if R is identity / zero point. Check is done inside `doubleScalarMulUns`
         const v = modN(R.x); // R.x must be in N's field, not P's
         return v === r; // mod(R.x, n) == r
@@ -562,7 +558,7 @@ const recoverPublicKey = (sig, msgh) => {
  * @returns public key C
  */
 const getSharedSecret = (privA, pubB, isCompressed = true) => {
-    return Point.fromBytes(toU8(pubB)).mul(toPrivScalar(privA)).toBytes(isCompressed);
+    return Point.fromBytes(toU8(pubB)).multiply(toPrivScalar(privA)).toBytes(isCompressed);
 };
 const hashToPrivateKey = (hash) => {
     hash = toU8(hash); // produces private keys with modulo bias
