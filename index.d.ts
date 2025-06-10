@@ -29,6 +29,7 @@ declare class Point {
     readonly py: bigint;
     readonly pz: bigint;
     constructor(px: bigint, py: bigint, pz: bigint);
+    /** Convert Uint8Array to Point. */
     static fromBytes(bytes: Bytes): Point;
     /** Equality check: compare points P&Q. */
     equals(other: Point): boolean;
@@ -48,13 +49,17 @@ declare class Point {
     /** Checks if the point is valid and on-curve. */
     ok(): Point;
     toBytes(isCompressed?: boolean): Bytes;
+    /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
+    static fromAffine(ap: AffinePoint): Point;
     is0(): boolean;
     toHex(c?: boolean): string;
     multiply(n: bigint): Point;
     static fromPrivateKey(k: Bytes): Point;
     get x(): bigint;
     get y(): bigint;
-    static fromAffine(ap: AffinePoint): Point;
+    toAffine(): AffinePoint;
+    toRawBytes(c?: boolean): Bytes;
+    assertValidity(): Point;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
 declare const getPublicKey: (privKey: Bytes, isCompressed?: boolean) => Bytes;
@@ -66,10 +71,11 @@ declare class Signature {
     constructor(r: bigint, s: bigint, recovery?: number);
     static fromBytes(b: Bytes): Signature;
     toBytes(): Bytes;
+    /** Create new signature, with added recovery bit. */
+    addRecoveryBit(bit: number): SignatureWithRecovery;
     hasHighS(): boolean;
     toCompactRawBytes(): Bytes;
     toCompactHex(): string;
-    addRecoveryBit(bit: number): SignatureWithRecovery;
     recoverPublicKey(msg: Bytes): Point;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
