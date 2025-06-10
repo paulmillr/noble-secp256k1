@@ -59,14 +59,15 @@ declare class Point {
     ok(): Point;
     toBytes(isCompressed?: boolean): Bytes;
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
-    static fromAffine(p: AffinePoint): Point;
-    static fromPrivateKey(k: PrivKey): Point;
+    static fromAffine(ap: AffinePoint): Point;
+    is0(): boolean;
+    toHex(c?: boolean): string;
+    multiply(n: bigint): Point;
+    static fromPrivateKey(k: Bytes): Point;
     static fromHex(hex: Hex): Point;
     get x(): bigint;
     get y(): bigint;
-    multiply(n: bigint): Point;
     toAffine(): AffinePoint;
-    toHex(isCompressed?: boolean): string;
     toRawBytes(c?: boolean): Bytes;
     assertValidity(): Point;
 }
@@ -79,18 +80,17 @@ declare class Signature {
     readonly recovery?: number;
     constructor(r: bigint, s: bigint, recovery?: number);
     /** Create signature from 64b compact (r || s) representation. */
-    static fromCompact(hex: Hex): Signature;
     static fromBytes(b: Bytes): Signature;
-    assertValidity(): Signature;
+    toBytes(): Bytes;
     /** Create new signature, with added recovery bit. */
-    addRecoveryBit(rec: number): SignatureWithRecovery;
+    addRecoveryBit(bit: number): SignatureWithRecovery;
     hasHighS(): boolean;
-    normalizeS(): Signature;
-    recoverPublicKey(msgh: Hex): Point;
-    /** Uint8Array 64b compact (r || s) representation. */
     toCompactRawBytes(): Bytes;
-    /** Hex string 64b compact (r || s) representation. */
     toCompactHex(): string;
+    recoverPublicKey(msg: Bytes): Point;
+    static fromCompact(hex: Hex): Signature;
+    assertValidity(): Signature;
+    normalizeS(): Signature;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 type OptS = {
