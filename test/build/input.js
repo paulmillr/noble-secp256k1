@@ -1,2 +1,1 @@
-export { etc, getPublicKey, schnorr, sign, verify } from "../../index.js";
-
+export { getPublicKey, hashes, schnorr, sign, utils, verify } from "../../index.js";

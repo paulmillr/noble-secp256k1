@@ -20,7 +20,7 @@ const FC_BIGINT = fc.bigInt(1n + 1n, CURVE_ORDER - 1n);
 const NUM_RUNS = 5;
 
 const getXY = (p) => ({ x: p.x, y: p.y });
-const toHex = secp256k1.etc2.bytesToHex;
+const toHex = secp256k1.etc.bytesToHex;
 
 function equal(a, b, comment) {
   deepStrictEqual(a.equals(b), true, `eq(${comment})`);

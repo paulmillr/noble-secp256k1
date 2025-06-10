@@ -4,14 +4,14 @@ import mark from 'micro-bmark';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as secp from '../index.js';
-const bytes = secp.etc2.hexToBytes;
+const bytes = secp.etc.hexToBytes;
 const points = readFileSync(join('.', 'test/vectors/points.txt'), 'utf-8')
   .split('\n')
   .filter((a) => a)
   .slice(0, 1000)
   .map(ph => bytes(ph));
 (async () => {
-  secp.etc.hmacSha256 = (k, ...m) => hmac(sha256, k, secp.etc2.concatBytes(...m));
+  secp.hashes.hmacSha256 = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
   // secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc2.concatBytes(...m));
   secp.getPublicKey(secp.utils.randomPrivateKey(), true); // warmup
   await mark('getPublicKey(utils.randomPrivateKey())', () => {
@@ -32,7 +32,7 @@ const points = readFileSync(join('.', 'test/vectors/points.txt'), 'utf-8')
   let len = points.length;
   await mark('Point.fromHex (decompression)', () => secp.Point.fromBytes(points[i++ % len]));
   if (secp.schnorr) {
-    secp.etc.sha256 = sha256;
+    secp.hashes.sha256 = sha256;
     const pubs = secp.schnorr.getPublicKey(priv);
     const signed = secp.schnorr.sign(msg, priv);
     await mark('schnorr.sign', () => secp.schnorr.sign(msg, priv));

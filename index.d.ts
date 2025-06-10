@@ -52,13 +52,13 @@ declare class Point {
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
     static fromAffine(ap: AffinePoint): Point;
     is0(): boolean;
-    toHex(c?: boolean): string;
+    toHex(isCompressed?: boolean): string;
     multiply(n: bigint): Point;
     static fromPrivateKey(k: Bytes): Point;
+    static fromHex(hex: string | Bytes): Point;
     get x(): bigint;
     get y(): bigint;
     toAffine(): AffinePoint;
-    toRawBytes(c?: boolean): Bytes;
     assertValidity(): Point;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
@@ -69,13 +69,11 @@ declare class Signature {
     readonly s: bigint;
     readonly recovery?: number;
     constructor(r: bigint, s: bigint, recovery?: number);
-    static fromBytes(b: Bytes): Signature;
-    toBytes(): Bytes;
+    static fromBytes(b: Bytes, format?: string): Signature;
+    toBytes(format?: string): Bytes;
     /** Create new signature, with added recovery bit. */
     addRecoveryBit(bit: number): SignatureWithRecovery;
     hasHighS(): boolean;
-    toCompactRawBytes(): Bytes;
-    toCompactHex(): string;
     recoverPublicKey(msg: Bytes): Point;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
@@ -128,14 +126,14 @@ declare const recoverPublicKey: (sig: SignatureWithRecovery, msgh: Bytes) => Poi
  * @returns public key C
  */
 declare const getSharedSecret: (privA: Bytes, pubB: Bytes, isCompressed?: boolean) => Bytes;
-/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
-declare const etc: {
+declare const hashes: {
     hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
     hmacSha256: HmacFnSync;
     sha256Async: (msg: Bytes) => Promise<Bytes>;
     sha256: Sha256FnSync;
 };
-declare const etc2: {
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
+declare const etc: {
     hexToBytes: (hex: string) => Bytes;
     bytesToHex: (bytes: Bytes) => string;
     concatBytes: (...arrs: Bytes[]) => Bytes;
@@ -175,4 +173,4 @@ declare const schnorr: {
     signAsync: typeof signAsyncSchnorr;
     verifyAsync: typeof verifyAsyncSchnorr;
 };
-export { CURVE, etc, etc2, getPublicKey, getSharedSecret, Point, randomPrivateKey, recoverPublicKey, schnorr, sign, signAsync, Signature, utils, verify };
+export { CURVE, etc, getPublicKey, getSharedSecret, hashes, Point, randomPrivateKey, recoverPublicKey, schnorr, sign, signAsync, Signature, utils, verify };

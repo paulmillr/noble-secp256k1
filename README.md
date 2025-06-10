@@ -68,17 +68,21 @@ To enable sync methods:
 ```ts
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
+secp.hashes.hmacSha256 = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
+secp.hashes.sha256 = sha256;
 ```
 
-### React Native: polyfill getRandomValues and sha512
+### React Native: polyfill getRandomValues and sha256
 
 ```ts
-import 'react-native-get-random-values';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
-secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
+import 'react-native-get-random-values';
+secp.hashes.hmacSha256 = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
+secp.hashes.sha256 = sha256;
+
+secp.hashes.hmacSha256Async = (k, ...m) => Promise.resolve(secp.hashes.hmacSha256(k, ...m));
+secp.hashes.sha256Async = (m) => Promise.resolve(sha256(m));
 ```
 
 ## API

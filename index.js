@@ -202,20 +202,16 @@ class Point {
         const { x, y } = ap;
         return ((x === _0) && (y === _0)) ? I : new Point(x, y, _1);
     }
-    // Can be commented-out:
     is0() { return this.equals(I); }
-    // 0.01kb
-    toHex(c = true) { return bytesToHex(this.toBytes(c)); }
-    // 0.01kb
+    toHex(isCompressed = true) { return bytesToHex(this.toBytes(isCompressed)); }
     multiply(n) { return this.mul(n); }
-    // 0.01kb
     static fromPrivateKey(k) { return G.mul(toPrivScalar(k)); }
-    // static fromHex(hex: Hex): Point { return Point.fromBytes(toU8(hex)); }
-    // 0.01kb
+    static fromHex(hex) {
+        return Point.fromBytes(typeof (hex) === 'string' ? hexToBytes(hex) : hex);
+    }
     get x() { return this.aff().x; }
     get y() { return this.aff().y; }
     toAffine() { return this.aff(); }
-    toRawBytes(c) { return this.toBytes(c); }
     assertValidity() { return this.ok(); }
 }
 /** Generator / base point */
@@ -292,6 +288,7 @@ const highS = (n) => n > (N >> _1);
 const getPublicKey = (privKey, isCompressed = true) => {
     return G.mul(toPrivScalar(privKey)).toBytes(isCompressed);
 };
+const validateSigFormat = (format) => (format !== 'compact') && err('invalid format');
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
     r;
@@ -304,13 +301,15 @@ class Signature {
             this.recovery = recovery;
         freeze(this);
     }
-    static fromBytes(b) {
+    static fromBytes(b, format = 'compact') {
+        validateSigFormat(format);
         abytes(b, L2);
         const r = sliceBytesNum(b, 0, L);
         const s = sliceBytesNum(b, L, L2);
         return new Signature(r, s);
     }
-    toBytes() {
+    toBytes(format = 'compact') {
+        validateSigFormat(format);
         const { r, s } = this;
         return concatBytes(numTo32b(r), numTo32b(s));
     }
@@ -318,13 +317,7 @@ class Signature {
     addRecoveryBit(bit) {
         return new Signature(this.r, this.s, bit);
     }
-    // Can be commented-out:
-    // 0.01kb
     hasHighS() { return highS(this.s); }
-    // 0.02kb
-    toCompactRawBytes() { return this.toBytes(); }
-    toCompactHex() { return bytesToHex(this.toBytes()); }
-    // 0.10kb
     recoverPublicKey(msg) {
         return recoverPublicKey(this, msg);
     }
@@ -344,11 +337,11 @@ const subtle = () => {
     const c = cr();
     return c?.subtle || err('crypto.subtle must be defined');
 };
-const callEtcFn = (name) => {
+const callHash = (name) => {
     // @ts-ignore
-    const fn = etc[name];
+    const fn = hashes[name];
     if (typeof fn !== 'function')
-        err('err.' + name + ' not set');
+        err('hashes.' + name + ' not set');
     return fn;
 };
 const randomBytes = (len = L) => {
@@ -402,7 +395,7 @@ const hmacDrbg = (asynchronous) => {
     const max = 1000;
     const _e = 'drbg: tried 1000 values';
     if (asynchronous) { // asynchronous=true
-        const h = (...b) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
+        const h = (...b) => hashes.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
         const reseed = async (seed = NULL) => {
             k = await h(u8of(0x00), seed); // k = hmac(K || V || 0x00 || seed)
             v = await h(); // v = hmac(K || V)
@@ -429,7 +422,7 @@ const hmacDrbg = (asynchronous) => {
     }
     else {
         const h = (...b) => {
-            return callEtcFn('hmacSha256')(k, v, ...b); // hmac(k)(v, ...values)
+            return callHash('hmacSha256')(k, v, ...b); // hmac(k)(v, ...values)
         };
         const reseed = (seed = NULL) => {
             k = h(u8of(0x00), seed); // k = hmac(k || v || 0x00 || seed)
@@ -552,8 +545,7 @@ const getSharedSecret = (privA, pubB, isCompressed = true) => {
     return Point.fromBytes(pubB).mul(toPrivScalar(privA)).toBytes(isCompressed); // ECDH
 };
 const _sha = 'SHA-256';
-/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
-const etc = {
+const hashes = {
     hmacSha256Async: async (key, ...msgs) => {
         const s = subtle();
         const name = 'HMAC';
@@ -564,7 +556,8 @@ const etc = {
     sha256Async: async (msg) => u8n(await subtle().digest(_sha, msg)),
     sha256: undefined,
 };
-const etc2 = {
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
+const etc = {
     hexToBytes: hexToBytes,
     bytesToHex: bytesToHex,
     concatBytes: concatBytes,
@@ -642,12 +635,12 @@ const T_AUX = 'aux';
 const T_NONCE = 'nonce';
 const T_CHALLENGE = 'challenge';
 const taggedHash = (tag, ...messages) => {
-    const fn = callEtcFn('sha256');
+    const fn = callHash('sha256');
     const tagH = fn(getTag(tag));
     return fn(concatBytes(tagH, tagH, ...messages));
 };
 const taggedHashAsync = async (tag, ...messages) => {
-    const fn = etc.sha256Async;
+    const fn = hashes.sha256Async;
     const tagH = await fn(getTag(tag));
     return await fn(concatBytes(tagH, tagH, ...messages));
 };
@@ -763,4 +756,4 @@ const schnorr = {
     signAsync: signAsyncSchnorr,
     verifyAsync: verifyAsyncSchnorr,
 };
-export { CURVE, etc, etc2, getPublicKey, getSharedSecret, Point, randomPrivateKey, recoverPublicKey, schnorr, sign, signAsync, Signature, utils, verify };
+export { CURVE, etc, getPublicKey, getSharedSecret, hashes, Point, randomPrivateKey, recoverPublicKey, schnorr, sign, signAsync, Signature, utils, verify };

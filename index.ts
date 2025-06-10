@@ -181,20 +181,16 @@ class Point {
     return ((x === _0) && (y === _0)) ? I : new Point(x, y, _1);
   }
 
-  // Can be commented-out:
   is0(): boolean { return this.equals(I); }
-  // 0.01kb
-  toHex(c=true): string { return bytesToHex(this.toBytes(c)); }
-  // 0.01kb
+  toHex(isCompressed = true): string { return bytesToHex(this.toBytes(isCompressed)); }
   multiply(n: bigint): Point { return this.mul(n); }
-  // 0.01kb
   static fromPrivateKey(k: Bytes): Point { return G.mul(toPrivScalar(k)); }
-  // static fromHex(hex: Hex): Point { return Point.fromBytes(toU8(hex)); }
-  // 0.01kb
+  static fromHex(hex: string | Bytes): Point {
+    return Point.fromBytes(typeof (hex) === 'string' ? hexToBytes(hex) : hex);
+  }
   get x(): bigint { return this.aff().x; }
   get y(): bigint { return this.aff().y; }
   toAffine(): AffinePoint { return this.aff(); }
-  toRawBytes(c?: boolean): Bytes { return this.toBytes(c); }
   assertValidity(): Point { return this.ok(); }
 }
 /** Generator / base point */
@@ -265,6 +261,7 @@ const getPublicKey = (privKey: Bytes, isCompressed = true): Bytes => {
   return G.mul(toPrivScalar(privKey)).toBytes(isCompressed);
 }
 
+const validateSigFormat = (format: string) => (format !== 'compact') && err('invalid format');
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
   readonly r: bigint;
@@ -276,13 +273,15 @@ class Signature {
     if (recovery != null) this.recovery = recovery;
     freeze(this);
   }
-  static fromBytes(b: Bytes): Signature {
+  static fromBytes(b: Bytes, format = 'compact'): Signature {
+    validateSigFormat(format);
     abytes(b, L2);
     const r = sliceBytesNum(b, 0, L);
     const s = sliceBytesNum(b, L, L2);
     return new Signature(r, s);
   }
-  toBytes(): Bytes {
+  toBytes(format = 'compact'): Bytes {
+    validateSigFormat(format);
     const { r, s } = this;
     return concatBytes(numTo32b(r), numTo32b(s));
   }
@@ -290,17 +289,12 @@ class Signature {
   addRecoveryBit(bit: number): SignatureWithRecovery {
     return new Signature(this.r, this.s, bit) as SignatureWithRecovery;
   }
-  // Can be commented-out:
-
-  // 0.01kb
   hasHighS(): boolean { return highS(this.s); }
-  // 0.02kb
-  toCompactRawBytes(): Bytes { return this.toBytes(); }
-  toCompactHex(): string { return bytesToHex(this.toBytes()); }
-  // 0.10kb
   recoverPublicKey(msg: Bytes): Point {
     return recoverPublicKey(this as unknown as SignatureWithRecovery, msg);
   }
+  // toCompactRawBytes(): Bytes { return this.toBytes(); }
+  // toCompactHex(): string { return bytesToHex(this.toBytes()); }
 }
 /** RFC6979: ensure ECDSA msg is X bytes. */
 const bits2int = (bytes: Bytes): bigint => {
@@ -317,10 +311,10 @@ const subtle = () => {
   const c = cr();
   return c?.subtle || err('crypto.subtle must be defined');
 };
-const callEtcFn = (name: string) => {
+const callHash = (name: string) => {
   // @ts-ignore
-  const fn = etc[name];
-  if (typeof fn !== 'function') err('err.' + name + ' not set');
+  const fn = hashes[name];
+  if (typeof fn !== 'function') err('hashes.' + name + ' not set');
   return fn;
 };
 const randomBytes = (len = L): Bytes => {               // CSPRNG (random number generator)
@@ -375,7 +369,7 @@ const hmacDrbg = <T>(asynchronous: boolean) => { // HMAC-DRBG async
   const max = 1000;
   const _e = 'drbg: tried 1000 values';
   if (asynchronous) {                                   // asynchronous=true
-    const h = (...b: Bytes[]) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
+    const h = (...b: Bytes[]) => hashes.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
     const reseed = async (seed = NULL) => {             // HMAC-DRBG reseed() function. Steps D-G
       k = await h(u8of(0x00), seed);                    // k = hmac(K || V || 0x00 || seed)
       v = await h();                                    // v = hmac(K || V)
@@ -398,7 +392,7 @@ const hmacDrbg = <T>(asynchronous: boolean) => { // HMAC-DRBG async
     };
   } else {
     const h = (...b: Bytes[]) => {                      // asynchronous=false; same, but synchronous
-      return callEtcFn('hmacSha256')(k, v, ...b);       // hmac(k)(v, ...values)
+      return callHash('hmacSha256')(k, v, ...b);       // hmac(k)(v, ...values)
     };
     const reseed = (seed = NULL) => {                   // HMAC-DRBG reseed() function. Steps D-G
       k = h(u8of(0x00), seed);                          // k = hmac(k || v || 0x00 || seed)
@@ -510,8 +504,7 @@ const getSharedSecret = (privA: Bytes, pubB: Bytes, isCompressed = true): Bytes 
   return Point.fromBytes(pubB).mul(toPrivScalar(privA)).toBytes(isCompressed); // ECDH
 };
 const _sha = 'SHA-256';
-/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
-const etc = {
+const hashes = {
   hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
     const s = subtle();
     const name = 'HMAC';
@@ -522,7 +515,8 @@ const etc = {
   sha256Async: async (msg: Bytes): Promise<Bytes> => u8n(await subtle().digest(_sha, msg)),
   sha256: undefined as Sha256FnSync,
 };
-const etc2 = {
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
+const etc = {
   hexToBytes: hexToBytes as (hex: string) => Bytes,
   bytesToHex: bytesToHex as (bytes: Bytes) => string,
   concatBytes: concatBytes as (...arrs: Bytes[]) => Bytes,
@@ -593,12 +587,12 @@ const T_AUX = 'aux';
 const T_NONCE = 'nonce';
 const T_CHALLENGE = 'challenge';
 const taggedHash = (tag: string, ...messages: Bytes[]): Bytes => {
-  const fn = callEtcFn('sha256');
+  const fn = callHash('sha256');
   const tagH = fn(getTag(tag));
   return fn(concatBytes(tagH, tagH, ...messages));
 };
 const taggedHashAsync = async (tag: string, ...messages: Bytes[]): Promise<Bytes> => {
-  const fn = etc.sha256Async;
+  const fn = hashes.sha256Async;
   const tagH = await fn(getTag(tag));
   return await fn(concatBytes(tagH, tagH, ...messages));
 };
@@ -735,8 +729,8 @@ const schnorr: {
 }
 
 export {
-  CURVE, etc, etc2,
+  CURVE, etc,
   getPublicKey,
-  getSharedSecret, Point, randomPrivateKey, recoverPublicKey,
-  schnorr, sign, signAsync, Signature, utils, verify
+  getSharedSecret, hashes, Point, randomPrivateKey, recoverPublicKey, schnorr, sign, signAsync, Signature, utils, verify
 };
+

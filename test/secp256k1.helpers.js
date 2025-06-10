@@ -3,11 +3,12 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import * as secp256k1 from '../index.js';
 import * as secp_1 from '../index.js';
 export { secp_1 as secp };
-secp256k1.etc.hmacSha256 = (key, ...msgs) => hmac(sha256, key, secp256k1.etc2.concatBytes(...msgs));
-if ('sha256' in secp256k1.etc) {
-    secp256k1.etc.sha256 = sha256;
+secp256k1.hashes.hmacSha256 = (key, ...msgs) =>
+    hmac(sha256, key, secp256k1.etc.concatBytes(...msgs));
+if ('sha256' in secp256k1.hashes) {
+    secp256k1.hashes.sha256 = sha256;
 }
-const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc2;
+const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc;
 export const DER = {
     // asn.1 DER encoding utils
     Err: class DERErr extends Error {
@@ -72,7 +73,7 @@ export const sigFromDER = (der) => {
 export const sigToDER = (sig) => DER.hexFromSig(sig);
 export const selectHash = (secp) => sha256;
 export const normVerifySig = (s) => DER.toSig(s);
-export const bytesToNumberBE = secp256k1.etc2.bytesToNumberBE;
-export const numberToBytesBE = secp256k1.etc2.numberToBytesBE;
-export const mod = secp256k1.etc2.mod;
+export const bytesToNumberBE = secp256k1.etc.bytesToNumberBE;
+export const numberToBytesBE = secp256k1.etc.numberToBytesBE;
+export const mod = secp256k1.etc.mod;
 export const schnorr = secp256k1.schnorr;
