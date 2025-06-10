@@ -49,14 +49,22 @@ declare class Point {
     /**
      * Point addition: P+Q, complete, exception-free formula
      * (Renes-Costello-Batina, algo 1 of [2015/1060](https://eprint.iacr.org/2015/1060)).
-     * Cost: 12M + 0S + 3*a + 3*b3 + 23add.
+     * Cost: `12M + 0S + 3*a + 3*b3 + 23add`.
      */
     add(other: Point): Point;
+    /**
+     * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
+     * Uses {@link wNAF} for base point.
+     * Uses fake point to mitigate side-channel leakage.
+     * @param n scalar by which point is multiplied
+     * @param safe safe mode guards against timing attacks; unsafe mode is faster
+     */
     multiply(n: bigint, safe?: boolean): Point;
-    /** Convert point to 2d xy affine point. (x, y, z) ∋ (x=x/z, y=y/z) */
+    /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
     toAffine(): AffinePoint;
     /** Checks if the point is valid and on-curve. */
     assertValidity(): Point;
+    /** Converts point to 33/65-byte Uint8Array. */
     toBytes(isCompressed?: boolean): Bytes;
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
     static fromAffine(ap: AffinePoint): Point;
@@ -66,7 +74,7 @@ declare class Point {
     static fromHex(hex: Hex): Point;
     get x(): bigint;
     get y(): bigint;
-    toRawBytes(c?: boolean): Bytes;
+    toRawBytes(isCompressed?: boolean): Bytes;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
 declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;
@@ -79,7 +87,7 @@ declare class Signature {
     /** Create signature from 64b compact (r || s) representation. */
     static fromBytes(b: Bytes): Signature;
     toBytes(): Bytes;
-    /** Create new signature, with added recovery bit. */
+    /** Copy signature, with newly added recovery bit. */
     addRecoveryBit(bit: number): SignatureWithRecovery;
     hasHighS(): boolean;
     toCompactRawBytes(): Bytes;
@@ -90,38 +98,54 @@ declare class Signature {
     normalizeS(): Signature;
 }
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
+/**
+ * Option to enable hedged signatures with improved security.
+ *
+ * * Randomly generated k is bad, because broken CSPRNG would leak private keys.
+ * * Deterministic k (RFC6979) is better; but is suspectible to fault attacks.
+ *
+ * We allow using technique described in RFC6979 3.6: additional k', a.k.a. adding randomness
+ * to deterministic sig. If CSPRNG is broken & randomness is weak, it would STILL be as secure
+ * as ordinary sig without ExtraEntropy.
+ *
+ * * `true` means "fetch data, from CSPRNG, incorporate it into k generation"
+ * * `false` means "disable extra entropy, use purely deterministic k"
+ * * `Uint8Array` passed means "incorporate following data into k generation"
+ *
+ * https://paulmillr.com/posts/deterministic-signatures/
+ */
+export type ExtraEntropy = boolean | Hex;
 type OptS = {
     lowS?: boolean;
-    extraEntropy?: boolean | Hex;
+    extraEntropy?: ExtraEntropy;
 };
 type OptV = {
     lowS?: boolean;
 };
-/** ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k. */
 /**
  * Sign a msg hash using secp256k1. Async.
- * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
- * Worst case: if randomness source for extraEntropy is bad, it would be as secure as if
- * the option has not been used.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
+ * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param priv - private key
- * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
+ * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
  */
 declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: OptS) => Promise<SignatureWithRecovery>;
 /**
  * Sign a msg hash using secp256k1.
- * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
- * Worst case: if randomness source for extraEntropy is bad, it would be as secure as if
- * the option has not been used.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
+ * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param priv - private key
- * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
+ * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
  * @example
- * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toCompactRawBytes();
+ * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toBytes();
  */
 declare const sign: (msgh: Hex, priv: PrivKey, opts?: OptS) => SignatureWithRecovery;
 /**
  * Verify a signature using secp256k1.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
+ * Default lowS=true, prevents malleability.
  * @param sig - signature, 64-byte or Signature instance
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param pub - public key
@@ -130,10 +154,10 @@ declare const sign: (msgh: Hex, priv: PrivKey, opts?: OptS) => SignatureWithReco
 declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: OptV) => boolean;
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
- * Result is **NOT hashed**. Use hash on it if you need.
+ * Result is **NOT hashed**. Use hash or KDF on it if you need.
  * @param privA private key A
  * @param pubB public key B
- * @param isCompressed 33-byte or 65-byte output
+ * @param isCompressed 33-byte (true) or 65-byte (false) output
  * @returns public key C
  */
 declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Bytes;
@@ -158,4 +182,4 @@ declare const utils: {
     randomPrivateKey: () => Bytes;
     precompute: (w?: number, p?: Point) => Point;
 };
-export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };
+export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };

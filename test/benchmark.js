@@ -27,5 +27,7 @@ const points = readFileSync(join('.', 'test/vectors/points.txt'), 'utf-8')
   await mark('recoverPublicKey', 1000, () => signature.recoverPublicKey(msg));
   let i = 0;
   let len = points.length;
-  await mark('Point.fromHex (decompression)', 10000, () => secp.ProjectivePoint.fromHex(points[i++ % len]));
+  await mark('Point.fromHex (decompression)', 10000, () =>
+    secp.ProjectivePoint.fromHex(points[i++ % len])
+  );
 })();

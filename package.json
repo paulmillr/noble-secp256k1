@@ -16,6 +16,8 @@
     "build": "tsc",
     "build:release": "npx jsbt esbuild test/build",
     "build:smaller": "cd test/build; npm install terser@5.29.2; npx terser --ecma 2020 -m -c < ../../index.js",
+    "lint": "prettier --check 'index.ts' 'test/**/*.{js,ts}'",
+    "format": "prettier --write 'index.ts' 'test/**/*.{js,ts}'",
     "test": "node test/index.js",
     "test:bun": "bun test/index.js",
     "test:deno": "deno --allow-env --allow-read test/index.js",
@@ -36,6 +38,7 @@
     "fast-check": "4.1.1",
     "micro-bmark": "0.4.2",
     "micro-should": "0.5.3",
+    "prettier": "^3.5.3",
     "typescript": "5.8.3"
   },
   "keywords": [

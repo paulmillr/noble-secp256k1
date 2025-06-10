@@ -3,7 +3,8 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { isBytes } from '@noble/hashes/utils.js';
 import * as secp256k1 from '../index.js';
-secp256k1.etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) => hmac(sha256, key, secp256k1.etc.concatBytes(...msgs))
+secp256k1.etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) =>
+  hmac(sha256, key, secp256k1.etc.concatBytes(...msgs));
 
 const { bytesToNumberBE: b2n, hexToBytes: h2b } = secp256k1.etc;
 export const DER = {

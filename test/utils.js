@@ -12,15 +12,16 @@ export function jsonGZ(path) {
 }
 
 export function byteify(obj) {
-  return Object.fromEntries(Object.entries(obj).map(([k, v]) => {
-    return [k, hexToBytes(v)];
-  }))
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => {
+      return [k, hexToBytes(v)];
+    })
+  );
 }
 
 function readUtf8(path) {
   return readFileSync(joinPath(_dirname, path), { encoding: 'utf-8' });
 }
-
 
 export function json(path) {
   try {

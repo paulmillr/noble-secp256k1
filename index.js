@@ -9,8 +9,6 @@ const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
 const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
 const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
 const _b = 7n;
-const _0 = 0n;
-const _1 = 1n;
 const L = 32; // field / group byte length
 const L2 = 64;
 /**
@@ -18,47 +16,64 @@ const L2 = 64;
  * Gx and Gy are generator coordinates. p is field order, n is group order.
  */
 const CURVE = {
-    p: P, n: N, a: _0, b: _b, Gx, Gy
-}; // exported variables incl. a, b
+    p: P,
+    n: N,
+    a: 0n,
+    b: _b,
+    Gx,
+    Gy,
+};
 /** x³+b secp256k1 formula */
 const curve = (x) => M(M(x * x) * x + _b);
 /** lift_x from BIP340 calculates square root. Validates x, then validates root*root. */
 const lift_x = (x) => {
-    // c = √y
     // Let c = x³ + 7 mod p. Fail if x ≥ p. (also fail if x < 1)
     const c = curve(afield(x));
+    // c = √y
     // y = c^((p+1)/4) mod p
     // This formula works for fields p = 3 mod 4 -- a special, fast case.
     // Paper: "Square Roots from 1;24,51,10 to Dan Shanks".
-    let r = _1;
-    for (let num = c, e = (P + _1) / 4n; e > _0; e >>= _1) { // powMod: modular exponentiation.
-        if (e & _1)
+    let r = 1n;
+    for (let num = c, e = (P + 1n) / 4n; e > 0n; e >>= 1n) {
+        // powMod: modular exponentiation.
+        if (e & 1n)
             r = (r * num) % P; // Uses exponentiation by squaring.
         num = (num * num) % P; // Not constant-time.
     }
     return M(r * r) === c ? r : err('sqrt invalid'); // check if result is valid
 };
-const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
+// error helper, messes-up stack trace
+const err = (m = '') => {
+    throw new Error(m);
+};
 const isB = (n) => typeof n === 'bigint'; // is big integer
 const isS = (s) => typeof s === 'string'; // is string
 const arange = (n, min, max, msg = 'bad number: out of range') => isB(n) && min <= n && n < max ? n : err(msg);
-const afield0 = (n) => arange(n, _0, P); // assert field element or 0
-const afield = (n) => arange(n, _1, P); // assert field element
-const agroup = (n) => arange(n, _1, N); // assert group elem
-const isBytes = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
-const abytes = (a, l) => // assert is Uint8Array (of specific length)
- !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
-    err('Uint8Array expected') : a;
-const u8n = (len) => new Uint8Array(len); // creates Uint8Array
+/** assert is field element or 0 */
+const afield0 = (n) => arange(n, 0n, P);
+/** assert is field element */
+const afield = (n) => arange(n, 1n, P);
+/** assert is group elem */
+const agroup = (n) => arange(n, 1n, N);
+const isBytes = (a) => a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
+/** assert is Uint8Array (of specific length) */
+const abytes = (a, l) => !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
+    ? err('Uint8Array expected')
+    : a;
+/** create Uint8Array */
+const u8n = (len) => new Uint8Array(len);
+/** create Uint8Array of byte n */
 const u8of = (n) => Uint8Array.of(n);
 const big = BigInt;
-const toU8 = (a, len) => abytes(isS(a) ? hexToBytes(a) : Uint8Array.from(abytes(a)), len); // norm(hex/u8a) to u8a
+/** normalize hex or ui8a to ui8a */
+const toU8 = (a, len) => abytes(isS(a) ? hexToBytes(a) : Uint8Array.from(abytes(a)), len);
+/** modular division */
 const M = (a, b = P) => {
     const r = a % b;
-    return r >= _0 ? r : b + r;
+    return r >= 0n ? r : b + r;
 };
 const modN = (a) => M(a, N);
-const isEven = (y) => (y & _1) === _0;
+const isEven = (y) => (y & 1n) === 0n;
 const getPrefix = (y) => u8of(isEven(y) ? 0x02 : 0x03);
 const freeze = (a) => Object.freeze(a);
 const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
@@ -79,43 +94,60 @@ class Point {
     static fromBytes(bytes) {
         abytes(bytes);
         let p = undefined;
-        const head = bytes[0], tail = bytes.subarray(1); // first byte is prefix, rest is data
-        const x = sliceBytesNum(tail, 0, L), len = bytes.length; // next 32 bytes are x coordinate
-        if (len === (L + 1) && [0x02, 0x03].includes(head)) { // Compressed 33-byte point
-            let y = lift_x(x); // x³+b is right side of equation
-            const evenY = isEven(y); // y² is equivalent left-side
-            const evenH = isEven(big(head)); // y = √y²; there are two solutions: y, -y
+        // First byte is prefix, rest is data. There are 2 kinds: compressed & uncompressed:
+        // * [0x02 or 0x03][32-byte x coordinate]
+        // * [0x04]        [32-byte x coordinate][32-byte y coordinate]
+        const head = bytes[0];
+        const tail = bytes.subarray(1);
+        const x = sliceBytesNum(tail, 0, L);
+        const len = bytes.length;
+        // Compressed 33-byte point, 0x02 or 0x03 prefix
+        if (len === L + 1 && [0x02, 0x03].includes(head)) {
+            // Equation is y² == x³ + ax + b. We calculate y from x.
+            // y = √y²; there are two solutions: y, -y. Determine proper solution based on prefix
+            let y = lift_x(x);
+            const evenY = isEven(y);
+            const evenH = isEven(big(head));
             if (evenH !== evenY)
-                y = M(-y); // determine proper solution
-            p = new Point(x, y, _1); // create point
+                y = M(-y);
+            p = new Point(x, y, 1n);
         }
-        if (len === (L2 + 1) && head === 0x04) // Uncompressed 65-byte point, 0x04 prefix
-            p = new Point(x, sliceBytesNum(tail, L, L2), _1);
+        // Uncompressed 65-byte point, 0x04 prefix
+        if (len === L2 + 1 && head === 0x04)
+            p = new Point(x, sliceBytesNum(tail, L, L2), 1n);
+        // Validate point
         return p ? p.assertValidity() : err('bad point: not on curve');
     }
     /** Equality check: compare points P&Q. */
     equals(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
-        const { px: X2, py: Y2, pz: Z2 } = apoint(other); // isPoint() checks class equality
-        const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
-        const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
+        const { px: X2, py: Y2, pz: Z2 } = apoint(other); // checks class equality
+        const X1Z2 = M(X1 * Z2);
+        const X2Z1 = M(X2 * Z1);
+        const Y1Z2 = M(Y1 * Z2);
+        const Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
     }
     /** Flip point over y coordinate. */
-    negate() { return new Point(this.px, M(-this.py), this.pz); }
+    negate() {
+        return new Point(this.px, M(-this.py), this.pz);
+    }
     /** Point doubling: P+P, complete formula. */
-    double() { return this.add(this); }
+    double() {
+        return this.add(this);
+    }
     /**
      * Point addition: P+Q, complete, exception-free formula
      * (Renes-Costello-Batina, algo 1 of [2015/1060](https://eprint.iacr.org/2015/1060)).
-     * Cost: 12M + 0S + 3*a + 3*b3 + 23add.
+     * Cost: `12M + 0S + 3*a + 3*b3 + 23add`.
      */
+    // prettier-ignore
     add(other) {
         const { px: X1, py: Y1, pz: Z1 } = this;
         const { px: X2, py: Y2, pz: Z2 } = apoint(other);
-        const a = _0;
+        const a = 0n;
         const b = _b;
-        let X3 = _0, Y3 = _0, Z3 = _0;
+        let X3 = 0n, Y3 = 0n, Z3 = 0n;
         const b3 = M(b * 3n);
         let t0 = M(X1 * X2), t1 = M(Y1 * Y2), t2 = M(Z1 * Z2), t3 = M(X1 + Y1); // step 1
         let t4 = M(X2 + Y2); // step 5
@@ -156,43 +188,58 @@ class Point {
         Z3 = M(Z3 + t0); // step 40
         return new Point(X3, Y3, Z3);
     }
+    /**
+     * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
+     * Uses {@link wNAF} for base point.
+     * Uses fake point to mitigate side-channel leakage.
+     * @param n scalar by which point is multiplied
+     * @param safe safe mode guards against timing attacks; unsafe mode is faster
+     */
     multiply(n, safe = true) {
-        if (!safe && n === _0)
-            return I; // in unsafe mode, allow zero
-        agroup(n); // must be 1 <= n < CURVE.n
+        if (!safe && n === 0n)
+            return I;
+        agroup(n);
         if (this.equals(G))
-            return wNAF(n).p; // use precomputes for base point
-        let p = I, f = G; // init result point & fake point
-        for (let d = this; n > _0; d = d.double(), n >>= _1) { // double-and-add ladder
-            if (n & _1)
-                p = p.add(d); // if bit is present, add to point
+            return wNAF(n).p;
+        // init result point & fake point
+        let p = I;
+        let f = G;
+        for (let d = this; n > 0n; d = d.double(), n >>= 1n) {
+            // if bit is present, add to point
+            // if not present, add to fake, for timing safety
+            if (n & 1n)
+                p = p.add(d);
             else if (safe)
-                f = f.add(d); // if not, add to fake for timing safety
+                f = f.add(d);
         }
         return p;
     }
-    /** Convert point to 2d xy affine point. (x, y, z) ∋ (x=x/z, y=y/z) */
+    /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
     toAffine() {
         const { px: x, py: y, pz: z } = this;
+        // fast-paths for ZERO point OR Z=1 (affine == projective)
         if (this.equals(I))
-            return { x: _0, y: _0 }; // fast-path for zero point
-        if (z === _1)
-            return { x, y }; // if z is 1, pass affine coordinates as-is
-        const iz = invert(z, P); // z^-1: invert z
-        if (M(z * iz) !== _1)
-            err('inverse invalid'); // (z * z^-1) must be 1, otherwise bad math
-        return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
+            return { x: 0n, y: 0n };
+        if (z === 1n)
+            return { x, y };
+        const iz = invert(z, P);
+        // (Z * Z^-1) must be 1, otherwise bad math
+        if (M(z * iz) !== 1n)
+            err('inverse invalid');
+        // x = X*Z^-1; y = Y*Z^-1
+        return { x: M(x * iz), y: M(y * iz) };
     }
     /** Checks if the point is valid and on-curve. */
     assertValidity() {
         const { x, y } = this.toAffine(); // convert to 2d xy affine point.
-        afield(x);
-        afield(y); // must be in range 1 <= x,y < P
-        return M(y * y) === curve(x) ? // y² = x³ + ax + b, must be equal
-            this : err('bad point: not on curve');
+        afield(x); // must be in range 1 <= x,y < P
+        afield(y);
+        // y² == x³ + ax + b, equation sides must be equal
+        return M(y * y) === curve(x) ? this : err('bad point: not on curve');
     }
+    /** Converts point to 33/65-byte Uint8Array. */
     toBytes(isCompressed = true) {
-        const { x, y } = this.assertValidity().toAffine(); // convert to 2d xy affine point
+        const { x, y } = this.assertValidity().toAffine();
         const x32b = numTo32b(x);
         if (isCompressed)
             return concatBytes(getPrefix(y), x32b);
@@ -201,33 +248,45 @@ class Point {
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
     static fromAffine(ap) {
         const { x, y } = ap;
-        return ((x === _0) && (y === _0)) ? I : new Point(x, y, _1);
+        return x === 0n && y === 0n ? I : new Point(x, y, 1n);
     }
-    // Can be commented-out:
-    is0() { return this.equals(I); }
-    // 0.01kb
-    toHex(isCompressed = true) { return bytesToHex(this.toBytes(isCompressed)); }
-    // 0.01kb
-    static fromPrivateKey(k) { return G.multiply(toPrivScalar(k)); }
-    static fromHex(hex) { return Point.fromBytes(toU8(hex)); }
-    // 0.01kb
-    get x() { return this.toAffine().x; }
-    get y() { return this.toAffine().y; }
-    toRawBytes(c) { return this.toBytes(c); }
+    is0() {
+        return this.equals(I);
+    }
+    toHex(isCompressed) {
+        return bytesToHex(this.toBytes(isCompressed));
+    }
+    static fromPrivateKey(k) {
+        return G.multiply(toPrivScalar(k));
+    }
+    static fromHex(hex) {
+        return Point.fromBytes(toU8(hex));
+    }
+    get x() {
+        return this.toAffine().x;
+    }
+    get y() {
+        return this.toAffine().y;
+    }
+    toRawBytes(isCompressed) {
+        return this.toBytes(isCompressed);
+    }
 }
 /** Generator / base point */
-const G = new Point(Gx, Gy, _1);
+const G = new Point(Gx, Gy, 1n);
 /** Identity / zero point */
-const I = new Point(_0, _1, _0);
+const I = new Point(0n, 1n, 0n);
 // Static aliases
 Point.BASE = G;
 Point.ZERO = I;
-/** `Q = u1⋅G + u2⋅R`. Unsafe (non-CT), but verifies Q is not ZERO */
+/** `Q = u1⋅G + u2⋅R`. Verifies Q is not ZERO. Unsafe: non-CT. */
 const doubleScalarMulUns = (R, u1, u2) => {
     return G.multiply(u1, false).add(R.multiply(u2, false)).assertValidity();
 };
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
-const bytesToHex = (b) => Array.from(abytes(b)).map(e => padh(e, 2)).join('');
+const bytesToHex = (b) => Array.from(abytes(b))
+    .map((e) => padh(e, 2))
+    .join('');
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
 const _ch = (ch) => {
     if (ch >= C._0 && ch <= C._9)
@@ -242,11 +301,13 @@ const hexToBytes = (hex) => {
     const e = 'hex invalid';
     if (!isS(hex))
         return err(e);
-    const hl = hex.length, al = hl / 2;
+    const hl = hex.length;
+    const al = hl / 2;
     if (hl % 2)
         return err(e);
     const array = u8n(al);
-    for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) { // treat each char as ASCII
+    for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
+        // treat each char as ASCII
         const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
         const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
         if (n1 === undefined || n2 === undefined)
@@ -258,8 +319,8 @@ const hexToBytes = (hex) => {
 const bytesToNum = (b) => big('0x' + (bytesToHex(b) || '0'));
 const sliceBytesNum = (b, from, to) => bytesToNum(b.subarray(from, to));
 /** Number to 32b. Must be 0 <= num < B256. validate, pad, to bytes. */
-const numTo32b = (num) => hexToBytes(padh(arange(num, _0, B256), L2));
-/** Concatenate Uint8Array-s. */
+const numTo32b = (num) => hexToBytes(padh(arange(num, 0n, B256), L2));
+// prettier-ignore
 const concatBytes = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
     let pad = 0; // walk through each array,
@@ -267,24 +328,25 @@ const concatBytes = (...arrs) => {
     return r;
 };
 /** Modular inversion using eucledian GCD (non-CT). No negative exponent for now. */
+// prettier-ignore
 const invert = (num, md) => {
-    if (num === _0 || md <= _0)
+    if (num === 0n || md <= 0n)
         err('no inverse n=' + num + ' mod=' + md);
-    let a = M(num, md), b = md, x = _0, y = _1, u = _1, v = _0;
-    while (a !== _0) {
+    let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+    while (a !== 0n) {
         const q = b / a, r = b % a;
         const m = x - u * q, n = y - v * q;
         b = a, a = r, x = u, y = v, u = m, v = n;
     }
-    return b === _1 ? M(x, md) : err('no inverse'); // b is gcd at this point
+    return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
 };
 /** Normalize private key to scalar (bigint). Verifies scalar is in range 1<s<N */
 const toPrivScalar = (pr) => {
     const num = isB(pr) ? pr : bytesToNum(toU8(pr, L));
-    return arange(num, _1, N, 'private key invalid 3');
+    return arange(num, 1n, N, 'private key invalid 3');
 };
 /** For Signature malleability, validates sig.s is bigger than N/2. */
-const highS = (n) => n > (N >> _1);
+const highS = (n) => n > N >> 1n;
 /** Creates 33/65-byte public key from 32-byte private key. */
 const getPublicKey = (privKey, isCompressed = true) => {
     return G.multiply(toPrivScalar(privKey)).toBytes(isCompressed);
@@ -312,36 +374,45 @@ class Signature {
         const { r, s } = this;
         return concatBytes(numTo32b(r), numTo32b(s));
     }
-    /** Create new signature, with added recovery bit. */
+    /** Copy signature, with newly added recovery bit. */
     addRecoveryBit(bit) {
         return new Signature(this.r, this.s, bit);
     }
-    // Can be commented-out:
-    // 0.01kb
-    hasHighS() { return highS(this.s); }
-    // 0.02kb
-    toCompactRawBytes() { return this.toBytes(); }
-    toCompactHex() { return bytesToHex(this.toBytes()); }
-    // 0.10kb
+    hasHighS() {
+        return highS(this.s);
+    }
+    toCompactRawBytes() {
+        return this.toBytes();
+    }
+    toCompactHex() {
+        return bytesToHex(this.toBytes());
+    }
     recoverPublicKey(msg) {
         return recoverPublicKey(this, msg);
     }
     static fromCompact(hex) {
         return Signature.fromBytes(toU8(hex, L2));
     }
-    assertValidity() { return this; }
+    assertValidity() {
+        return this;
+    }
     normalizeS() {
         const { r, s, recovery } = this;
         return highS(s) ? new Signature(r, modN(-s), recovery) : this;
     }
 }
-/** RFC6979: ensure ECDSA msg is X bytes. */
+/**
+ * RFC6979: ensure ECDSA msg is X bytes, convert to BigInt.
+ * RFC suggests optional truncating via bits2octets.
+ * FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits,
+ * which matches bits2int. bits2int can produce res>N.
+ */
 const bits2int = (bytes) => {
-    const delta = bytes.length * 8 - 256; // RFC suggests optional truncating via bits2octets
+    const delta = bytes.length * 8 - 256;
     if (delta > 1024)
-        err('msg invalid'); // our CUSTOM check, "just-in-case"
-    const num = bytesToNum(bytes); // FIPS 186-4 4.6 suggests the leftmost min(nBitLen, outLen) bits,
-    return delta > 0 ? num >> big(delta) : num; // which matches bits2int. bits2int can produce res>N.
+        err('msg invalid'); // our CUSTOM check, "just-in-case": prohibit long inputs
+    const num = bytesToNum(bytes);
+    return delta > 0 ? num >> big(delta) : num;
 };
 /** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
 const bits2int_modN = (bytes) => modN(bits2int(abytes(bytes)));
@@ -357,14 +428,17 @@ const callEtcFn = (name) => {
         err('err.' + name + ' not set');
     return fn;
 };
+/** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
 const randomBytes = (len = L) => {
-    const c = cr(); // Must be shimmed in node.js <= 18 to prevent error. See README.
+    const c = cr();
     return c.getRandomValues(u8n(len));
 };
-const optS = { lowS: true }; // opts for sign()
-const optV = { lowS: true }; // standard opts for verify()
-const prepSig = (msgh, priv, opts = optS) => {
-    if (['der', 'recovered', 'canonical'].some(k => k in opts)) // legacy opts
+const signOpts = { lowS: true };
+const veriOpts = { lowS: true };
+// RFC6979 signature generation, preparation step.
+const prepSig = (msgh, priv, opts = signOpts) => {
+    if (['der', 'recovered', 'canonical'].some((k) => k in opts))
+        // legacy opts
         err('option not supported');
     let { lowS, extraEntropy } = opts; // generates low-s sigs by default
     if (lowS == null)
@@ -374,44 +448,60 @@ const prepSig = (msgh, priv, opts = optS) => {
     const h1o = i2o(h1i); // msg octets
     const d = toPrivScalar(priv); // validate private key, convert to bigint
     const seed = [i2o(d), h1o]; // Step D of RFC6979 3.2
-    // RFC6979 3.6: additional k' (optional)
+    /** RFC6979 3.6: additional k' (optional). See {@link ExtraEntropy}. */
     // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
-    if (extraEntropy) // true means fetch from CSPRNG
+    if (extraEntropy)
         seed.push(extraEntropy === true ? randomBytes(L) : toU8(extraEntropy));
     const m = h1i; // convert msg to bigint
+    // Converts signature params into point w r/s, checks result for validity.
+    // To transform k => Signature:
+    // q = k⋅G
+    // r = q.x mod n
+    // s = k^-1(m + rd) mod n
     const k2sig = (kBytes) => {
-        const k = bits2int(kBytes); // RFC6979 method.
-        if (!(_1 <= k && k < N))
+        // RFC 6979 Section 3.2, step 3: k = bits2int(T)
+        // Important: all mod() calls here must be done over N
+        const k = bits2int(kBytes);
+        if (!(1n <= k && k < N))
             return; // Check 0 < k < CURVE.n
-        const q = G.multiply(k).toAffine(); // q = Gk
+        const q = G.multiply(k).toAffine(); // q = k⋅G
         const r = modN(q.x); // r = q.x mod n
-        if (r === _0)
-            return; // r=0 invalid
+        if (r === 0n)
+            return;
         const ik = invert(k, N); // k^-1 mod n, NOT mod P
         const s = modN(ik * modN(m + modN(d * r))); // s = k^-1(m + rd) mod n
-        if (s === _0)
-            return; // s=0 invalid
+        if (s === 0n)
+            return;
         let normS = s; // normalized S
-        let rec = (q.x === r ? 0 : 2) | Number(q.y & _1); // recovery bit
-        if (lowS && highS(s)) { // if lowS was passed, ensure s is always
+        let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit (2 or 3, when q.x > n)
+        if (lowS && highS(s)) {
+            // if lowS was passed, ensure s is always
             normS = modN(-s); // in the bottom half of CURVE.n
-            rec ^= 1;
+            recovery ^= 1;
         }
-        return new Signature(r, normS, rec); // use normS, not s
+        return new Signature(r, normS, recovery); // use normS, not s
     };
     return { seed: concatBytes(...seed), k2sig };
 };
+// HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
 const hmacDrbg = (asynchronous) => {
-    let v = u8n(L); // Minimal non-full-spec HMAC-DRBG from NIST 800-90 for RFC6979 sigs.
-    let k = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen, in our case always same
+    let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
+    let k = u8n(L); // In our case, it's always equal to L
     let i = 0; // Iterations counter, will throw when over max
     const NULL = u8n(0);
-    const reset = () => { v.fill(1); k.fill(0); i = 0; };
+    const reset = () => {
+        v.fill(1);
+        k.fill(0);
+        i = 0;
+    };
     const max = 1000;
     const _e = 'drbg: tried 1000 values';
-    if (asynchronous) { // asynchronous=true
-        const h = (...b) => etc.hmacSha256Async(k, v, ...b); // hmac(k)(v, ...values)
+    if (asynchronous) {
+        // asynchronous=true
+        // h = hmac(K || V || ...)
+        const h = (...b) => etc.hmacSha256Async(k, v, ...b);
         const reseed = async (seed = NULL) => {
+            // HMAC-DRBG reseed() function. Steps D-G
             k = await h(u8of(0x00), seed); // k = hmac(K || V || 0x00 || seed)
             v = await h(); // v = hmac(K || V)
             if (seed.length === 0)
@@ -419,14 +509,17 @@ const hmacDrbg = (asynchronous) => {
             k = await h(u8of(0x01), seed); // k = hmac(K || V || 0x01 || seed)
             v = await h(); // v = hmac(K || V)
         };
+        // HMAC-DRBG generate() function
         const gen = async () => {
             if (i++ >= max)
                 err(_e);
             v = await h(); // v = hmac(K || V)
-            return v;
+            return v; // this diverges from noble-curves: we don't allow arbitrary output len!
         };
+        // Do not reuse returned fn for more than 1 sig:
+        // 1) it's slower (JIT screws up). 2. unsafe (async race conditions)
         return async (seed, pred) => {
-            reset(); // the returned fn, don't, it's: 1. slower (JIT). 2. unsafe (async race conditions)
+            reset();
             await reseed(seed); // Steps D-G
             let res = undefined; // Step H: grind until k is in [1..n-1]
             while (!(res = pred(await gen())))
@@ -436,10 +529,11 @@ const hmacDrbg = (asynchronous) => {
         };
     }
     else {
-        const h = (...b) => {
-            return callEtcFn('hmacSha256Sync')(k, v, ...b); // hmac(k)(v, ...values)
-        };
+        // asynchronous=false; same as above, but synchronous
+        // h = hmac(K || V || ...)
+        const h = (...b) => callEtcFn('hmacSha256Sync')(k, v, ...b);
         const reseed = (seed = NULL) => {
+            // HMAC-DRBG reseed() function. Steps D-G
             k = h(u8of(0x00), seed); // k = hmac(k || v || 0x00 || seed)
             v = h(); // v = hmac(k || v)
             if (seed.length === 0)
@@ -447,12 +541,15 @@ const hmacDrbg = (asynchronous) => {
             k = h(u8of(0x01), seed); // k = hmac(k || v || 0x01 || seed)
             v = h(); // v = hmac(k || v)
         };
+        // HMAC-DRBG generate() function
         const gen = () => {
             if (i++ >= max)
                 err(_e);
             v = h(); // v = hmac(k || v)
             return v; // this diverges from noble-curves: we don't allow arbitrary output len!
         };
+        // Do not reuse returned fn for more than 1 sig:
+        // 1) it's slower (JIT screws up). 2. unsafe (async race conditions)
         return (seed, pred) => {
             reset();
             reseed(seed); // Steps D-G
@@ -464,55 +561,56 @@ const hmacDrbg = (asynchronous) => {
         };
     }
 };
-/** ECDSA signature generation. via secg.org/sec1-v2.pdf 4.1.2 + RFC6979 deterministic k. */
 /**
  * Sign a msg hash using secp256k1. Async.
- * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
- * Worst case: if randomness source for extraEntropy is bad, it would be as secure as if
- * the option has not been used.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
+ * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param priv - private key
- * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
+ * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
  */
-const signAsync = async (msgh, priv, opts = optS) => {
-    const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
+const signAsync = async (msgh, priv, opts = signOpts) => {
     // Re-run drbg until k2sig returns ok
+    const { seed, k2sig } = prepSig(msgh, priv, opts);
     const sig = await hmacDrbg(true)(seed, k2sig);
     return sig;
 };
 /**
  * Sign a msg hash using secp256k1.
- * It is advised to use `extraEntropy: true` (from RFC6979 3.6) to prevent fault attacks.
- * Worst case: if randomness source for extraEntropy is bad, it would be as secure as if
- * the option has not been used.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
+ * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param priv - private key
- * @param opts - `lowS: true` to prevent malleability (s >= CURVE.n/2), `extraEntropy: boolean | Hex` to improve sig security.
+ * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
  * @example
- * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toCompactRawBytes();
+ * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toBytes();
  */
-const sign = (msgh, priv, opts = optS) => {
-    const { seed, k2sig } = prepSig(msgh, priv, opts); // Extract arguments for hmac-drbg
+const sign = (msgh, priv, opts = signOpts) => {
     // Re-run drbg until k2sig returns ok
+    const { seed, k2sig } = prepSig(msgh, priv, opts);
     const sig = hmacDrbg(false)(seed, k2sig);
     return sig;
 };
 /**
  * Verify a signature using secp256k1.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
+ * Default lowS=true, prevents malleability.
  * @param sig - signature, 64-byte or Signature instance
  * @param msgh - message HASH, not message itself e.g. sha256(message)
  * @param pub - public key
  * @param opts - { lowS: true } is default, prohibits s >= CURVE.n/2 to prevent malleability
  */
-const verify = (sig, msgh, pub, opts = optV) => {
-    let { lowS } = opts; // ECDSA signature verification
+const verify = (sig, msgh, pub, opts = veriOpts) => {
+    let { lowS } = opts;
     if (lowS == null)
-        lowS = true; // Default lowS=true
+        lowS = true;
     if ('strict' in opts)
-        err('option not supported'); // legacy param
-    let sigg; // secg.org/sec1-v2.pdf 4.1.4
-    const rs = sig && typeof sig === 'object' && 'r' in sig; // Previous ver supported DER sigs. We
-    if (!rs && (toU8(sig).length !== L2)) // throw error when DER is suspected now.
+        err('option not supported');
+    let sigg;
+    // Previous ver supported DER sigs.
+    // We throw error when DER is suspected now.
+    const rs = sig && typeof sig === 'object' && 'r' in sig;
+    if (!rs && toU8(sig).length !== L2)
         err('signature must be 64 bytes');
     try {
         sigg = rs ? new Signature(sig.r, sig.s) : Signature.fromCompact(sig);
@@ -525,7 +623,7 @@ const verify = (sig, msgh, pub, opts = optV) => {
         const u1 = modN(h * is); // u1 = hs^-1 mod n
         const u2 = modN(r * is); // u2 = rs^-1 mod n
         const R = doubleScalarMulUns(P, u1, u2).toAffine(); // R = u1⋅G + u2⋅P
-        // stop if R is identity / zero point. Check is done inside `doubleScalarMulUns`
+        // Stop if R is identity / zero point. Check is done inside `doubleScalarMulUns`
         const v = modN(R.x); // R.x must be in N's field, not P's
         return v === r; // mod(R.x, n) == r
     }
@@ -533,13 +631,18 @@ const verify = (sig, msgh, pub, opts = optV) => {
         return false;
     }
 };
-/** ECDSA public key recovery. Requires msg hash and recovery id. */
+/**
+ * ECDSA public key recovery. Requires msg hash and recovery id.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
+ */
 const recoverPublicKey = (sig, msgh) => {
-    const { r, s, recovery } = sig; // secg.org/sec1-v2.pdf 4.1.6
+    const { r, s, recovery } = sig;
+    // 0 or 1 recovery id determines sign of "y" coordinate.
+    // 2 or 3 means q.x was >N.
     if (![0, 1, 2, 3].includes(recovery))
-        err('recovery id invalid'); // check recovery id
+        err('recovery id invalid');
     const h = bits2int_modN(toU8(msgh, L)); // Truncate hash
-    const radj = recovery === 2 || recovery === 3 ? r + N : r; // q.x > n when rec was 2 or 3,
+    const radj = recovery === 2 || recovery === 3 ? r + N : r;
     afield(radj); // ensure q.x is still a field element
     const head = getPrefix(big(recovery)); // head is 0x02 or 0x03
     const Rb = concatBytes(head, numTo32b(radj)); // concat head + r
@@ -551,23 +654,25 @@ const recoverPublicKey = (sig, msgh) => {
 };
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
- * Result is **NOT hashed**. Use hash on it if you need.
+ * Result is **NOT hashed**. Use hash or KDF on it if you need.
  * @param privA private key A
  * @param pubB public key B
- * @param isCompressed 33-byte or 65-byte output
+ * @param isCompressed 33-byte (true) or 65-byte (false) output
  * @returns public key C
  */
 const getSharedSecret = (privA, pubB, isCompressed = true) => {
     return Point.fromBytes(toU8(pubB)).multiply(toPrivScalar(privA)).toBytes(isCompressed);
 };
+// FIPS 186 B.4.1 compliant key generation produces private keys with modulo bias being neglible.
+// takes >N+8 bytes, returns (hash mod n-1)+1
 const hashToPrivateKey = (hash) => {
-    hash = toU8(hash); // produces private keys with modulo bias
+    hash = toU8(hash);
     if (hash.length < L + 8 || hash.length > 1024)
-        err('expected 40-1024b'); // being neglible.
-    const num = M(bytesToNum(hash), N - _1); // takes n+8 bytes
-    return numTo32b(num + _1); // returns (hash mod n-1)+1
+        err('expected 40-1024b');
+    const num = M(bytesToNum(hash), N - 1n);
+    return numTo32b(num + 1n);
 };
-const randomPrivateKey = () => hashToPrivateKey(randomBytes(L + 16));
+const randomPrivateKey = () => hashToPrivateKey(randomBytes(L + 16)); // FIPS 186 B.4.1.
 const _sha = 'SHA-256';
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
@@ -599,55 +704,80 @@ const utils = {
             return false;
         }
     },
-    randomPrivateKey: randomPrivateKey, // FIPS 186 B.4.1.
-    precompute: (w = 8, p = G) => { p.multiply(3n); w; return p; }, // no-op
+    randomPrivateKey: randomPrivateKey,
+    precompute: (w = 8, p = G) => {
+        p.multiply(3n);
+        w;
+        return p;
+    },
 };
-const W = 8; // Precomputes-related code. W = window size
+// ## Precomputes
+// --------------
+const W = 8; // W is window size
 const scalarBits = 256;
-const pwindows = Math.ceil(scalarBits / W) + 1; // W=8 33
-const pwindowSize = 2 ** (W - 1); // W=8 128
+const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8
+const pwindowSize = 2 ** (W - 1); // 128 for W=8
 const precompute = () => {
-    const points = []; // 10x sign(), 2x verify(). To achieve this,
-    let p = G, b = p; // a lot of points related to base point G.
-    for (let w = 0; w < pwindows; w++) { // Points are stored in array and used
-        b = p; // any time Gx multiplication is done.
-        points.push(b); // They consume 16-32 MiB of RAM.
+    const points = [];
+    let p = G;
+    let b = p;
+    for (let w = 0; w < pwindows; w++) {
+        b = p;
+        points.push(b);
         for (let i = 1; i < pwindowSize; i++) {
             b = b.add(p);
             points.push(b);
         } // i=1, bc we skip 0
-        p = b.double(); // Precomputes don't speed-up getSharedKey,
-    } // which multiplies user point by scalar,
-    return points; // when precomputes are using base point
+        p = b.double();
+    }
+    return points;
 };
 let Gpows = undefined; // precomputes for base point G
+// const-time negate
+const ctneg = (cnd, p) => {
+    let n = p.negate();
+    return cnd ? n : p;
+};
+/**
+ * Precomputes give 12x faster getPublicKey(), 10x sign(), 2x verify() by
+ * caching multiples of G (base point). Cache is stored in 32MB of RAM.
+ * Any time `G.multiply` is done, precomputes are used.
+ * Not used for getSharedSecret, which instead multiplies random pubkey `P.multiply`.
+ *
+ * w-ary non-adjacent form (wNAF) precomputation method is 10% slower than windowed method,
+ * but takes 2x less RAM. RAM reduction is possible by utilizing `.subtract`.
+ *
+ * !! Precomputes can be disabled by commenting-out call of the wNAF() inside Point#multiply().
+ */
 const wNAF = (n) => {
-    // Compared to other point mult methods,
-    const comp = Gpows || (Gpows = precompute()); // stores 2x less points using subtraction
-    const ctneg = (cnd, p) => { let n = p.negate(); return cnd ? n : p; }; // negate
-    let p = I, f = G; // f must be G, or could become I in the end
-    const pow_2_w = 2 ** W; // W=8 256
-    const maxNum = pow_2_w; // W=8 256
-    const mask = big(pow_2_w - 1); // W=8 255 == mask 0b11111111
-    const shiftBy = big(W); // W=8 8
+    const comp = Gpows || (Gpows = precompute());
+    let p = I;
+    let f = G; // f must be G, or could become I in the end
+    const pow_2_w = 2 ** W; // 256 for W=8
+    const maxNum = pow_2_w; // 256 for W=8
+    const mask = big(pow_2_w - 1); // 255 for W=8 == mask 0b11111111
+    const shiftBy = big(W); // 8 for W=8
     for (let w = 0; w < pwindows; w++) {
         let wbits = Number(n & mask); // extract W bits.
         n >>= shiftBy; // shift number by W bits.
         if (wbits > pwindowSize) {
             wbits -= maxNum;
-            n += _1;
+            n += 1n;
         } // split if bits > max: +224 => 256-32
         const off = w * pwindowSize;
-        const offF = off, offP = off + Math.abs(wbits) - 1; // offsets, evaluate both
-        const isEven = w % 2 !== 0, isNeg = wbits < 0; // conditions, evaluate both
+        const offF = off; // offsets, evaluate both
+        const offP = off + Math.abs(wbits) - 1;
+        const isEven = w % 2 !== 0; // conditions, evaluate both
+        const isNeg = wbits < 0;
         if (wbits === 0) {
+            // off == I: can't add it. Adding random offF instead.
             f = f.add(ctneg(isEven, comp[offF])); // bits are 0: add garbage to fake point
         }
-        else { //          ^ can't add off2, off2 = I
+        else {
             p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
         }
     }
     return { p, f }; // return both real and fake points for JIT
-}; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-// !! Remove the export to easily use in REPL / browser console
-export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };
+};
+// !! Remove the export below to easily use in REPL / browser console
+export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };
