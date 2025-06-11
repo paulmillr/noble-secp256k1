@@ -1,6 +1,6 @@
 {
   "name": "@noble/secp256k1",
-  "version": "2.2.3",
+  "version": "2.3.0-pre",
   "exports": "./index.ts",
   "publish": {
     "include": [
