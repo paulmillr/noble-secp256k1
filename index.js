@@ -1,34 +1,143 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
- * 4KB JS implementation of secp256k1 signatures & ECDH. Compliant with RFC6979.
+ * 4KB JS implementation of secp256k1 ECDSA / Schnorr signatures & ECDH.
+ * Compliant with RFC6979 & BIP340.
  * @module
  */
-const B256 = 2n ** 256n;
-const P = B256 - 0x1000003d1n; // curve's field prime
-const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
-const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
-const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const _b = 7n;
+/**
+ * Curve params. secp256k1 is short weierstrass / koblitz curve. Equation is y² == x³ + ax + b.
+ * * P = `2n**256n-2n**32n-2n**977n` // field over which calculations are done
+ * * N = `2n**256n - 0x14551231950b75fc4402da1732fc9bebfn` // group order, amount of curve points
+ * * h = `1n` // cofactor
+ * * a = `0n` // equation param
+ * * b = `7n` // equation param
+ * * Gx, Gy are coordinates of Generator / base point
+ */
+const secp256k1_CURVE = {
+    p: 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn,
+    n: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n,
+    h: 1n,
+    a: 0n,
+    b: 7n,
+    Gx: 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n,
+    Gy: 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n,
+};
+const { p: P, n: N, Gx, Gy, b: _b } = secp256k1_CURVE;
 const L = 32; // field / group byte length
 const L2 = 64;
-/**
- * secp256k1 curve parameters. Equation is x³ + ax + b, but a=0 - which makes it x³+b.
- * Gx and Gy are generator coordinates. p is field order, n is group order.
- */
-const CURVE = {
-    p: P,
-    n: N,
-    a: 0n,
-    b: _b,
-    Gx,
-    Gy,
+// Helpers and Precomputes sections are reused between libraries
+// ## Helpers
+// ----------
+// error helper, messes-up stack trace
+const err = (m = '') => {
+    throw new Error(m);
 };
-/** x³+b secp256k1 formula */
-const curve = (x) => M(M(x * x) * x + _b);
+const isBig = (n) => typeof n === 'bigint'; // is big integer
+const isStr = (s) => typeof s === 'string'; // is string
+const isBytes = (a) => a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
+/** assert is Uint8Array (of specific length) */
+const abytes = (a, l) => !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
+    ? err('Uint8Array expected')
+    : a;
+/** create Uint8Array */
+const u8n = (len) => new Uint8Array(len);
+const u8fr = (buf) => Uint8Array.from(buf);
+const padh = (n, pad) => n.toString(16).padStart(pad, '0');
+const bytesToHex = (b) => Array.from(abytes(b))
+    .map((e) => padh(e, 2))
+    .join('');
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
+const _ch = (ch) => {
+    if (ch >= C._0 && ch <= C._9)
+        return ch - C._0; // '2' => 50-48
+    if (ch >= C.A && ch <= C.F)
+        return ch - (C.A - 10); // 'B' => 66-(65-10)
+    if (ch >= C.a && ch <= C.f)
+        return ch - (C.a - 10); // 'b' => 98-(97-10)
+    return;
+};
+const hexToBytes = (hex) => {
+    const e = 'hex invalid';
+    if (!isStr(hex))
+        return err(e);
+    const hl = hex.length;
+    const al = hl / 2;
+    if (hl % 2)
+        return err(e);
+    const array = u8n(al);
+    for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
+        // treat each char as ASCII
+        const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+        const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
+        if (n1 === undefined || n2 === undefined)
+            return err(e);
+        array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
+    }
+    return array;
+};
+/** normalize hex or ui8a to ui8a */
+const toU8 = (a, len) => abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len);
+const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
+// prettier-ignore
+const concatBytes = (...arrs) => {
+    const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
+    let pad = 0; // walk through each array,
+    arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
+    return r;
+};
+/** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
+const randomBytes = (len = L) => {
+    const c = cr();
+    return c.getRandomValues(u8n(len));
+};
+const big = BigInt;
+const arange = (n, min, max, msg = 'bad number: out of range') => isBig(n) && min <= n && n < max ? n : err(msg);
+/** modular division */
+const M = (a, b = P) => {
+    const r = a % b;
+    return r >= 0n ? r : b + r;
+};
+const modN = (a) => M(a, N);
+/** Modular inversion using eucledian GCD (non-CT). No negative exponent for now. */
+// prettier-ignore
+const invert = (num, md) => {
+    if (num === 0n || md <= 0n)
+        err('no inverse n=' + num + ' mod=' + md);
+    let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+    while (a !== 0n) {
+        const q = b / a, r = b % a;
+        const m = x - u * q, n = y - v * q;
+        b = a, a = r, x = u, y = v, u = m, v = n;
+    }
+    return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
+};
+const callHash = (name) => {
+    // @ts-ignore
+    const fn = etc[name];
+    if (typeof fn !== 'function')
+        err('hashes.' + name + ' not set');
+    return fn;
+};
+const apoint = (p) => (p instanceof Point ? p : err('Point expected'));
+// ## End of Helpers
+// -----------------
+/** secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0, making it x³+b */
+const koblitz = (x) => M(M(x * x) * x + _b);
+/** assert is field element or 0 */
+const afield0 = (n) => arange(n, 0n, P);
+/** assert is field element */
+const afield = (n) => arange(n, 1n, P);
+/** assert is group elem */
+const agroup = (n) => arange(n, 1n, N);
+const isEven = (y) => (y & 1n) === 0n;
+/** create Uint8Array of byte n */
+const u8of = (n) => Uint8Array.of(n);
+const getPrefix = (y) => u8of(isEven(y) ? 0x02 : 0x03);
 /** lift_x from BIP340 calculates square root. Validates x, then validates root*root. */
 const lift_x = (x) => {
     // Let c = x³ + 7 mod p. Fail if x ≥ p. (also fail if x < 1)
-    const c = curve(afield(x));
+    const c = koblitz(afield(x));
     // c = √y
     // y = c^((p+1)/4) mod p
     // This formula works for fields p = 3 mod 4 -- a special, fast case.
@@ -42,41 +151,6 @@ const lift_x = (x) => {
     }
     return M(r * r) === c ? r : err('sqrt invalid'); // check if result is valid
 };
-// error helper, messes-up stack trace
-const err = (m = '') => {
-    throw new Error(m);
-};
-const isB = (n) => typeof n === 'bigint'; // is big integer
-const isS = (s) => typeof s === 'string'; // is string
-const arange = (n, min, max, msg = 'bad number: out of range') => isB(n) && min <= n && n < max ? n : err(msg);
-/** assert is field element or 0 */
-const afield0 = (n) => arange(n, 0n, P);
-/** assert is field element */
-const afield = (n) => arange(n, 1n, P);
-/** assert is group elem */
-const agroup = (n) => arange(n, 1n, N);
-const isBytes = (a) => a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
-/** assert is Uint8Array (of specific length) */
-const abytes = (a, l) => !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
-    ? err('Uint8Array expected')
-    : a;
-/** create Uint8Array */
-const u8n = (len) => new Uint8Array(len);
-/** create Uint8Array of byte n */
-const u8of = (n) => Uint8Array.of(n);
-const big = BigInt;
-/** normalize hex or ui8a to ui8a */
-const toU8 = (a, len) => abytes(isS(a) ? hexToBytes(a) : Uint8Array.from(abytes(a)), len);
-/** modular division */
-const M = (a, b = P) => {
-    const r = a % b;
-    return r >= 0n ? r : b + r;
-};
-const modN = (a) => M(a, N);
-const isEven = (y) => (y & 1n) === 0n;
-const getPrefix = (y) => u8of(isEven(y) ? 0x02 : 0x03);
-const freeze = (a) => Object.freeze(a);
-const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 class Point {
     static BASE;
@@ -88,7 +162,7 @@ class Point {
         this.px = afield0(px);
         this.py = afield(py); // y can't be 0 in Projective
         this.pz = afield0(pz);
-        freeze(this);
+        Object.freeze(this);
     }
     /** Convert Uint8Array or hex string to Point. */
     static fromBytes(bytes) {
@@ -99,7 +173,7 @@ class Point {
         // * [0x04]        [32-byte x coordinate][32-byte y coordinate]
         const head = bytes[0];
         const tail = bytes.subarray(1);
-        const x = sliceBytesNum(tail, 0, L);
+        const x = sliceBytesNumBE(tail, 0, L);
         const len = bytes.length;
         // Compressed 33-byte point, 0x02 or 0x03 prefix
         if (len === L + 1 && [0x02, 0x03].includes(head)) {
@@ -114,7 +188,7 @@ class Point {
         }
         // Uncompressed 65-byte point, 0x04 prefix
         if (len === L2 + 1 && head === 0x04)
-            p = new Point(x, sliceBytesNum(tail, L, L2), 1n);
+            p = new Point(x, sliceBytesNumBE(tail, L, L2), 1n);
         // Validate point
         return p ? p.assertValidity() : err('bad point: not on curve');
     }
@@ -127,6 +201,9 @@ class Point {
         const Y1Z2 = M(Y1 * Z2);
         const Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
+    }
+    is0() {
+        return this.equals(I);
     }
     /** Flip point over y coordinate. */
     negate() {
@@ -199,6 +276,8 @@ class Point {
         if (!safe && n === 0n)
             return I;
         agroup(n);
+        if (n === 1n)
+            return this;
         if (this.equals(G))
             return wNAF(n).p;
         // init result point & fake point
@@ -217,7 +296,7 @@ class Point {
     /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
     toAffine() {
         const { px: x, py: y, pz: z } = this;
-        // fast-paths for ZERO point OR Z=1 (affine == projective)
+        // fast-paths for ZERO point OR Z=1
         if (this.equals(I))
             return { x: 0n, y: 0n };
         if (z === 1n)
@@ -235,7 +314,7 @@ class Point {
         afield(x); // must be in range 1 <= x,y < P
         afield(y);
         // y² == x³ + ax + b, equation sides must be equal
-        return M(y * y) === curve(x) ? this : err('bad point: not on curve');
+        return M(y * y) === koblitz(x) ? this : err('bad point: not on curve');
     }
     /** Converts point to 33/65-byte Uint8Array. */
     toBytes(isCompressed = true) {
@@ -249,9 +328,6 @@ class Point {
     static fromAffine(ap) {
         const { x, y } = ap;
         return x === 0n && y === 0n ? I : new Point(x, y, 1n);
-    }
-    is0() {
-        return this.equals(I);
     }
     toHex(isCompressed) {
         return bytesToHex(this.toBytes(isCompressed));
@@ -283,66 +359,14 @@ Point.ZERO = I;
 const doubleScalarMulUns = (R, u1, u2) => {
     return G.multiply(u1, false).add(R.multiply(u2, false)).assertValidity();
 };
-const padh = (n, pad) => n.toString(16).padStart(pad, '0');
-const bytesToHex = (b) => Array.from(abytes(b))
-    .map((e) => padh(e, 2))
-    .join('');
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
-const _ch = (ch) => {
-    if (ch >= C._0 && ch <= C._9)
-        return ch - C._0; // '2' => 50-48
-    if (ch >= C.A && ch <= C.F)
-        return ch - (C.A - 10); // 'B' => 66-(65-10)
-    if (ch >= C.a && ch <= C.f)
-        return ch - (C.a - 10); // 'b' => 98-(97-10)
-    return;
-};
-const hexToBytes = (hex) => {
-    const e = 'hex invalid';
-    if (!isS(hex))
-        return err(e);
-    const hl = hex.length;
-    const al = hl / 2;
-    if (hl % 2)
-        return err(e);
-    const array = u8n(al);
-    for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-        // treat each char as ASCII
-        const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-        const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
-        if (n1 === undefined || n2 === undefined)
-            return err(e);
-        array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
-    }
-    return array;
-};
-const bytesToNum = (b) => big('0x' + (bytesToHex(b) || '0'));
-const sliceBytesNum = (b, from, to) => bytesToNum(b.subarray(from, to));
+const bytesToNumBE = (b) => big('0x' + (bytesToHex(b) || '0'));
+const sliceBytesNumBE = (b, from, to) => bytesToNumBE(b.subarray(from, to));
+const B256 = 2n ** 256n; // secp256k1 is weierstrass curve. Equation is x³ + ax + b.
 /** Number to 32b. Must be 0 <= num < B256. validate, pad, to bytes. */
 const numTo32b = (num) => hexToBytes(padh(arange(num, 0n, B256), L2));
-// prettier-ignore
-const concatBytes = (...arrs) => {
-    const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
-    let pad = 0; // walk through each array,
-    arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
-    return r;
-};
-/** Modular inversion using eucledian GCD (non-CT). No negative exponent for now. */
-// prettier-ignore
-const invert = (num, md) => {
-    if (num === 0n || md <= 0n)
-        err('no inverse n=' + num + ' mod=' + md);
-    let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
-    while (a !== 0n) {
-        const q = b / a, r = b % a;
-        const m = x - u * q, n = y - v * q;
-        b = a, a = r, x = u, y = v, u = m, v = n;
-    }
-    return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
-};
 /** Normalize private key to scalar (bigint). Verifies scalar is in range 1<s<N */
 const toPrivScalar = (pr) => {
-    const num = isB(pr) ? pr : bytesToNum(toU8(pr, L));
+    const num = isBig(pr) ? pr : bytesToNumBE(toU8(pr, L));
     return arange(num, 1n, N, 'private key invalid 3');
 };
 /** For Signature malleability, validates sig.s is bigger than N/2. */
@@ -361,13 +385,13 @@ class Signature {
         this.s = agroup(s); // 1 <= s < N
         if (recovery != null)
             this.recovery = recovery;
-        freeze(this);
+        Object.freeze(this);
     }
     /** Create signature from 64b compact (r || s) representation. */
     static fromBytes(b) {
         abytes(b, L2);
-        const r = sliceBytesNum(b, 0, L);
-        const s = sliceBytesNum(b, L, L2);
+        const r = sliceBytesNumBE(b, 0, L);
+        const s = sliceBytesNumBE(b, L, L2);
         return new Signature(r, s);
     }
     toBytes() {
@@ -411,28 +435,11 @@ const bits2int = (bytes) => {
     const delta = bytes.length * 8 - 256;
     if (delta > 1024)
         err('msg invalid'); // our CUSTOM check, "just-in-case": prohibit long inputs
-    const num = bytesToNum(bytes);
+    const num = bytesToNumBE(bytes);
     return delta > 0 ? num >> big(delta) : num;
 };
 /** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
 const bits2int_modN = (bytes) => modN(bits2int(abytes(bytes)));
-const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => {
-    const c = cr();
-    return c?.subtle || err('crypto.subtle must be defined');
-};
-const callEtcFn = (name) => {
-    // @ts-ignore
-    const fn = etc[name];
-    if (typeof fn !== 'function')
-        err('err.' + name + ' not set');
-    return fn;
-};
-/** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
-const randomBytes = (len = L) => {
-    const c = cr();
-    return c.getRandomValues(u8n(len));
-};
 const signOpts = { lowS: true };
 const veriOpts = { lowS: true };
 // RFC6979 signature generation, preparation step.
@@ -531,7 +538,7 @@ const hmacDrbg = (asynchronous) => {
     else {
         // asynchronous=false; same as above, but synchronous
         // h = hmac(K || V || ...)
-        const h = (...b) => callEtcFn('hmacSha256Sync')(k, v, ...b);
+        const h = (...b) => callHash('hmacSha256Sync')(k, v, ...b);
         const reseed = (seed = NULL) => {
             // HMAC-DRBG reseed() function. Steps D-G
             k = h(u8of(0x00), seed); // k = hmac(k || v || 0x00 || seed)
@@ -669,7 +676,7 @@ const hashToPrivateKey = (hash) => {
     hash = toU8(hash);
     if (hash.length < L + 8 || hash.length > 1024)
         err('expected 40-1024b');
-    const num = M(bytesToNum(hash), N - 1n);
+    const num = M(bytesToNumBE(hash), N - 1n);
     return numTo32b(num + 1n);
 };
 const randomPrivateKey = () => hashToPrivateKey(randomBytes(L + 16)); // FIPS 186 B.4.1.
@@ -679,7 +686,7 @@ const etc = {
     hexToBytes: hexToBytes,
     bytesToHex: bytesToHex,
     concatBytes: concatBytes,
-    bytesToNumberBE: bytesToNum,
+    bytesToNumberBE: bytesToNumBE,
     numberToBytesBE: numTo32b,
     mod: M,
     invert: invert, // math utilities
@@ -735,7 +742,7 @@ const precompute = () => {
 let Gpows = undefined; // precomputes for base point G
 // const-time negate
 const ctneg = (cnd, p) => {
-    let n = p.negate();
+    const n = p.negate();
     return cnd ? n : p;
 };
 /**
@@ -780,4 +787,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export below to easily use in REPL / browser console
-export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };
+export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };

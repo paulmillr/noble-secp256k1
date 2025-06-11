@@ -1,28 +1,31 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
- * 4KB JS implementation of secp256k1 signatures & ECDH. Compliant with RFC6979.
+ * 4KB JS implementation of secp256k1 ECDSA / Schnorr signatures & ECDH.
+ * Compliant with RFC6979 & BIP340.
  * @module
  */
-const B256 = 2n ** 256n;
-const P = B256 - 0x1000003d1n; // curve's field prime
-const N = B256 - 0x14551231950b75fc4402da1732fc9bebfn; // curve (group) order
-const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n; // base point x
-const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n; // base point y
-const _b = 7n;
+/**
+ * Curve params. secp256k1 is short weierstrass / koblitz curve. Equation is y² == x³ + ax + b.
+ * * P = `2n**256n-2n**32n-2n**977n` // field over which calculations are done
+ * * N = `2n**256n - 0x14551231950b75fc4402da1732fc9bebfn` // group order, amount of curve points
+ * * h = `1n` // cofactor
+ * * a = `0n` // equation param
+ * * b = `7n` // equation param
+ * * Gx, Gy are coordinates of Generator / base point
+ */
+const secp256k1_CURVE: WeierstrassOpts<bigint> = {
+  p: 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn,
+  n: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n,
+  h: 1n,
+  a: 0n,
+  b: 7n,
+  Gx: 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n,
+  Gy: 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n,
+};
+const { p: P, n: N, Gx, Gy, b: _b } = secp256k1_CURVE;
+
 const L = 32; // field / group byte length
 const L2 = 64;
-/**
- * secp256k1 curve parameters. Equation is x³ + ax + b, but a=0 - which makes it x³+b.
- * Gx and Gy are generator coordinates. p is field order, n is group order.
- */
-const CURVE: { p: bigint; n: bigint; a: bigint; b: bigint; Gx: bigint; Gy: bigint } = {
-  p: P,
-  n: N,
-  a: 0n,
-  b: _b,
-  Gx,
-  Gy,
-};
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
 /** Hex-encoded string or Uint8Array. */
@@ -32,13 +35,136 @@ export type PrivKey = Hex | bigint;
 /** Signature instance. Has properties r and s. */
 export type SigLike = { r: bigint; s: bigint };
 /** Signature instance, which allows recovering pubkey from it. */
-export type SignatureWithRecovery = Signature & { recovery: number };
-/** x³+b secp256k1 formula */
-const curve = (x: bigint) => M(M(x * x) * x + _b);
+export type RecoveredSignature = Signature & { recovery: number };
+export type SignatureWithRecovery = RecoveredSignature;
+/** Weierstrass elliptic curve options. */
+export type WeierstrassOpts<T> = Readonly<{
+  p: bigint;
+  n: bigint;
+  h: bigint;
+  a: T;
+  b: T;
+  Gx: T;
+  Gy: T;
+}>;
+
+// Helpers and Precomputes sections are reused between libraries
+
+// ## Helpers
+// ----------
+// error helper, messes-up stack trace
+const err = (m = ''): never => {
+  throw new Error(m);
+};
+const isBig = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
+const isStr = (s: unknown): s is string => typeof s === 'string'; // is string
+const isBytes = (a: unknown): a is Uint8Array =>
+  a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
+/** assert is Uint8Array (of specific length) */
+const abytes = (a: unknown, l?: number): Bytes =>
+  !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
+    ? err('Uint8Array expected')
+    : a;
+/** create Uint8Array */
+const u8n = (len: number) => new Uint8Array(len);
+const u8fr = (buf: ArrayLike<number>) => Uint8Array.from(buf);
+const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
+const bytesToHex = (b: Bytes): string =>
+  Array.from(abytes(b))
+    .map((e) => padh(e, 2))
+    .join('');
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
+const _ch = (ch: number): number | undefined => {
+  if (ch >= C._0 && ch <= C._9) return ch - C._0; // '2' => 50-48
+  if (ch >= C.A && ch <= C.F) return ch - (C.A - 10); // 'B' => 66-(65-10)
+  if (ch >= C.a && ch <= C.f) return ch - (C.a - 10); // 'b' => 98-(97-10)
+  return;
+};
+const hexToBytes = (hex: string): Bytes => {
+  const e = 'hex invalid';
+  if (!isStr(hex)) return err(e);
+  const hl = hex.length;
+  const al = hl / 2;
+  if (hl % 2) return err(e);
+  const array = u8n(al);
+  for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
+    // treat each char as ASCII
+    const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+    const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
+    if (n1 === undefined || n2 === undefined) return err(e);
+    array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
+  }
+  return array;
+};
+/** normalize hex or ui8a to ui8a */
+const toU8 = (a: Hex, len?: number) => abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len);
+declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
+const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
+// prettier-ignore
+const concatBytes = (...arrs: Bytes[]): Bytes => {
+  const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
+  let pad = 0; // walk through each array,
+  arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
+  return r;
+};
+/** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
+const randomBytes = (len: number = L): Bytes => {
+  const c = cr();
+  return c.getRandomValues(u8n(len));
+};
+const big = BigInt;
+const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range'): bigint =>
+  isBig(n) && min <= n && n < max ? n : err(msg);
+/** modular division */
+const M = (a: bigint, b: bigint = P) => {
+  const r = a % b;
+  return r >= 0n ? r : b + r;
+};
+const modN = (a: bigint) => M(a, N);
+/** Modular inversion using eucledian GCD (non-CT). No negative exponent for now. */
+// prettier-ignore
+const invert = (num: bigint, md: bigint): bigint => {
+  if (num === 0n || md <= 0n) err('no inverse n=' + num + ' mod=' + md);
+  let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+  while (a !== 0n) {
+    const q = b / a, r = b % a;
+    const m = x - u * q, n = y - v * q;
+    b = a, a = r, x = u, y = v, u = m, v = n;
+  }
+  return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
+};
+const callHash = (name: string) => {
+  // @ts-ignore
+  const fn = etc[name];
+  if (typeof fn !== 'function') err('hashes.' + name + ' not set');
+  return fn;
+};
+const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
+/** Point in 2d xy affine coordinates. */
+export interface AffinePoint {
+  x: bigint;
+  y: bigint;
+}
+// ## End of Helpers
+// -----------------
+
+/** secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0, making it x³+b */
+const koblitz = (x: bigint) => M(M(x * x) * x + _b);
+/** assert is field element or 0 */
+const afield0 = (n: bigint) => arange(n, 0n, P);
+/** assert is field element */
+const afield = (n: bigint) => arange(n, 1n, P);
+/** assert is group elem */
+const agroup = (n: bigint) => arange(n, 1n, N);
+const isEven = (y: bigint) => (y & 1n) === 0n;
+/** create Uint8Array of byte n */
+const u8of = (n: number) => Uint8Array.of(n);
+const getPrefix = (y: bigint) => u8of(isEven(y) ? 0x02 : 0x03);
 /** lift_x from BIP340 calculates square root. Validates x, then validates root*root. */
 const lift_x = (x: bigint) => {
   // Let c = x³ + 7 mod p. Fail if x ≥ p. (also fail if x < 1)
-  const c = curve(afield(x));
+  const c = koblitz(afield(x));
   // c = √y
   // y = c^((p+1)/4) mod p
   // This formula works for fields p = 3 mod 4 -- a special, fast case.
@@ -51,50 +177,7 @@ const lift_x = (x: bigint) => {
   }
   return M(r * r) === c ? r : err('sqrt invalid'); // check if result is valid
 };
-// error helper, messes-up stack trace
-const err = (m = ''): never => {
-  throw new Error(m);
-};
-const isB = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
-const isS = (s: unknown): s is string => typeof s === 'string'; // is string
-const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range') =>
-  isB(n) && min <= n && n < max ? n : err(msg);
-/** assert is field element or 0 */
-const afield0 = (n: bigint) => arange(n, 0n, P);
-/** assert is field element */
-const afield = (n: bigint) => arange(n, 1n, P);
-/** assert is group elem */
-const agroup = (n: bigint) => arange(n, 1n, N);
-const isBytes = (a: unknown): a is Uint8Array =>
-  a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
-/** assert is Uint8Array (of specific length) */
-const abytes = (a: unknown, l?: number): Bytes =>
-  !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
-    ? err('Uint8Array expected')
-    : a;
-/** create Uint8Array */
-const u8n = (len: number) => new Uint8Array(len);
-/** create Uint8Array of byte n */
-const u8of = (n: number) => Uint8Array.of(n);
-const big = BigInt;
-/** normalize hex or ui8a to ui8a */
-const toU8 = (a: Hex, len?: number) =>
-  abytes(isS(a) ? hexToBytes(a) : Uint8Array.from(abytes(a)), len);
-/** modular division */
-const M = (a: bigint, b: bigint = P) => {
-  const r = a % b;
-  return r >= 0n ? r : b + r;
-};
-const modN = (a: bigint) => M(a, N);
-const isEven = (y: bigint) => (y & 1n) === 0n;
-const getPrefix = (y: bigint) => u8of(isEven(y) ? 0x02 : 0x03);
-const freeze = (a: object) => Object.freeze(a);
-const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is 3d point
-/** Point in 2d xy affine coordinates. */
-export interface AffinePoint {
-  x: bigint;
-  y: bigint;
-}
+
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 class Point {
   static BASE: Point;
@@ -106,7 +189,7 @@ class Point {
     this.px = afield0(px);
     this.py = afield(py); // y can't be 0 in Projective
     this.pz = afield0(pz);
-    freeze(this);
+    Object.freeze(this);
   }
   /** Convert Uint8Array or hex string to Point. */
   static fromBytes(bytes: Bytes): Point {
@@ -117,7 +200,7 @@ class Point {
     // * [0x04]        [32-byte x coordinate][32-byte y coordinate]
     const head = bytes[0];
     const tail = bytes.subarray(1);
-    const x = sliceBytesNum(tail, 0, L);
+    const x = sliceBytesNumBE(tail, 0, L);
     const len = bytes.length;
     // Compressed 33-byte point, 0x02 or 0x03 prefix
     if (len === L + 1 && [0x02, 0x03].includes(head)) {
@@ -130,7 +213,7 @@ class Point {
       p = new Point(x, y, 1n);
     }
     // Uncompressed 65-byte point, 0x04 prefix
-    if (len === L2 + 1 && head === 0x04) p = new Point(x, sliceBytesNum(tail, L, L2), 1n);
+    if (len === L2 + 1 && head === 0x04) p = new Point(x, sliceBytesNumBE(tail, L, L2), 1n);
     // Validate point
     return p ? p.assertValidity() : err('bad point: not on curve');
   }
@@ -143,6 +226,9 @@ class Point {
     const Y1Z2 = M(Y1 * Z2);
     const Y2Z1 = M(Y2 * Z1);
     return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
+  }
+  is0(): boolean {
+    return this.equals(I);
   }
   /** Flip point over y coordinate. */
   negate(): Point {
@@ -193,6 +279,7 @@ class Point {
   multiply(n: bigint, safe = true): Point {
     if (!safe && n === 0n) return I;
     agroup(n);
+    if (n === 1n) return this;
     if (this.equals(G)) return wNAF(n).p;
     // init result point & fake point
     let p = I;
@@ -208,7 +295,7 @@ class Point {
   /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
   toAffine(): AffinePoint {
     const { px: x, py: y, pz: z } = this;
-    // fast-paths for ZERO point OR Z=1 (affine == projective)
+    // fast-paths for ZERO point OR Z=1
     if (this.equals(I)) return { x: 0n, y: 0n };
     if (z === 1n) return { x, y };
     const iz = invert(z, P);
@@ -223,7 +310,7 @@ class Point {
     afield(x); // must be in range 1 <= x,y < P
     afield(y);
     // y² == x³ + ax + b, equation sides must be equal
-    return M(y * y) === curve(x) ? this : err('bad point: not on curve');
+    return M(y * y) === koblitz(x) ? this : err('bad point: not on curve');
   }
   /** Converts point to 33/65-byte Uint8Array. */
   toBytes(isCompressed = true): Bytes {
@@ -238,9 +325,6 @@ class Point {
     return x === 0n && y === 0n ? I : new Point(x, y, 1n);
   }
 
-  is0(): boolean {
-    return this.equals(I);
-  }
   toHex(isCompressed?: boolean): string {
     return bytesToHex(this.toBytes(isCompressed));
   }
@@ -271,60 +355,14 @@ Point.ZERO = I;
 const doubleScalarMulUns = (R: Point, u1: bigint, u2: bigint): Point => {
   return G.multiply(u1, false).add(R.multiply(u2, false)).assertValidity();
 };
-const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
-const bytesToHex = (b: Bytes): string =>
-  Array.from(abytes(b))
-    .map((e) => padh(e, 2))
-    .join('');
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
-const _ch = (ch: number): number | undefined => {
-  if (ch >= C._0 && ch <= C._9) return ch - C._0; // '2' => 50-48
-  if (ch >= C.A && ch <= C.F) return ch - (C.A - 10); // 'B' => 66-(65-10)
-  if (ch >= C.a && ch <= C.f) return ch - (C.a - 10); // 'b' => 98-(97-10)
-  return;
-};
-const hexToBytes = (hex: string): Bytes => {
-  const e = 'hex invalid';
-  if (!isS(hex)) return err(e);
-  const hl = hex.length;
-  const al = hl / 2;
-  if (hl % 2) return err(e);
-  const array = u8n(al);
-  for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-    // treat each char as ASCII
-    const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-    const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
-    if (n1 === undefined || n2 === undefined) return err(e);
-    array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
-  }
-  return array;
-};
-const bytesToNum = (b: Bytes): bigint => big('0x' + (bytesToHex(b) || '0'));
-const sliceBytesNum = (b: Bytes, from: number, to: number) => bytesToNum(b.subarray(from, to));
+const bytesToNumBE = (b: Bytes): bigint => big('0x' + (bytesToHex(b) || '0'));
+const sliceBytesNumBE = (b: Bytes, from: number, to: number) => bytesToNumBE(b.subarray(from, to));
+const B256 = 2n ** 256n; // secp256k1 is weierstrass curve. Equation is x³ + ax + b.
 /** Number to 32b. Must be 0 <= num < B256. validate, pad, to bytes. */
 const numTo32b = (num: bigint): Bytes => hexToBytes(padh(arange(num, 0n, B256), L2));
-// prettier-ignore
-const concatBytes = (...arrs: Bytes[]): Bytes => {
-  const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
-  let pad = 0; // walk through each array,
-  arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
-  return r;
-};
-/** Modular inversion using eucledian GCD (non-CT). No negative exponent for now. */
-// prettier-ignore
-const invert = (num: bigint, md: bigint): bigint => {
-  if (num === 0n || md <= 0n) err('no inverse n=' + num + ' mod=' + md);
-  let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
-  while (a !== 0n) {
-    const q = b / a, r = b % a;
-    const m = x - u * q, n = y - v * q;
-    b = a, a = r, x = u, y = v, u = m, v = n;
-  }
-  return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
-};
 /** Normalize private key to scalar (bigint). Verifies scalar is in range 1<s<N */
 const toPrivScalar = (pr: PrivKey): bigint => {
-  const num = isB(pr) ? pr : bytesToNum(toU8(pr, L));
+  const num = isBig(pr) ? pr : bytesToNumBE(toU8(pr, L));
   return arange(num, 1n, N, 'private key invalid 3');
 };
 /** For Signature malleability, validates sig.s is bigger than N/2. */
@@ -333,6 +371,7 @@ const highS = (n: bigint): boolean => n > N >> 1n;
 const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => {
   return G.multiply(toPrivScalar(privKey)).toBytes(isCompressed);
 };
+
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
   readonly r: bigint;
@@ -342,13 +381,13 @@ class Signature {
     this.r = agroup(r); // 1 <= r < N
     this.s = agroup(s); // 1 <= s < N
     if (recovery != null) this.recovery = recovery;
-    freeze(this);
+    Object.freeze(this);
   }
   /** Create signature from 64b compact (r || s) representation. */
   static fromBytes(b: Bytes): Signature {
     abytes(b, L2);
-    const r = sliceBytesNum(b, 0, L);
-    const s = sliceBytesNum(b, L, L2);
+    const r = sliceBytesNumBE(b, 0, L);
+    const s = sliceBytesNumBE(b, L, L2);
     return new Signature(r, s);
   }
   toBytes(): Bytes {
@@ -356,8 +395,8 @@ class Signature {
     return concatBytes(numTo32b(r), numTo32b(s));
   }
   /** Copy signature, with newly added recovery bit. */
-  addRecoveryBit(bit: number): SignatureWithRecovery {
-    return new Signature(this.r, this.s, bit) as SignatureWithRecovery;
+  addRecoveryBit(bit: number): RecoveredSignature {
+    return new Signature(this.r, this.s, bit) as RecoveredSignature;
   }
 
   hasHighS(): boolean {
@@ -370,7 +409,7 @@ class Signature {
     return bytesToHex(this.toBytes());
   }
   recoverPublicKey(msg: Bytes): Point {
-    return recoverPublicKey(this as unknown as SignatureWithRecovery, msg);
+    return recoverPublicKey(this as unknown as RecoveredSignature, msg);
   }
   static fromCompact(hex: Hex): Signature {
     return Signature.fromBytes(toU8(hex, L2));
@@ -393,28 +432,11 @@ class Signature {
 const bits2int = (bytes: Bytes): bigint => {
   const delta = bytes.length * 8 - 256;
   if (delta > 1024) err('msg invalid'); // our CUSTOM check, "just-in-case": prohibit long inputs
-  const num = bytesToNum(bytes);
+  const num = bytesToNumBE(bytes);
   return delta > 0 ? num >> big(delta) : num;
 };
 /** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
 const bits2int_modN = (bytes: Bytes): bigint => modN(bits2int(abytes(bytes)));
-declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
-const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => {
-  const c = cr();
-  return c?.subtle || err('crypto.subtle must be defined');
-};
-const callEtcFn = (name: string) => {
-  // @ts-ignore
-  const fn = etc[name];
-  if (typeof fn !== 'function') err('err.' + name + ' not set');
-  return fn;
-};
-/** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
-const randomBytes = (len = L): Bytes => {
-  const c = cr();
-  return c.getRandomValues(u8n(len));
-};
 type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 /**
  * Option to enable hedged signatures with improved security.
@@ -437,7 +459,7 @@ type OptS = { lowS?: boolean; extraEntropy?: ExtraEntropy };
 type OptV = { lowS?: boolean };
 const signOpts: OptS = { lowS: true };
 const veriOpts: OptV = { lowS: true };
-type BC = { seed: Bytes; k2sig: (kb: Bytes) => SignatureWithRecovery | undefined }; //for hmac-drbg
+type BC = { seed: Bytes; k2sig: (kb: Bytes) => RecoveredSignature | undefined }; //for hmac-drbg
 // RFC6979 signature generation, preparation step.
 const prepSig = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): BC => {
   if (['der', 'recovered', 'canonical'].some((k) => k in opts))
@@ -459,7 +481,7 @@ const prepSig = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): BC => {
   // q = k⋅G
   // r = q.x mod n
   // s = k^-1(m + rd) mod n
-  const k2sig = (kBytes: Bytes): SignatureWithRecovery | undefined => {
+  const k2sig = (kBytes: Bytes): RecoveredSignature | undefined => {
     // RFC 6979 Section 3.2, step 3: k = bits2int(T)
     // Important: all mod() calls here must be done over N
     const k = bits2int(kBytes);
@@ -477,7 +499,7 @@ const prepSig = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): BC => {
       normS = modN(-s); // in the bottom half of CURVE.n
       recovery ^= 1;
     }
-    return new Signature(r, normS, recovery) as SignatureWithRecovery; // use normS, not s
+    return new Signature(r, normS, recovery) as RecoveredSignature; // use normS, not s
   };
   return { seed: concatBytes(...seed), k2sig };
 };
@@ -526,7 +548,7 @@ const hmacDrbg = <T>(asynchronous: boolean) => {
   } else {
     // asynchronous=false; same as above, but synchronous
     // h = hmac(K || V || ...)
-    const h = (...b: Bytes[]) => callEtcFn('hmacSha256Sync')(k, v, ...b);
+    const h = (...b: Bytes[]) => callHash('hmacSha256Sync')(k, v, ...b);
     const reseed = (seed = NULL) => {
       // HMAC-DRBG reseed() function. Steps D-G
       k = h(u8of(0x00), seed); // k = hmac(k || v || 0x00 || seed)
@@ -566,10 +588,10 @@ const signAsync = async (
   msgh: Hex,
   priv: PrivKey,
   opts: OptS = signOpts
-): Promise<SignatureWithRecovery> => {
+): Promise<RecoveredSignature> => {
   // Re-run drbg until k2sig returns ok
   const { seed, k2sig } = prepSig(msgh, priv, opts);
-  const sig = await hmacDrbg<SignatureWithRecovery>(true)(seed, k2sig);
+  const sig = await hmacDrbg<RecoveredSignature>(true)(seed, k2sig);
   return sig;
 };
 /**
@@ -582,10 +604,10 @@ const signAsync = async (
  * @example
  * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toBytes();
  */
-const sign = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): SignatureWithRecovery => {
+const sign = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): RecoveredSignature => {
   // Re-run drbg until k2sig returns ok
   const { seed, k2sig } = prepSig(msgh, priv, opts);
-  const sig = hmacDrbg<SignatureWithRecovery>(false)(seed, k2sig) as SignatureWithRecovery;
+  const sig = hmacDrbg<RecoveredSignature>(false)(seed, k2sig) as RecoveredSignature;
   return sig;
 };
 /**
@@ -628,7 +650,7 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = veriOpts):
  * ECDSA public key recovery. Requires msg hash and recovery id.
  * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
  */
-const recoverPublicKey = (sig: SignatureWithRecovery, msgh: Hex): Point => {
+const recoverPublicKey = (sig: RecoveredSignature, msgh: Hex): Point => {
   const { r, s, recovery } = sig;
   // 0 or 1 recovery id determines sign of "y" coordinate.
   // 2 or 3 means q.x was >N.
@@ -661,7 +683,7 @@ const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true): Bytes => {
 const hashToPrivateKey = (hash: Hex): Bytes => {
   hash = toU8(hash);
   if (hash.length < L + 8 || hash.length > 1024) err('expected 40-1024b');
-  const num = M(bytesToNum(hash), N - 1n);
+  const num = M(bytesToNumBE(hash), N - 1n);
   return numTo32b(num + 1n);
 };
 const randomPrivateKey = () => hashToPrivateKey(randomBytes(L + 16)); // FIPS 186 B.4.1.
@@ -672,7 +694,7 @@ const etc = {
   hexToBytes: hexToBytes as (hex: string) => Bytes,
   bytesToHex: bytesToHex as (bytes: Bytes) => string,
   concatBytes: concatBytes as (...arrs: Bytes[]) => Bytes,
-  bytesToNumberBE: bytesToNum as (a: Bytes) => bigint,
+  bytesToNumberBE: bytesToNumBE as (a: Bytes) => bigint,
   numberToBytesBE: numTo32b as (n: bigint) => Bytes,
   mod: M as (a: bigint, md?: bigint) => bigint,
   invert: invert as (num: bigint, md?: bigint) => bigint, // math utilities
@@ -729,7 +751,7 @@ const precompute = () => {
 let Gpows: Point[] | undefined = undefined; // precomputes for base point G
 // const-time negate
 const ctneg = (cnd: boolean, p: Point) => {
-  let n = p.negate();
+  const n = p.negate();
   return cnd ? n : p;
 };
 
@@ -773,9 +795,10 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
   }
   return { p, f }; // return both real and fake points for JIT
 };
+
 // !! Remove the export below to easily use in REPL / browser console
 export {
-  CURVE,
+  secp256k1_CURVE as CURVE,
   etc,
   getPublicKey,
   getSharedSecret,

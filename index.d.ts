@@ -1,15 +1,19 @@
+/*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
- * secp256k1 curve parameters. Equation is x³ + ax + b, but a=0 - which makes it x³+b.
- * Gx and Gy are generator coordinates. p is field order, n is group order.
+ * 4KB JS implementation of secp256k1 ECDSA / Schnorr signatures & ECDH.
+ * Compliant with RFC6979 & BIP340.
+ * @module
  */
-declare const CURVE: {
-    p: bigint;
-    n: bigint;
-    a: bigint;
-    b: bigint;
-    Gx: bigint;
-    Gy: bigint;
-};
+/**
+ * Curve params. secp256k1 is short weierstrass / koblitz curve. Equation is y² == x³ + ax + b.
+ * * P = `2n**256n-2n**32n-2n**977n` // field over which calculations are done
+ * * N = `2n**256n - 0x14551231950b75fc4402da1732fc9bebfn` // group order, amount of curve points
+ * * h = `1n` // cofactor
+ * * a = `0n` // equation param
+ * * b = `7n` // equation param
+ * * Gx, Gy are coordinates of Generator / base point
+ */
+declare const secp256k1_CURVE: WeierstrassOpts<bigint>;
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
 /** Hex-encoded string or Uint8Array. */
@@ -22,9 +26,20 @@ export type SigLike = {
     s: bigint;
 };
 /** Signature instance, which allows recovering pubkey from it. */
-export type SignatureWithRecovery = Signature & {
+export type RecoveredSignature = Signature & {
     recovery: number;
 };
+export type SignatureWithRecovery = RecoveredSignature;
+/** Weierstrass elliptic curve options. */
+export type WeierstrassOpts<T> = Readonly<{
+    p: bigint;
+    n: bigint;
+    h: bigint;
+    a: T;
+    b: T;
+    Gx: T;
+    Gy: T;
+}>;
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint {
     x: bigint;
@@ -42,6 +57,7 @@ declare class Point {
     static fromBytes(bytes: Bytes): Point;
     /** Equality check: compare points P&Q. */
     equals(other: Point): boolean;
+    is0(): boolean;
     /** Flip point over y coordinate. */
     negate(): Point;
     /** Point doubling: P+P, complete formula. */
@@ -68,7 +84,6 @@ declare class Point {
     toBytes(isCompressed?: boolean): Bytes;
     /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
     static fromAffine(ap: AffinePoint): Point;
-    is0(): boolean;
     toHex(isCompressed?: boolean): string;
     static fromPrivateKey(k: Bytes): Point;
     static fromHex(hex: Hex): Point;
@@ -88,7 +103,7 @@ declare class Signature {
     static fromBytes(b: Bytes): Signature;
     toBytes(): Bytes;
     /** Copy signature, with newly added recovery bit. */
-    addRecoveryBit(bit: number): SignatureWithRecovery;
+    addRecoveryBit(bit: number): RecoveredSignature;
     hasHighS(): boolean;
     toCompactRawBytes(): Bytes;
     toCompactHex(): string;
@@ -130,7 +145,7 @@ type OptV = {
  * @param priv - private key
  * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
  */
-declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: OptS) => Promise<SignatureWithRecovery>;
+declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: OptS) => Promise<RecoveredSignature>;
 /**
  * Sign a msg hash using secp256k1.
  * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
@@ -141,7 +156,7 @@ declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: OptS) => Promise<Sign
  * @example
  * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toBytes();
  */
-declare const sign: (msgh: Hex, priv: PrivKey, opts?: OptS) => SignatureWithRecovery;
+declare const sign: (msgh: Hex, priv: PrivKey, opts?: OptS) => RecoveredSignature;
 /**
  * Verify a signature using secp256k1.
  * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
@@ -182,4 +197,4 @@ declare const utils: {
     randomPrivateKey: () => Bytes;
     precompute: (w?: number, p?: Point) => Point;
 };
-export { CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };
+export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };

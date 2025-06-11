@@ -6,6 +6,6 @@
   "devDependencies": {
     "@noble/secp256k1": "file:../..",
     "esbuild": "0.25.0",
-    "terser": "5.29.2"
+    "terser": "^5.29.2"
   }
 }
