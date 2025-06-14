@@ -15,14 +15,12 @@
   "scripts": {
     "build": "tsc",
     "build:release": "npx jsbt esbuild test/build",
-    "build:smaller": "cd test/build; npm install terser@5.29.2; npx terser --ecma 2020 -m -c < ../../index.js",
+    "bench": "node test/benchmark.js",
     "lint": "prettier --check 'index.ts' 'test/*.{js,ts}'",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",
     "test": "node test/index.js",
     "test:bun": "bun test/index.js",
-    "test:deno": "deno --allow-env --allow-read test/index.js",
-    "bench": "node test/benchmark.js",
-    "loc": "echo \"`npm run --silent build:min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent build:mingz | wc -c`B gzipped\""
+    "test:deno": "deno --allow-env --allow-read test/index.js"
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
@@ -55,11 +53,5 @@
     "bitcoin",
     "ethereum"
   ],
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "default": "./index.js"
-    }
-  },
   "funding": "https://paulmillr.com/funding/"
 }
