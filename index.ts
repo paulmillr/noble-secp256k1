@@ -731,6 +731,7 @@ const utils = {
 
 const W = 8; // W is window size
 const scalarBits = 256;
+// We need +1 window because of how wNAF works: see wNAF loop
 const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8
 const pwindowSize = 2 ** (W - 1); // 128 for W=8
 const precompute = () => {
@@ -777,10 +778,15 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
   for (let w = 0; w < pwindows; w++) {
     let wbits = Number(n & mask); // extract W bits.
     n >>= shiftBy; // shift number by W bits.
+    // We use negative indexes to reduce size of precomputed table by 2x.
+    // Instead of needing precomputes 0..256, we only calculate them for 0..128.
+    // If an index > 128 is found, we do (256-index) - where 256 is next window.
+    // Naive: index +127 => 127, +224 => 224
+    // Optimized: index +127 => 127, +224 => 256-32
     if (wbits > pwindowSize) {
       wbits -= maxNum;
       n += 1n;
-    } // split if bits > max: +224 => 256-32
+    }
     const off = w * pwindowSize;
     const offF = off; // offsets, evaluate both
     const offP = off + Math.abs(wbits) - 1;
@@ -808,5 +814,6 @@ export {
   signAsync,
   Signature,
   utils,
-  verify,
+  verify
 };
+
