@@ -731,8 +731,7 @@ const utils = {
 
 const W = 8; // W is window size
 const scalarBits = 256;
-// We need +1 window because of how wNAF works: see wNAF loop
-const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8
+const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8, NOT 32 - see wNAF loop
 const pwindowSize = 2 ** (W - 1); // 128 for W=8
 const precompute = () => {
   const points: Point[] = [];
@@ -799,6 +798,7 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
       p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
     }
   }
+  if (n !== 0n) err('invalid wnaf');
   return { p, f }; // return both real and fake points for JIT
 };
 

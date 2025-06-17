@@ -1,5 +1,5 @@
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha256';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import mark from 'micro-bmark';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
