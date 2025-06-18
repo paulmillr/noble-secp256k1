@@ -814,6 +814,5 @@ export {
   signAsync,
   Signature,
   utils,
-  verify
+  verify,
 };
-
