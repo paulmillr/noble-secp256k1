@@ -28,9 +28,15 @@ const L2 = 64;
 // Helpers and Precomputes sections are reused between libraries
 // ## Helpers
 // ----------
-// error helper, messes-up stack trace
-const err = (m = '') => {
-    throw new Error(m);
+const captureTrace = (...args) => {
+    if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
+        Error.captureStackTrace(...args);
+    }
+};
+const err = (message = '') => {
+    const e = new Error(message);
+    captureTrace(e, err);
+    throw e;
 };
 const isBig = (n) => typeof n === 'bigint'; // is big integer
 const isStr = (s) => typeof s === 'string'; // is string
@@ -794,4 +800,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export below to easily use in REPL / browser console
-export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify };
+export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };
