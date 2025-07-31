@@ -14,7 +14,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc",
-    "build:release": "npx jsbt esbuild test/build",
+    "build:release": "npx --no @paulmillr/jsbt esbuild test/build",
     "bench": "node test/benchmark.js",
     "lint": "prettier --check 'index.ts' 'test/*.{js,ts}'",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",

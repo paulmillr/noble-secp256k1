@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join as joinPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -94,4 +94,27 @@ export function repr(item) {
   if (item && item.isProxy) return '[proxy]';
   if (typeof item === 'symbol') return item.toString();
   return `${item}`;
+}
+
+export function phex(point) {
+  return bytesToHex(point.toBytes());
+}
+
+export function deepHexToBytes(val) {
+  if (typeof val === 'string' && /^[0-9a-fA-F]*$/.test(val)) {
+    try {
+      return hexToBytes(val);
+    } catch (e) {
+      return val;
+    }
+  } else {
+  }
+  if (val === null) return val;
+  if (Array.isArray(val)) return val.map(deepHexToBytes);
+  if (val && typeof val === 'object') {
+    const out = {};
+    for (const k in val) out[k] = deepHexToBytes(val[k]);
+    return out;
+  }
+  return val;
 }

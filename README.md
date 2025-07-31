@@ -249,7 +249,7 @@ class Signature {
   hasHighS(): boolean;
   normalizeS(): Signature;
   recoverPublicKey(msgh: Hex): Point;
-  toCompactRawBytes(): Bytes;
+  toBytes(): Bytes;
   toCompactHex(): string;
 }
 CURVE; // curve prime; order; equation params, generator coordinates
@@ -355,7 +355,7 @@ The goal of v2 is to provide minimum possible JS library which is safe and fast.
   - `canonical` option was renamed to `lowS`
   - `recovered` option has been removed because recovery bit is always returned now
   - `der` option has been removed. There are 2 options:
-    1. Use compact encoding: `fromCompact`, `toCompactRawBytes`, `toCompactHex`.
+    1. Use compact encoding: `fromCompact`, `toBytes`, `toCompactHex`.
        Compact encoding is simply a concatenation of 32-byte r and 32-byte s.
     2. If you must use DER encoding, switch to noble-curves (see above).
 - `verify`

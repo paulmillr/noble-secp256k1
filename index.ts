@@ -26,17 +26,16 @@ const { p: P, n: N, Gx, Gy, b: _b } = secp256k1_CURVE;
 
 const L = 32; // field / group byte length
 const L2 = 64;
+const lengths = {
+  publicKey: L + 1,
+  publicKeyUncompressed: L2 + 1,
+  signature: L2,
+  seed: L + L / 2,
+};
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
-/** Hex-encoded string or Uint8Array. */
-export type Hex = Bytes | string;
-/** Hex-encoded string, Uint8Array or bigint. */
-export type PrivKey = Hex | bigint;
-/** Signature instance. Has properties r and s. */
-export type SigLike = { r: bigint; s: bigint };
 /** Signature instance, which allows recovering pubkey from it. */
 export type RecoveredSignature = Signature & { recovery: number };
-export type SignatureWithRecovery = RecoveredSignature;
 /** Weierstrass elliptic curve options. */
 export type WeierstrassOpts<T> = Readonly<{
   p: bigint;
@@ -66,14 +65,21 @@ const isBig = (n: unknown): n is bigint => typeof n === 'bigint'; // is big inte
 const isStr = (s: unknown): s is string => typeof s === 'string'; // is string
 const isBytes = (a: unknown): a is Uint8Array =>
   a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
-/** assert is Uint8Array (of specific length) */
-const abytes = (a: unknown, l?: number): Bytes =>
-  !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
-    ? err('Uint8Array expected')
-    : a;
+/** Asserts something is Uint8Array. */
+const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
+  const bytes = isBytes(value);
+  const len = value?.length;
+  const needsLen = length !== undefined;
+  if (!bytes || (needsLen && len !== length)) {
+    const prefix = title && `"${title}" `;
+    const ofLen = needsLen ? ` of length ${length}` : '';
+    const got = bytes ? `length=${len}` : `type=${typeof value}`;
+    throw new Error(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+  }
+  return value;
+};
 /** create Uint8Array */
 const u8n = (len: number) => new Uint8Array(len);
-const u8fr = (buf: ArrayLike<number>) => Uint8Array.from(buf);
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 const bytesToHex = (b: Bytes): string =>
   Array.from(abytes(b))
@@ -102,8 +108,6 @@ const hexToBytes = (hex: string): Bytes => {
   }
   return array;
 };
-/** normalize hex or ui8a to ui8a */
-const toU8 = (a: Hex, len?: number) => abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len);
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
 const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
@@ -142,7 +146,7 @@ const invert = (num: bigint, md: bigint): bigint => {
 };
 const callHash = (name: string) => {
   // @ts-ignore
-  const fn = etc[name];
+  const fn = hashes[name];
   if (typeof fn !== 'function') err('hashes.' + name + ' not set');
   return fn;
 };
@@ -157,12 +161,12 @@ export interface AffinePoint {
 
 /** secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0, making it x³+b */
 const koblitz = (x: bigint) => M(M(x * x) * x + _b);
-/** assert is field element or 0 */
-const afield0 = (n: bigint) => arange(n, 0n, P);
-/** assert is field element */
-const afield = (n: bigint) => arange(n, 1n, P);
+/** assert is field element, including 0 */
+const FpIsValid = (n: bigint) => arange(n, 0n, P);
+/** assert is field element and not 0 */
+const FpIsValidNot0 = (n: bigint) => arange(n, 1n, P);
 /** assert is group elem */
-const agroup = (n: bigint) => arange(n, 1n, N);
+const FnIsValidNot0 = (n: bigint) => arange(n, 1n, N);
 const isEven = (y: bigint) => (y & 1n) === 0n;
 /** create Uint8Array of byte n */
 const u8of = (n: number) => Uint8Array.of(n);
@@ -170,7 +174,7 @@ const getPrefix = (y: bigint) => u8of(isEven(y) ? 0x02 : 0x03);
 /** lift_x from BIP340 calculates square root. Validates x, then validates root*root. */
 const lift_x = (x: bigint) => {
   // Let c = x³ + 7 mod p. Fail if x ≥ p. (also fail if x < 1)
-  const c = koblitz(afield(x));
+  const c = koblitz(FpIsValidNot0(x));
   // c = √y
   // y = c^((p+1)/4) mod p
   // This formula works for fields p = 3 mod 4 -- a special, fast case.
@@ -188,28 +192,34 @@ const lift_x = (x: bigint) => {
 class Point {
   static BASE: Point;
   static ZERO: Point;
-  readonly px: bigint;
-  readonly py: bigint;
-  readonly pz: bigint;
-  constructor(px: bigint, py: bigint, pz: bigint) {
-    this.px = afield0(px);
-    this.py = afield(py); // y can't be 0 in Projective
-    this.pz = afield0(pz);
+  readonly X: bigint;
+  readonly Y: bigint;
+  readonly Z: bigint;
+  constructor(X: bigint, Y: bigint, Z: bigint) {
+    this.X = FpIsValid(X);
+    this.Y = FpIsValidNot0(Y); // Y can't be 0 in Projective
+    this.Z = FpIsValid(Z);
     Object.freeze(this);
+  }
+  static CURVE(): WeierstrassOpts<bigint> {
+    return secp256k1_CURVE;
+  }
+  /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
+  static fromAffine(ap: AffinePoint): Point {
+    const { x, y } = ap;
+    return x === 0n && y === 0n ? I : new Point(x, y, 1n);
   }
   /** Convert Uint8Array or hex string to Point. */
   static fromBytes(bytes: Bytes): Point {
     abytes(bytes);
+    const { publicKey: comp, publicKeyUncompressed: uncomp } = lengths; // e.g. for 32-byte: 33, 65
     let p: Point | undefined = undefined;
-    // First byte is prefix, rest is data. There are 2 kinds: compressed & uncompressed:
-    // * [0x02 or 0x03][32-byte x coordinate]
-    // * [0x04]        [32-byte x coordinate][32-byte y coordinate]
+    const length = bytes.length;
     const head = bytes[0];
     const tail = bytes.subarray(1);
     const x = sliceBytesNumBE(tail, 0, L);
-    const len = bytes.length;
-    // Compressed 33-byte point, 0x02 or 0x03 prefix
-    if (len === L + 1 && [0x02, 0x03].includes(head)) {
+    // No actual validation is done here: use .assertValidity()
+    if (length === comp && (head === 0x02 || head === 0x03)) {
       // Equation is y² == x³ + ax + b. We calculate y from x.
       // y = √y²; there are two solutions: y, -y. Determine proper solution based on prefix
       let y = lift_x(x);
@@ -219,14 +229,23 @@ class Point {
       p = new Point(x, y, 1n);
     }
     // Uncompressed 65-byte point, 0x04 prefix
-    if (len === L2 + 1 && head === 0x04) p = new Point(x, sliceBytesNumBE(tail, L, L2), 1n);
+    if (length === uncomp && head === 0x04) p = new Point(x, sliceBytesNumBE(tail, L, L2), 1n);
     // Validate point
     return p ? p.assertValidity() : err('bad point: not on curve');
   }
+  static fromHex(hex: string): Point {
+    return Point.fromBytes(hexToBytes(hex));
+  }
+  get x(): bigint {
+    return this.toAffine().x;
+  }
+  get y(): bigint {
+    return this.toAffine().y;
+  }
   /** Equality check: compare points P&Q. */
   equals(other: Point): boolean {
-    const { px: X1, py: Y1, pz: Z1 } = this;
-    const { px: X2, py: Y2, pz: Z2 } = apoint(other); // checks class equality
+    const { X: X1, Y: Y1, Z: Z1 } = this;
+    const { X: X2, Y: Y2, Z: Z2 } = apoint(other); // checks class equality
     const X1Z2 = M(X1 * Z2);
     const X2Z1 = M(X2 * Z1);
     const Y1Z2 = M(Y1 * Z2);
@@ -238,7 +257,7 @@ class Point {
   }
   /** Flip point over y coordinate. */
   negate(): Point {
-    return new Point(this.px, M(-this.py), this.pz);
+    return new Point(this.X, M(-this.Y), this.Z);
   }
   /** Point doubling: P+P, complete formula. */
   double(): Point {
@@ -251,8 +270,8 @@ class Point {
    */
   // prettier-ignore
   add(other: Point): Point {
-    const { px: X1, py: Y1, pz: Z1 } = this;
-    const { px: X2, py: Y2, pz: Z2 } = apoint(other);
+    const { X: X1, Y: Y1, Z: Z1 } = this;
+    const { X: X2, Y: Y2, Z: Z2 } = apoint(other);
     const a = 0n;
     const b = _b;
     let X3 = 0n, Y3 = 0n, Z3 = 0n;
@@ -275,6 +294,9 @@ class Point {
     Z3 = M(Z3 + t0); // step 40
     return new Point(X3, Y3, Z3);
   }
+  subtract(other: Point): Point {
+    return this.add(apoint(other).negate());
+  }
   /**
    * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
    * Uses {@link wNAF} for base point.
@@ -284,7 +306,7 @@ class Point {
    */
   multiply(n: bigint, safe = true): Point {
     if (!safe && n === 0n) return I;
-    agroup(n);
+    FnIsValidNot0(n);
     if (n === 1n) return this;
     if (this.equals(G)) return wNAF(n).p;
     // init result point & fake point
@@ -300,7 +322,7 @@ class Point {
   }
   /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
   toAffine(): AffinePoint {
-    const { px: x, py: y, pz: z } = this;
+    const { X: x, Y: y, Z: z } = this;
     // fast-paths for ZERO point OR Z=1
     if (this.equals(I)) return { x: 0n, y: 0n };
     if (z === 1n) return { x, y };
@@ -313,8 +335,8 @@ class Point {
   /** Checks if the point is valid and on-curve. */
   assertValidity(): Point {
     const { x, y } = this.toAffine(); // convert to 2d xy affine point.
-    afield(x); // must be in range 1 <= x,y < P
-    afield(y);
+    FpIsValidNot0(x); // must be in range 1 <= x,y < P
+    FpIsValidNot0(y);
     // y² == x³ + ax + b, equation sides must be equal
     return M(y * y) === koblitz(x) ? this : err('bad point: not on curve');
   }
@@ -325,29 +347,9 @@ class Point {
     if (isCompressed) return concatBytes(getPrefix(y), x32b);
     return concatBytes(u8of(0x04), x32b, numTo32b(y));
   }
-  /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
-  static fromAffine(ap: AffinePoint): Point {
-    const { x, y } = ap;
-    return x === 0n && y === 0n ? I : new Point(x, y, 1n);
-  }
 
   toHex(isCompressed?: boolean): string {
     return bytesToHex(this.toBytes(isCompressed));
-  }
-  static fromPrivateKey(k: Bytes): Point {
-    return G.multiply(toPrivScalar(k));
-  }
-  static fromHex(hex: Hex): Point {
-    return Point.fromBytes(toU8(hex));
-  }
-  get x(): bigint {
-    return this.toAffine().x;
-  }
-  get y(): bigint {
-    return this.toAffine().y;
-  }
-  toRawBytes(isCompressed?: boolean): Bytes {
-    return this.toBytes(isCompressed);
   }
 }
 /** Generator / base point */
@@ -367,65 +369,92 @@ const B256 = 2n ** 256n; // secp256k1 is weierstrass curve. Equation is x³ + ax
 /** Number to 32b. Must be 0 <= num < B256. validate, pad, to bytes. */
 const numTo32b = (num: bigint): Bytes => hexToBytes(padh(arange(num, 0n, B256), L2));
 /** Normalize private key to scalar (bigint). Verifies scalar is in range 1<s<N */
-const toPrivScalar = (pr: PrivKey): bigint => {
-  const num = isBig(pr) ? pr : bytesToNumBE(toU8(pr, L));
-  return arange(num, 1n, N, 'private key invalid 3');
+const validateSecretKey = (secretKey: Bytes): bigint => {
+  const num = bytesToNumBE(abytes(secretKey, L, 'secret key'));
+  return arange(num, 1n, N, 'invalid secret key: outside of range');
 };
 /** For Signature malleability, validates sig.s is bigger than N/2. */
 const highS = (n: bigint): boolean => n > N >> 1n;
 /** Creates 33/65-byte public key from 32-byte private key. */
-const getPublicKey = (privKey: PrivKey, isCompressed = true): Bytes => {
-  return G.multiply(toPrivScalar(privKey)).toBytes(isCompressed);
+const getPublicKey = (privKey: Bytes, isCompressed = true): Bytes => {
+  return G.multiply(validateSecretKey(privKey)).toBytes(isCompressed);
 };
 
+const isValidSecretKey = (secretKey: Bytes): boolean => {
+  try {
+    return !!validateSecretKey(secretKey);
+  } catch (error) {
+    return false;
+  }
+};
+const isValidPublicKey = (publicKey: Bytes, isCompressed?: boolean): boolean => {
+  const { publicKey: comp, publicKeyUncompressed } = lengths;
+  try {
+    const l = publicKey.length;
+    if (isCompressed === true && l !== comp) return false;
+    if (isCompressed === false && l !== publicKeyUncompressed) return false;
+    return !!Point.fromBytes(publicKey);
+  } catch (error) {
+    return false;
+  }
+};
+
+const assertRecoveryBit = (recovery?: number) => {
+  if (![0, 1, 2, 3].includes(recovery!)) err('recovery id must be valid and present');
+};
+const assertSigFormat = (format?: ECDSASigFormat) => {
+  if (format != null && !ALL_SIG.includes(format))
+    err(`Signature format must be one of: ${ALL_SIG.join(', ')}`);
+  if (format === SIG_DER) err('Signature format "der" is not supported: switch to noble-curves');
+};
+const assertSigLength = (sig: Bytes, format: ECDSASigFormat = SIG_COMPACT) => {
+  assertSigFormat(format);
+  const SL = lengths.signature;
+  const RL = SL + 1;
+  let msg = `Signature format "${format}" expects Uint8Array with length `;
+  if (format === SIG_COMPACT && sig.length !== SL) err(msg + SL);
+  if (format === SIG_RECOVERED && sig.length !== RL) err(msg + RL);
+};
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 class Signature {
   readonly r: bigint;
   readonly s: bigint;
   readonly recovery?: number;
   constructor(r: bigint, s: bigint, recovery?: number) {
-    this.r = agroup(r); // 1 <= r < N
-    this.s = agroup(s); // 1 <= s < N
+    this.r = FnIsValidNot0(r); // 1 <= r < N
+    this.s = FnIsValidNot0(s); // 1 <= s < N
     if (recovery != null) this.recovery = recovery;
     Object.freeze(this);
   }
-  /** Create signature from 64b compact (r || s) representation. */
-  static fromBytes(b: Bytes): Signature {
-    abytes(b, L2);
+  static fromBytes(b: Bytes, format: ECDSASigFormat = SIG_COMPACT): Signature {
+    assertSigLength(b, format);
+    let rec: number | undefined;
+    if (format === SIG_RECOVERED) {
+      rec = b[0];
+      b = b.subarray(1);
+    }
     const r = sliceBytesNumBE(b, 0, L);
     const s = sliceBytesNumBE(b, L, L2);
-    return new Signature(r, s);
+    return new Signature(r, s, rec);
   }
-  toBytes(): Bytes {
-    const { r, s } = this;
-    return concatBytes(numTo32b(r), numTo32b(s));
-  }
-  /** Copy signature, with newly added recovery bit. */
   addRecoveryBit(bit: number): RecoveredSignature {
     return new Signature(this.r, this.s, bit) as RecoveredSignature;
   }
-
   hasHighS(): boolean {
     return highS(this.s);
-  }
-  toCompactRawBytes(): Bytes {
-    return this.toBytes();
-  }
-  toCompactHex(): string {
-    return bytesToHex(this.toBytes());
-  }
-  recoverPublicKey(msg: Bytes): Point {
-    return recoverPublicKey(this as unknown as RecoveredSignature, msg);
-  }
-  static fromCompact(hex: Hex): Signature {
-    return Signature.fromBytes(toU8(hex, L2));
-  }
-  assertValidity(): Signature {
-    return this;
   }
   normalizeS(): Signature {
     const { r, s, recovery } = this;
     return highS(s) ? new Signature(r, modN(-s), recovery) : this;
+  }
+  toBytes(format: ECDSASigFormat = SIG_COMPACT): Bytes {
+    const { r, s, recovery } = this;
+    const res = concatBytes(numTo32b(r), numTo32b(s));
+    if (format === SIG_RECOVERED) {
+      assertRecoveryBit(recovery);
+      return concatBytes(Uint8Array.of(recovery!), res);
+    }
+    return res;
   }
 }
 
@@ -443,7 +472,6 @@ const bits2int = (bytes: Bytes): bigint => {
 };
 /** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
 const bits2int_modN = (bytes: Bytes): bigint => modN(bits2int(abytes(bytes)));
-type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 /**
  * Option to enable hedged signatures with improved security.
  *
@@ -460,56 +488,35 @@ type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
  *
  * https://paulmillr.com/posts/deterministic-signatures/
  */
-export type ExtraEntropy = boolean | Hex;
-type OptS = { lowS?: boolean; extraEntropy?: ExtraEntropy };
-type OptV = { lowS?: boolean };
-const signOpts: OptS = { lowS: true };
-const veriOpts: OptV = { lowS: true };
-type BC = { seed: Bytes; k2sig: (kb: Bytes) => RecoveredSignature | undefined }; //for hmac-drbg
-// RFC6979 signature generation, preparation step.
-const prepSig = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): BC => {
-  if (['der', 'recovered', 'canonical'].some((k) => k in opts))
-    // legacy opts
-    err('option not supported');
-  let { lowS, extraEntropy } = opts; // generates low-s sigs by default
-  if (lowS == null) lowS = true; // RFC6979 3.2: we skip step A
-  const i2o = numTo32b; // int to octets
-  const h1i = bits2int_modN(toU8(msgh)); // msg bigint
-  const h1o = i2o(h1i); // msg octets
-  const d = toPrivScalar(priv); // validate private key, convert to bigint
-  const seed = [i2o(d), h1o]; // Step D of RFC6979 3.2
-  /** RFC6979 3.6: additional k' (optional). See {@link ExtraEntropy}. */
-  // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
-  if (extraEntropy) seed.push(extraEntropy === true ? randomBytes(L) : toU8(extraEntropy));
-  const m = h1i; // convert msg to bigint
-  // Converts signature params into point w r/s, checks result for validity.
-  // To transform k => Signature:
-  // q = k⋅G
-  // r = q.x mod n
-  // s = k^-1(m + rd) mod n
-  const k2sig = (kBytes: Bytes): RecoveredSignature | undefined => {
-    // RFC 6979 Section 3.2, step 3: k = bits2int(T)
-    // Important: all mod() calls here must be done over N
-    const k = bits2int(kBytes);
-    if (!(1n <= k && k < N)) return; // Check 0 < k < CURVE.n
-    const q = G.multiply(k).toAffine(); // q = k⋅G
-    const r = modN(q.x); // r = q.x mod n
-    if (r === 0n) return;
-    const ik = invert(k, N); // k^-1 mod n, NOT mod P
-    const s = modN(ik * modN(m + modN(d * r))); // s = k^-1(m + rd) mod n
-    if (s === 0n) return;
-    let normS = s; // normalized S
-    let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit (2 or 3, when q.x > n)
-    if (lowS && highS(s)) {
-      // if lowS was passed, ensure s is always
-      normS = modN(-s); // in the bottom half of CURVE.n
-      recovery ^= 1;
-    }
-    return new Signature(r, normS, recovery) as RecoveredSignature; // use normS, not s
-  };
-  return { seed: concatBytes(...seed), k2sig };
+export type ExtraEntropy = boolean | Bytes;
+// todo: better name
+const SIG_COMPACT = 'compact';
+const SIG_RECOVERED = 'recovered';
+const SIG_DER = 'der';
+const ALL_SIG = [SIG_COMPACT, SIG_RECOVERED, SIG_DER] as const;
+export type ECDSASigFormat = 'compact' | 'recovered' | 'der';
+export type ECDSARecoverOpts = {
+  prehash?: boolean;
 };
-type Pred<T> = (v: Uint8Array) => T | undefined;
+export type ECDSAVerifyOpts = {
+  prehash?: boolean;
+  lowS?: boolean;
+  format?: ECDSASigFormat;
+};
+export type ECDSASignOpts = {
+  prehash?: boolean;
+  lowS?: boolean;
+  format?: ECDSASigFormat;
+  extraEntropy?: Uint8Array | boolean;
+};
+
+const defaultSignOpts: ECDSASignOpts = {
+  lowS: true,
+  prehash: true,
+  format: SIG_COMPACT,
+  extraEntropy: false,
+};
+type Pred<T> = (v: Bytes) => T | undefined;
 // HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
 const hmacDrbg = <T>(asynchronous: boolean) => {
   let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
@@ -526,7 +533,7 @@ const hmacDrbg = <T>(asynchronous: boolean) => {
   if (asynchronous) {
     // asynchronous=true
     // h = hmac(K || V || ...)
-    const h = (...b: Bytes[]) => etc.hmacSha256Async(k, v, ...b);
+    const h = (...b: Bytes[]) => hashes.hmacSha256Async(k, concatBytes(v, ...b));
     const reseed = async (seed = NULL) => {
       // HMAC-DRBG reseed() function. Steps D-G
       k = await h(u8of(0x00), seed); // k = hmac(K || V || 0x00 || seed)
@@ -554,7 +561,7 @@ const hmacDrbg = <T>(asynchronous: boolean) => {
   } else {
     // asynchronous=false; same as above, but synchronous
     // h = hmac(K || V || ...)
-    const h = (...b: Bytes[]) => callHash('hmacSha256Sync')(k, v, ...b);
+    const h = (...b: Bytes[]) => callHash('hmacSha256')(k, concatBytes(v, ...b));
     const reseed = (seed = NULL) => {
       // HMAC-DRBG reseed() function. Steps D-G
       k = h(u8of(0x00), seed); // k = hmac(k || v || 0x00 || seed)
@@ -582,63 +589,73 @@ const hmacDrbg = <T>(asynchronous: boolean) => {
   }
 };
 
-/**
- * Sign a msg hash using secp256k1. Async.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
- * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
- * @param msgh - message HASH, not message itself e.g. sha256(message)
- * @param priv - private key
- * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
- */
-const signAsync = async (
-  msgh: Hex,
-  priv: PrivKey,
-  opts: OptS = signOpts
-): Promise<RecoveredSignature> => {
-  // Re-run drbg until k2sig returns ok
-  const { seed, k2sig } = prepSig(msgh, priv, opts);
-  const sig = await hmacDrbg<RecoveredSignature>(true)(seed, k2sig);
-  return sig;
+// RFC6979 signature generation, preparation step.
+// Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
+const _sign = (
+  asynchronous: boolean,
+  messageHash: Bytes,
+  secretKey: Bytes,
+  opts: ECDSASignOpts
+) => {
+  let { lowS, extraEntropy } = opts; // generates low-s sigs by default
+  // RFC6979 3.2: we skip step A
+  const int2octets = numTo32b; // int to octets
+  const h1i = bits2int_modN(messageHash); // msg bigint
+  const h1o = int2octets(h1i); // msg octets
+  const d = validateSecretKey(secretKey); // validate private key, convert to bigint
+  const seedArgs = [int2octets(d), h1o]; // Step D of RFC6979 3.2
+  /** RFC6979 3.6: additional k' (optional). See {@link ExtraEntropy}. */
+  if (extraEntropy != null && extraEntropy !== false) {
+    // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
+    // gen random bytes OR pass as-is
+    const e = extraEntropy === true ? randomBytes(L) : extraEntropy;
+    seedArgs.push(abytes(e, undefined, 'extraEntropy')); // check for being bytes
+  }
+  const seed = concatBytes(...seedArgs);
+  const m = h1i; // convert msg to bigint
+  // Converts signature params into point w r/s, checks result for validity.
+  // To transform k => Signature:
+  // q = k⋅G
+  // r = q.x mod n
+  // s = k^-1(m + rd) mod n
+  // Can use scalar blinding b^-1(bm + bdr) where b ∈ [1,q−1] according to
+  // https://tches.iacr.org/index.php/TCHES/article/view/7337/6509. We've decided against it:
+  // a) dependency on CSPRNG b) 15% slowdown c) doesn't really help since bigints are not CT
+  const k2sig = (kBytes: Bytes): Bytes | undefined => {
+    // RFC 6979 Section 3.2, step 3: k = bits2int(T)
+    // Important: all mod() calls here must be done over N
+    const k = bits2int(kBytes);
+    if (!(1n <= k && k < N)) return; // Valid scalars (including k) must be in 1..N-1
+    const ik = invert(k, N); // k^-1 mod n
+    const q = G.multiply(k).toAffine(); // q = k⋅G
+    const r = modN(q.x); // r = q.x mod n
+    if (r === 0n) return;
+    const s = modN(ik * modN(m + r * d)); // s = k^-1(m + rd) mod n
+    if (s === 0n) return;
+    let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit (2 or 3, when q.x > n)
+    let normS = s; // normalized S
+    if (lowS && highS(s)) {
+      // if lowS was passed, ensure s is always
+      normS = modN(-s); // in the bottom half of CURVE.n
+      recovery ^= 1;
+    }
+    const sig = new Signature(r, normS, recovery) as RecoveredSignature; // use normS, not s
+    return sig.toBytes(opts.format);
+  };
+  // const { seed, k2sig } = prepSig(message, secretKey, opts);
+  return hmacDrbg<Bytes>(asynchronous)(seed, k2sig);
 };
-/**
- * Sign a msg hash using secp256k1.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
- * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
- * @param msgh - message HASH, not message itself e.g. sha256(message)
- * @param priv - private key
- * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
- * @example
- * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toBytes();
- */
-const sign = (msgh: Hex, priv: PrivKey, opts: OptS = signOpts): RecoveredSignature => {
-  // Re-run drbg until k2sig returns ok
-  const { seed, k2sig } = prepSig(msgh, priv, opts);
-  const sig = hmacDrbg<RecoveredSignature>(false)(seed, k2sig) as RecoveredSignature;
-  return sig;
-};
-/**
- * Verify a signature using secp256k1.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
- * Default lowS=true, prevents malleability.
- * @param sig - signature, 64-byte or Signature instance
- * @param msgh - message HASH, not message itself e.g. sha256(message)
- * @param pub - public key
- * @param opts - { lowS: true } is default, prohibits s >= CURVE.n/2 to prevent malleability
- */
-const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = veriOpts): boolean => {
-  let { lowS } = opts;
-  if (lowS == null) lowS = true;
-  if ('strict' in opts) err('option not supported');
-  let sigg: Signature;
-  // Previous ver supported DER sigs.
-  // We throw error when DER is suspected now.
-  const rs = sig && typeof sig === 'object' && 'r' in sig;
-  if (!rs && toU8(sig).length !== L2) err('signature must be 64 bytes');
+
+// Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
+const _verify = (sig: Bytes, messageHash: Bytes, publicKey: Bytes, opts: ECDSAVerifyOpts = {}) => {
+  const { lowS, format } = opts;
+  if (sig instanceof Signature) err('Signature must be in Uint8Array, use .toBytes()');
+  assertSigLength(sig, format);
+  abytes(publicKey, undefined, 'publicKey');
   try {
-    sigg = rs ? new Signature(sig.r, sig.s) : Signature.fromCompact(sig);
-    const h = bits2int_modN(toU8(msgh)); // Truncate hash
-    const P = Point.fromBytes(toU8(pub)); // Validate public key
-    const { r, s } = sigg;
+    const { r, s } = Signature.fromBytes(sig, format);
+    const h = bits2int_modN(messageHash); // Truncate hash
+    const P = Point.fromBytes(publicKey); // Validate public key
     if (lowS && highS(s)) return false; // lowS bans sig.s >= CURVE.n/2
     const is = invert(s, N); // s^-1
     const u1 = modN(h * is); // u1 = hs^-1 mod n
@@ -652,48 +669,176 @@ const verify = (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts: OptV = veriOpts):
   }
 };
 
+const setDefaults = (opts: ECDSASignOpts): Required<ECDSASignOpts> => {
+  const res: ECDSASignOpts = {};
+  Object.keys(defaultSignOpts).forEach((k: string) => {
+    // @ts-ignore
+    res[k] = opts[k] ?? defaultSignOpts[k];
+  });
+  return res as Required<ECDSASignOpts>;
+};
+
+const callPrehash = (asynchronous: boolean, message: Bytes, opts: { prehash?: boolean }) => {
+  abytes(message, undefined, 'message');
+  if (!opts.prehash) return message;
+  return asynchronous ? hashes.sha256Async(message) : callHash('sha256')(message);
+};
+
 /**
- * ECDSA public key recovery. Requires msg hash and recovery id.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
+ * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
+ * Prehashes message with sha256, disable using `prehash: false`.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * sign(msg, secretKey);
+ * sign(sha256(msg), secretKey, { prehash: false });
+ * sign(msg, secretKey, { extraEntropy: true });
+ * sign(msg, secretKey, { format: 'recovered' });
+ * ```
  */
-const recoverPublicKey = (sig: RecoveredSignature, msgh: Hex): Point => {
+const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes => {
+  opts = setDefaults(opts);
+  message = callPrehash(false, message, opts);
+  return _sign(false, message, secretKey, opts) as Bytes;
+};
+
+/**
+ * Sign a message using secp256k1. Async: uses built-in WebCrypto hashes.
+ * Prehashes message with sha256, disable using `prehash: false`.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * await signAsync(msg, secretKey);
+ * await signAsync(sha256(msg), secretKey, { prehash: false });
+ * await signAsync(msg, secretKey, { extraEntropy: true });
+ * await signAsync(msg, secretKey, { format: 'recovered' });
+ * ```
+ */
+const signAsync = async (
+  message: Bytes,
+  secretKey: Bytes,
+  opts: ECDSASignOpts = {}
+): Promise<Bytes> => {
+  opts = setDefaults(opts);
+  message = await callPrehash(true, message, opts);
+  return _sign(true, message, secretKey, opts) as Promise<Bytes>;
+};
+
+/**
+ * Verify a signature using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
+ * @param signature - signature, default is 64-byte "compact" format
+ * @param message - message which has been signed
+ * @param publicKey - public key
+ * @param opts - see {@link ECDSAVerifyOpts} for details.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * verify(sig, msg, publicKey);
+ * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, msg, publicKey, { lowS: false });
+ * verify(sigr, msg, publicKey, { format: 'recovered' });
+ * ```
+ */
+const verify = (
+  signature: Bytes,
+  message: Bytes,
+  publicKey: Bytes,
+  opts: ECDSAVerifyOpts = {}
+): boolean => {
+  opts = setDefaults(opts);
+  message = callPrehash(false, message, opts);
+  return _verify(signature, message, publicKey, opts);
+};
+
+/**
+ * Verify a signature using secp256k1. Async: uses built-in WebCrypto hashes.
+ * @param signature - signature, default is 64-byte "compact" format
+ * @param message - message which has been signed
+ * @param publicKey - public key
+ * @param opts - see {@link ECDSAVerifyOpts} for details.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * verify(sig, msg, publicKey);
+ * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, msg, publicKey, { lowS: false });
+ * verify(sigr, msg, publicKey, { format: 'recovered' });
+ * ```
+ */
+const verifyAsync = async (
+  sig: Bytes,
+  message: Bytes,
+  publicKey: Bytes,
+  opts: ECDSAVerifyOpts = {}
+): Promise<boolean> => {
+  opts = setDefaults(opts);
+  message = await callPrehash(true, message, opts);
+  return _verify(sig, message, publicKey, opts);
+};
+
+const _recover = (signature: Bytes, messageHash: Bytes) => {
+  const sig = Signature.fromBytes(signature, 'recovered');
   const { r, s, recovery } = sig;
   // 0 or 1 recovery id determines sign of "y" coordinate.
   // 2 or 3 means q.x was >N.
-  if (![0, 1, 2, 3].includes(recovery)) err('recovery id invalid');
-  const h = bits2int_modN(toU8(msgh, L)); // Truncate hash
+  assertRecoveryBit(recovery);
+  const h = bits2int_modN(abytes(messageHash, L)); // Truncate hash
   const radj = recovery === 2 || recovery === 3 ? r + N : r;
-  afield(radj); // ensure q.x is still a field element
-  const head = getPrefix(big(recovery)); // head is 0x02 or 0x03
+  FpIsValidNot0(radj); // ensure q.x is still a field element
+  const head = getPrefix(big(recovery!)); // head is 0x02 or 0x03
   const Rb = concatBytes(head, numTo32b(radj)); // concat head + r
   const R = Point.fromBytes(Rb);
   const ir = invert(radj, N); // r^-1
   const u1 = modN(-h * ir); // -hr^-1
   const u2 = modN(s * ir); // sr^-1
-  return doubleScalarMulUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
+  const point = doubleScalarMulUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
+  return point.toBytes();
+};
+
+/**
+ * ECDSA public key recovery. Requires msg hash and recovery id.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
+ */
+const recoverPublicKey = (signature: Bytes, message: Bytes, opts: ECDSARecoverOpts = {}): Bytes => {
+  message = callPrehash(false, message, setDefaults(opts));
+  return _recover(signature, message);
+};
+
+const recoverPublicKeyAsync = async (
+  signature: Bytes,
+  message: Bytes,
+  opts: ECDSARecoverOpts = {}
+): Promise<Bytes> => {
+  message = await callPrehash(true, message, setDefaults(opts));
+  return _recover(signature, message);
 };
 
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
  * Result is **NOT hashed**. Use hash or KDF on it if you need.
- * @param privA private key A
- * @param pubB public key B
  * @param isCompressed 33-byte (true) or 65-byte (false) output
  * @returns public key C
  */
-const getSharedSecret = (privA: Hex, pubB: Hex, isCompressed = true): Bytes => {
-  return Point.fromBytes(toU8(pubB)).multiply(toPrivScalar(privA)).toBytes(isCompressed);
+const getSharedSecret = (secretKeyA: Bytes, publicKeyB: Bytes, isCompressed = true): Bytes => {
+  return Point.fromBytes(publicKeyB).multiply(validateSecretKey(secretKeyA)).toBytes(isCompressed);
 };
-// FIPS 186 B.4.1 compliant key generation produces private keys with modulo bias being neglible.
-// takes >N+8 bytes, returns (hash mod n-1)+1
-const hashToPrivateKey = (hash: Hex): Bytes => {
-  hash = toU8(hash);
-  if (hash.length < L + 8 || hash.length > 1024) err('expected 40-1024b');
-  const num = M(bytesToNumBE(hash), N - 1n);
+
+// FIPS 186 B.4.1 compliant key generation produces private keys
+// with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
+const randomSecretKey = (seed = randomBytes(lengths.seed)) => {
+  abytes(seed);
+  if (seed.length < lengths.seed || seed.length > 1024) err('expected 40-1024b');
+  const num = M(bytesToNumBE(seed), N - 1n);
   return numTo32b(num + 1n);
 };
-const randomPrivateKey = () => hashToPrivateKey(randomBytes(L + 16)); // FIPS 186 B.4.1.
-const _sha = 'SHA-256';
+
+type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
+const keygen = (seed?: Bytes): KeysSecPub => {
+  const secretKey = randomSecretKey(seed);
+  return { secretKey, publicKey: getPublicKey(secretKey) };
+};
 
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
@@ -704,32 +849,190 @@ const etc = {
   numberToBytesBE: numTo32b as (n: bigint) => Bytes,
   mod: M as (a: bigint, md?: bigint) => bigint,
   invert: invert as (num: bigint, md?: bigint) => bigint, // math utilities
-  hmacSha256Async: async (key: Bytes, ...msgs: Bytes[]): Promise<Bytes> => {
+  randomBytes: randomBytes as (len?: number) => Bytes,
+  abytes: abytes as typeof abytes,
+};
+
+/** Curve-specific utilities for private keys. */
+const utils = {
+  isValidSecretKey: isValidSecretKey as typeof isValidSecretKey,
+  isValidPublicKey: isValidPublicKey as typeof isValidPublicKey,
+  randomSecretKey: randomSecretKey as () => Bytes,
+};
+
+export type Sha256FnSync = undefined | ((msg: Bytes) => Bytes);
+export type HmacFnSync = undefined | ((key: Bytes, msg: Bytes) => Bytes);
+const _sha = 'SHA-256';
+export const hashes = {
+  hmacSha256Async: async (key: Bytes, msg: Bytes): Promise<Bytes> => {
     const s = subtle();
     const name = 'HMAC';
     const k = await s.importKey('raw', key, { name, hash: { name: _sha } }, false, ['sign']);
-    return u8n(await s.sign(name, k, concatBytes(...msgs)));
+    return u8n(await s.sign(name, k, msg));
   },
-  hmacSha256Sync: undefined as HmacFnSync, // For TypeScript. Actual logic is below
-  hashToPrivateKey: hashToPrivateKey as (hash: Hex) => Bytes,
-  randomBytes: randomBytes as (len?: number) => Bytes,
+  hmacSha256: undefined as HmacFnSync,
+  sha256Async: async (msg: Bytes): Promise<Bytes> => u8n(await subtle().digest(_sha, msg)),
+  sha256: undefined as Sha256FnSync,
 };
-/** Curve-specific utilities for private keys. */
-const utils = {
-  normPrivateKeyToScalar: toPrivScalar as (p: PrivKey) => bigint,
-  isValidPrivateKey: (key: Hex): boolean => {
-    try {
-      return !!toPrivScalar(key);
-    } catch (e) {
-      return false;
-    }
-  },
-  randomPrivateKey: randomPrivateKey as () => Bytes,
-  precompute: (w = 8, p: Point = G): Point => {
-    p.multiply(3n);
-    w;
-    return p;
-  },
+
+// Schnorr signatures are superior to ECDSA from above. Below is Schnorr-specific BIP0340 code.
+// https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki
+const getTag = (tag: string) => Uint8Array.from('BIP0340/' + tag, (c) => c.charCodeAt(0));
+const T_AUX = 'aux';
+const T_NONCE = 'nonce';
+const T_CHALLENGE = 'challenge';
+const taggedHash = (tag: string, ...messages: Bytes[]): Bytes => {
+  const fn = callHash('sha256');
+  const tagH = fn(getTag(tag));
+  return fn(concatBytes(tagH, tagH, ...messages));
+};
+const taggedHashAsync = async (tag: string, ...messages: Bytes[]): Promise<Bytes> => {
+  const fn = hashes.sha256Async;
+  const tagH = await fn(getTag(tag));
+  return await fn(concatBytes(tagH, tagH, ...messages));
+};
+
+// ECDSA compact points are 33-byte. Schnorr is 32: we strip first byte 0x02 or 0x03
+// Calculate point, scalar and bytes
+const extpubSchnorr = (priv: Bytes) => {
+  const d_ = validateSecretKey(priv);
+  const p = G.multiply(d_); // P = d'⋅G; 0 < d' < n check is done inside
+  const { x, y } = p.assertValidity().toAffine(); // validate Point is not at infinity
+  const d = isEven(y) ? d_ : modN(-d_);
+  const px = numTo32b(x);
+  return { d, px };
+};
+
+const bytesModN = (bytes: Bytes) => modN(bytesToNumBE(bytes));
+const challenge = (...args: Bytes[]): bigint => bytesModN(taggedHash(T_CHALLENGE, ...args));
+const challengeAsync = async (...args: Bytes[]): Promise<bigint> =>
+  bytesModN(await taggedHashAsync(T_CHALLENGE, ...args));
+
+/**
+ * Schnorr public key is just `x` coordinate of Point as per BIP340.
+ */
+const pubSchnorr = (secretKey: Bytes): Bytes => {
+  return extpubSchnorr(secretKey).px; // d'=int(sk). Fail if d'=0 or d'≥n. Ret bytes(d'⋅G)
+};
+
+// Common preparation fn for both sync and async signing
+const prepSigSchnorr = (message: Bytes, secretKey: Bytes, auxRand: Bytes) => {
+  const { px, d } = extpubSchnorr(secretKey);
+  return { m: abytes(message), px, d, a: abytes(auxRand, L) };
+};
+
+const extractK = (rand: Bytes) => {
+  const k_ = bytesModN(rand); // Let k' = int(rand) mod n
+  if (k_ === 0n) err('sign failed: k is zero'); // Fail if k' = 0.
+  const { px, d } = extpubSchnorr(numTo32b(k_)); // Let R = k'⋅G.
+  return { rx: px, k: d };
+};
+
+// Common signature creation helper
+const createSigSchnorr = (k: bigint, px: Bytes, e: bigint, d: bigint): Bytes => {
+  return concatBytes(px, numTo32b(modN(k + e * d)));
+};
+
+const E_INVSIG = 'invalid signature produced';
+/**
+ * Creates Schnorr signature as per BIP340. Verifies itself before returning anything.
+ * auxRand is optional and is not the sole source of k generation: bad CSPRNG won't be dangerous.
+ */
+const signSchnorr = (message: Bytes, secretKey: Bytes, auxRand: Bytes = randomBytes(L)): Bytes => {
+  const { m, px, d, a } = prepSigSchnorr(message, secretKey, auxRand);
+  const aux = taggedHash(T_AUX, a);
+  // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+  const t = numTo32b(d ^ bytesToNumBE(aux));
+  // Let rand = hash/nonce(t || bytes(P) || m)
+  const rand = taggedHash(T_NONCE, t, px, m);
+  const { rx, k } = extractK(rand);
+  // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
+  const e = challenge(rx, px, m);
+  const sig = createSigSchnorr(k, rx, e, d);
+  // If Verify(bytes(P), m, sig) (see below) returns failure, abort
+  if (!verifySchnorr(sig, m, px)) err(E_INVSIG);
+  return sig;
+};
+
+const signAsyncSchnorr = async (
+  message: Bytes,
+  secretKey: Bytes,
+  auxRand: Bytes = randomBytes(L)
+): Promise<Bytes> => {
+  const { m, px, d, a } = prepSigSchnorr(message, secretKey, auxRand);
+  const aux = await taggedHashAsync(T_AUX, a);
+  // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
+  const t = numTo32b(d ^ bytesToNumBE(aux));
+  // Let rand = hash/nonce(t || bytes(P) || m)
+  const rand = await taggedHashAsync(T_NONCE, t, px, m);
+  const { rx, k } = extractK(rand);
+  // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
+  const e = await challengeAsync(rx, px, m);
+  const sig = createSigSchnorr(k, rx, e, d);
+  // If Verify(bytes(P), m, sig) (see below) returns failure, abort
+  if (!(await verifyAsyncSchnorr(sig, m, px))) err(E_INVSIG);
+  return sig;
+};
+
+const finishVerif = (P: Point, r: bigint, s: bigint, e: bigint) => {
+  const { x, y } = doubleScalarMulUns(P, s, modN(-e)).toAffine(); // R = s⋅G - e⋅P
+  if (!isEven(y) || x !== r) return false; // -eP == (n-e)P
+  return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
+};
+
+const _verifSchnorr = (
+  asynchronous: boolean,
+  signature: Bytes,
+  message: Bytes,
+  publicKey: Bytes
+): boolean | Promise<boolean> => {
+  const sig = abytes(signature, L2, 'signature');
+  const msg = abytes(message, undefined, 'message');
+  const pub = abytes(publicKey, L, 'publicKey');
+  try {
+    // lift_x from BIP340. Convert 32-byte x coordinate to elliptic curve point.
+    // Fail if x ≥ p. Let c = x³ + 7 mod p.
+    const x = bytesToNumBE(pub);
+    const y = lift_x(x); // Let y = c^(p+1)/4 mod p.
+    const y_ = isEven(y) ? y : M(-y);
+    // Return the unique point P such that x(P) = x and
+    // y(P) = y if y mod 2 = 0 or y(P) = p-y otherwise.
+    const P_ = new Point(x, y_, 1n).assertValidity();
+    const px = numTo32b(P_.toAffine().x);
+    // P = lift_x(int(pk)); fail if that fails
+    const r = sliceBytesNumBE(sig, 0, L); // Let r = int(sig[0:32]); fail if r ≥ p.
+    arange(r, 1n, P);
+    const s = sliceBytesNumBE(sig, L, L2); // Let s = int(sig[32:64]); fail if s ≥ n.
+    arange(s, 1n, N);
+    const i = concatBytes(numTo32b(r), px, msg);
+    if (asynchronous) return challengeAsync(i).then((e) => finishVerif(P_, r, s, e));
+    return finishVerif(P_, r, s, challenge(i)); // int(challenge(bytes(r)||bytes(P)||m))%n
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
+ * Verifies Schnorr signature.
+ * Will swallow errors & return false except for initial type validation of arguments.
+ */
+const verifySchnorr = (s: Bytes, m: Bytes, p: Bytes): boolean =>
+  _verifSchnorr(true, s, m, p) as boolean;
+const verifyAsyncSchnorr = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
+  _verifSchnorr(false, s, m, p) as Promise<boolean>;
+
+const schnorr: {
+  getPublicKey: typeof pubSchnorr;
+  sign: typeof signSchnorr;
+  verify: typeof verifySchnorr;
+  signAsync: typeof signAsyncSchnorr;
+  verifyAsync: typeof verifyAsyncSchnorr;
+} = {
+  getPublicKey: pubSchnorr,
+  sign: signSchnorr,
+  verify: verifySchnorr,
+  signAsync: signAsyncSchnorr,
+  verifyAsync: verifyAsyncSchnorr,
 };
 
 // ## Precomputes
@@ -808,17 +1111,22 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
   return { p, f }; // return both real and fake points for JIT
 };
 
+// Point as ProjectivePoint,
 // !! Remove the export below to easily use in REPL / browser console
 export {
   secp256k1_CURVE as CURVE,
   etc,
   getPublicKey,
   getSharedSecret,
+  keygen,
   Point,
-  Point as ProjectivePoint,
+  recoverPublicKey,
+  recoverPublicKeyAsync,
+  schnorr,
   sign,
   signAsync,
   Signature,
   utils,
   verify,
+  verifyAsync,
 };

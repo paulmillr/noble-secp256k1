@@ -16,20 +16,10 @@
 declare const secp256k1_CURVE: WeierstrassOpts<bigint>;
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
-/** Hex-encoded string or Uint8Array. */
-export type Hex = Bytes | string;
-/** Hex-encoded string, Uint8Array or bigint. */
-export type PrivKey = Hex | bigint;
-/** Signature instance. Has properties r and s. */
-export type SigLike = {
-    r: bigint;
-    s: bigint;
-};
 /** Signature instance, which allows recovering pubkey from it. */
 export type RecoveredSignature = Signature & {
     recovery: number;
 };
-export type SignatureWithRecovery = RecoveredSignature;
 /** Weierstrass elliptic curve options. */
 export type WeierstrassOpts<T> = Readonly<{
     p: bigint;
@@ -40,6 +30,8 @@ export type WeierstrassOpts<T> = Readonly<{
     Gx: T;
     Gy: T;
 }>;
+/** Asserts something is Uint8Array. */
+declare const abytes: (value: Bytes, length?: number, title?: string) => Bytes;
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint {
     x: bigint;
@@ -49,12 +41,18 @@ export interface AffinePoint {
 declare class Point {
     static BASE: Point;
     static ZERO: Point;
-    readonly px: bigint;
-    readonly py: bigint;
-    readonly pz: bigint;
-    constructor(px: bigint, py: bigint, pz: bigint);
+    readonly X: bigint;
+    readonly Y: bigint;
+    readonly Z: bigint;
+    constructor(X: bigint, Y: bigint, Z: bigint);
+    static CURVE(): WeierstrassOpts<bigint>;
+    /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
+    static fromAffine(ap: AffinePoint): Point;
     /** Convert Uint8Array or hex string to Point. */
     static fromBytes(bytes: Bytes): Point;
+    static fromHex(hex: string): Point;
+    get x(): bigint;
+    get y(): bigint;
     /** Equality check: compare points P&Q. */
     equals(other: Point): boolean;
     is0(): boolean;
@@ -68,6 +66,7 @@ declare class Point {
      * Cost: `12M + 0S + 3*a + 3*b3 + 23add`.
      */
     add(other: Point): Point;
+    subtract(other: Point): Point;
     /**
      * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
      * Uses {@link wNAF} for base point.
@@ -82,37 +81,24 @@ declare class Point {
     assertValidity(): Point;
     /** Converts point to 33/65-byte Uint8Array. */
     toBytes(isCompressed?: boolean): Bytes;
-    /** Create 3d xyz point from 2d xy. (0, 0) => (0, 1, 0), not (0, 0, 1) */
-    static fromAffine(ap: AffinePoint): Point;
     toHex(isCompressed?: boolean): string;
-    static fromPrivateKey(k: Bytes): Point;
-    static fromHex(hex: Hex): Point;
-    get x(): bigint;
-    get y(): bigint;
-    toRawBytes(isCompressed?: boolean): Bytes;
 }
 /** Creates 33/65-byte public key from 32-byte private key. */
-declare const getPublicKey: (privKey: PrivKey, isCompressed?: boolean) => Bytes;
+declare const getPublicKey: (privKey: Bytes, isCompressed?: boolean) => Bytes;
+declare const isValidSecretKey: (secretKey: Bytes) => boolean;
+declare const isValidPublicKey: (publicKey: Bytes, isCompressed?: boolean) => boolean;
 /** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
 declare class Signature {
     readonly r: bigint;
     readonly s: bigint;
     readonly recovery?: number;
     constructor(r: bigint, s: bigint, recovery?: number);
-    /** Create signature from 64b compact (r || s) representation. */
-    static fromBytes(b: Bytes): Signature;
-    toBytes(): Bytes;
-    /** Copy signature, with newly added recovery bit. */
+    static fromBytes(b: Bytes, format?: ECDSASigFormat): Signature;
     addRecoveryBit(bit: number): RecoveredSignature;
     hasHighS(): boolean;
-    toCompactRawBytes(): Bytes;
-    toCompactHex(): string;
-    recoverPublicKey(msg: Bytes): Point;
-    static fromCompact(hex: Hex): Signature;
-    assertValidity(): Signature;
     normalizeS(): Signature;
+    toBytes(format?: ECDSASigFormat): Bytes;
 }
-type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
 /**
  * Option to enable hedged signatures with improved security.
  *
@@ -129,53 +115,100 @@ type HmacFnSync = undefined | ((key: Bytes, ...msgs: Bytes[]) => Bytes);
  *
  * https://paulmillr.com/posts/deterministic-signatures/
  */
-export type ExtraEntropy = boolean | Hex;
-type OptS = {
-    lowS?: boolean;
-    extraEntropy?: ExtraEntropy;
+export type ExtraEntropy = boolean | Bytes;
+export type ECDSASigFormat = 'compact' | 'recovered' | 'der';
+export type ECDSARecoverOpts = {
+    prehash?: boolean;
 };
-type OptV = {
+export type ECDSAVerifyOpts = {
+    prehash?: boolean;
     lowS?: boolean;
+    format?: ECDSASigFormat;
+};
+export type ECDSASignOpts = {
+    prehash?: boolean;
+    lowS?: boolean;
+    format?: ECDSASigFormat;
+    extraEntropy?: Uint8Array | boolean;
 };
 /**
- * Sign a msg hash using secp256k1. Async.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
- * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
- * @param msgh - message HASH, not message itself e.g. sha256(message)
- * @param priv - private key
- * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
- */
-declare const signAsync: (msgh: Hex, priv: PrivKey, opts?: OptS) => Promise<RecoveredSignature>;
-/**
- * Sign a msg hash using secp256k1.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
- * It's suggested to enable hedging ({@link ExtraEntropy}) to prevent fault attacks.
- * @param msgh - message HASH, not message itself e.g. sha256(message)
- * @param priv - private key
- * @param opts - `lowS: true` prevents malleability, `extraEntropy: true` enables hedging
+ * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
+ * Prehashes message with sha256, disable using `prehash: false`.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
  * @example
- * const sig = sign(sha256('hello'), privKey, { extraEntropy: true }).toBytes();
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * sign(msg, secretKey);
+ * sign(sha256(msg), secretKey, { prehash: false });
+ * sign(msg, secretKey, { extraEntropy: true });
+ * sign(msg, secretKey, { format: 'recovered' });
+ * ```
  */
-declare const sign: (msgh: Hex, priv: PrivKey, opts?: OptS) => RecoveredSignature;
+declare const sign: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts) => Bytes;
 /**
- * Verify a signature using secp256k1.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
- * Default lowS=true, prevents malleability.
- * @param sig - signature, 64-byte or Signature instance
- * @param msgh - message HASH, not message itself e.g. sha256(message)
- * @param pub - public key
- * @param opts - { lowS: true } is default, prohibits s >= CURVE.n/2 to prevent malleability
+ * Sign a message using secp256k1. Async: uses built-in WebCrypto hashes.
+ * Prehashes message with sha256, disable using `prehash: false`.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * await signAsync(msg, secretKey);
+ * await signAsync(sha256(msg), secretKey, { prehash: false });
+ * await signAsync(msg, secretKey, { extraEntropy: true });
+ * await signAsync(msg, secretKey, { format: 'recovered' });
+ * ```
  */
-declare const verify: (sig: Hex | SigLike, msgh: Hex, pub: Hex, opts?: OptV) => boolean;
+declare const signAsync: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts) => Promise<Bytes>;
+/**
+ * Verify a signature using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
+ * @param signature - signature, default is 64-byte "compact" format
+ * @param message - message which has been signed
+ * @param publicKey - public key
+ * @param opts - see {@link ECDSAVerifyOpts} for details.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * verify(sig, msg, publicKey);
+ * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, msg, publicKey, { lowS: false });
+ * verify(sigr, msg, publicKey, { format: 'recovered' });
+ * ```
+ */
+declare const verify: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: ECDSAVerifyOpts) => boolean;
+/**
+ * Verify a signature using secp256k1. Async: uses built-in WebCrypto hashes.
+ * @param signature - signature, default is 64-byte "compact" format
+ * @param message - message which has been signed
+ * @param publicKey - public key
+ * @param opts - see {@link ECDSAVerifyOpts} for details.
+ * @example
+ * ```js
+ * const msg = new TextEncoder().encode('hello');
+ * verify(sig, msg, publicKey);
+ * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, msg, publicKey, { lowS: false });
+ * verify(sigr, msg, publicKey, { format: 'recovered' });
+ * ```
+ */
+declare const verifyAsync: (sig: Bytes, message: Bytes, publicKey: Bytes, opts?: ECDSAVerifyOpts) => Promise<boolean>;
+/**
+ * ECDSA public key recovery. Requires msg hash and recovery id.
+ * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
+ */
+declare const recoverPublicKey: (signature: Bytes, message: Bytes, opts?: ECDSARecoverOpts) => Bytes;
+declare const recoverPublicKeyAsync: (signature: Bytes, message: Bytes, opts?: ECDSARecoverOpts) => Promise<Bytes>;
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
  * Result is **NOT hashed**. Use hash or KDF on it if you need.
- * @param privA private key A
- * @param pubB public key B
  * @param isCompressed 33-byte (true) or 65-byte (false) output
  * @returns public key C
  */
-declare const getSharedSecret: (privA: Hex, pubB: Hex, isCompressed?: boolean) => Bytes;
+declare const getSharedSecret: (secretKeyA: Bytes, publicKeyB: Bytes, isCompressed?: boolean) => Bytes;
+type KeysSecPub = {
+    secretKey: Bytes;
+    publicKey: Bytes;
+};
+declare const keygen: (seed?: Bytes) => KeysSecPub;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
     hexToBytes: (hex: string) => Bytes;
@@ -185,16 +218,44 @@ declare const etc: {
     numberToBytesBE: (n: bigint) => Bytes;
     mod: (a: bigint, md?: bigint) => bigint;
     invert: (num: bigint, md?: bigint) => bigint;
-    hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
-    hmacSha256Sync: HmacFnSync;
-    hashToPrivateKey: (hash: Hex) => Bytes;
     randomBytes: (len?: number) => Bytes;
+    abytes: typeof abytes;
 };
 /** Curve-specific utilities for private keys. */
 declare const utils: {
-    normPrivateKeyToScalar: (p: PrivKey) => bigint;
-    isValidPrivateKey: (key: Hex) => boolean;
-    randomPrivateKey: () => Bytes;
-    precompute: (w?: number, p?: Point) => Point;
+    isValidSecretKey: typeof isValidSecretKey;
+    isValidPublicKey: typeof isValidPublicKey;
+    randomSecretKey: () => Bytes;
 };
-export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, Point, Point as ProjectivePoint, sign, signAsync, Signature, utils, verify, };
+export type Sha256FnSync = undefined | ((msg: Bytes) => Bytes);
+export type HmacFnSync = undefined | ((key: Bytes, msg: Bytes) => Bytes);
+export declare const hashes: {
+    hmacSha256Async: (key: Bytes, msg: Bytes) => Promise<Bytes>;
+    hmacSha256: HmacFnSync;
+    sha256Async: (msg: Bytes) => Promise<Bytes>;
+    sha256: Sha256FnSync;
+};
+/**
+ * Schnorr public key is just `x` coordinate of Point as per BIP340.
+ */
+declare const pubSchnorr: (secretKey: Bytes) => Bytes;
+/**
+ * Creates Schnorr signature as per BIP340. Verifies itself before returning anything.
+ * auxRand is optional and is not the sole source of k generation: bad CSPRNG won't be dangerous.
+ */
+declare const signSchnorr: (message: Bytes, secretKey: Bytes, auxRand?: Bytes) => Bytes;
+declare const signAsyncSchnorr: (message: Bytes, secretKey: Bytes, auxRand?: Bytes) => Promise<Bytes>;
+/**
+ * Verifies Schnorr signature.
+ * Will swallow errors & return false except for initial type validation of arguments.
+ */
+declare const verifySchnorr: (s: Bytes, m: Bytes, p: Bytes) => boolean;
+declare const verifyAsyncSchnorr: (s: Bytes, m: Bytes, p: Bytes) => Promise<boolean>;
+declare const schnorr: {
+    getPublicKey: typeof pubSchnorr;
+    sign: typeof signSchnorr;
+    verify: typeof verifySchnorr;
+    signAsync: typeof signAsyncSchnorr;
+    verifyAsync: typeof verifyAsyncSchnorr;
+};
+export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };
