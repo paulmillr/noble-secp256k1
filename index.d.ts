@@ -18,10 +18,10 @@ export type WeierstrassOpts<T> = Readonly<{
 declare const abytes: (value: Bytes, length?: number, title?: string) => Bytes;
 declare const hash: (msg: Bytes) => Bytes;
 /** Point in 2d xy affine coordinates. */
-export interface AffinePoint {
+export type AffinePoint = {
     x: bigint;
     y: bigint;
-}
+};
 /** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
 declare class Point {
     static BASE: Point;
@@ -79,11 +79,11 @@ declare class Signature {
     readonly s: bigint;
     readonly recovery?: number;
     constructor(r: bigint, s: bigint, recovery?: number);
-    static fromBytes(b: Bytes, format?: ECDSASigFormat): Signature;
+    static fromBytes(b: Bytes, format?: ECDSASignatureFormat): Signature;
     addRecoveryBit(bit: number): RecoveredSignature;
     hasHighS(): boolean;
     normalizeS(): Signature;
-    toBytes(format?: ECDSASigFormat): Bytes;
+    toBytes(format?: ECDSASignatureFormat): Bytes;
 }
 /**
  * Option to enable hedged signatures with improved security.
@@ -101,26 +101,26 @@ declare class Signature {
  *
  * https://paulmillr.com/posts/deterministic-signatures/
  */
-export type ExtraEntropy = boolean | Bytes;
-export type ECDSASigFormat = 'compact' | 'recovered' | 'der';
+export type ECDSAExtraEntropy = boolean | Bytes;
+export type ECDSASignatureFormat = 'compact' | 'recovered' | 'der';
 export type ECDSARecoverOpts = {
     prehash?: boolean;
 };
 export type ECDSAVerifyOpts = {
     prehash?: boolean;
     lowS?: boolean;
-    format?: ECDSASigFormat;
+    format?: ECDSASignatureFormat;
 };
 export type ECDSASignOpts = {
     prehash?: boolean;
     lowS?: boolean;
-    format?: ECDSASigFormat;
-    extraEntropy?: Uint8Array | boolean;
+    format?: ECDSASignatureFormat;
+    extraEntropy?: ECDSAExtraEntropy;
 };
 /**
  * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
  * const msg = new TextEncoder().encode('hello');
@@ -134,7 +134,7 @@ declare const sign: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts) => 
 /**
  * Sign a message using secp256k1. Async: uses built-in WebCrypto hashes.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
  * const msg = new TextEncoder().encode('hello');
@@ -213,13 +213,11 @@ declare const utils: {
     isValidPublicKey: typeof isValidPublicKey;
     randomSecretKey: () => Bytes;
 };
-export type Sha256FnSync = undefined | ((msg: Bytes) => Bytes);
-export type HmacFnSync = undefined | ((key: Bytes, msg: Bytes) => Bytes);
 declare const hashes: {
-    hmacSha256Async: (key: Bytes, msg: Bytes) => Promise<Bytes>;
-    hmacSha256: HmacFnSync;
+    hmacSha256Async: (key: Bytes, message: Bytes) => Promise<Bytes>;
+    hmacSha256: undefined | ((key: Bytes, message: Bytes) => Bytes);
     sha256Async: (msg: Bytes) => Promise<Bytes>;
-    sha256: Sha256FnSync;
+    sha256: undefined | ((message: Bytes) => Bytes);
 };
 /**
  * Schnorr public key is just `x` coordinate of Point as per BIP340.
@@ -244,4 +242,4 @@ declare const schnorr: {
     signAsync: typeof signAsyncSchnorr;
     verifyAsync: typeof verifyAsyncSchnorr;
 };
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };

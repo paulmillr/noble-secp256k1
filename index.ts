@@ -74,7 +74,7 @@ const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
     const prefix = title && `"${title}" `;
     const ofLen = needsLen ? ` of length ${length}` : '';
     const got = bytes ? `length=${len}` : `type=${typeof value}`;
-    throw new Error(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+    err(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
   }
   return value;
 };
@@ -110,7 +110,7 @@ const hexToBytes = (hex: string): Bytes => {
 };
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
 // prettier-ignore
 const concatBytes = (...arrs: Bytes[]): Bytes => {
   const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
@@ -153,10 +153,10 @@ const callHash = (name: string) => {
 const hash = (msg: Bytes): Bytes => callHash('sha256')(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 /** Point in 2d xy affine coordinates. */
-export interface AffinePoint {
+export type AffinePoint = {
   x: bigint;
   y: bigint;
-}
+};
 // ## End of Helpers
 // -----------------
 
@@ -406,12 +406,12 @@ const isValidPublicKey = (publicKey: Bytes, isCompressed?: boolean): boolean => 
 const assertRecoveryBit = (recovery?: number) => {
   if (![0, 1, 2, 3].includes(recovery!)) err('recovery id must be valid and present');
 };
-const assertSigFormat = (format?: ECDSASigFormat) => {
+const assertSigFormat = (format?: ECDSASignatureFormat) => {
   if (format != null && !ALL_SIG.includes(format))
     err(`Signature format must be one of: ${ALL_SIG.join(', ')}`);
   if (format === SIG_DER) err('Signature format "der" is not supported: switch to noble-curves');
 };
-const assertSigLength = (sig: Bytes, format: ECDSASigFormat = SIG_COMPACT) => {
+const assertSigLength = (sig: Bytes, format: ECDSASignatureFormat = SIG_COMPACT) => {
   assertSigFormat(format);
   const SL = lengths.signature;
   const RL = SL + 1;
@@ -430,7 +430,7 @@ class Signature {
     if (recovery != null) this.recovery = recovery;
     Object.freeze(this);
   }
-  static fromBytes(b: Bytes, format: ECDSASigFormat = SIG_COMPACT): Signature {
+  static fromBytes(b: Bytes, format: ECDSASignatureFormat = SIG_COMPACT): Signature {
     assertSigLength(b, format);
     let rec: number | undefined;
     if (format === SIG_RECOVERED) {
@@ -451,7 +451,7 @@ class Signature {
     const { r, s, recovery } = this;
     return highS(s) ? new Signature(r, modN(-s), recovery) : this;
   }
-  toBytes(format: ECDSASigFormat = SIG_COMPACT): Bytes {
+  toBytes(format: ECDSASignatureFormat = SIG_COMPACT): Bytes {
     const { r, s, recovery } = this;
     const res = concatBytes(numTo32b(r), numTo32b(s));
     if (format === SIG_RECOVERED) {
@@ -492,26 +492,26 @@ const bits2int_modN = (bytes: Bytes): bigint => modN(bits2int(abytes(bytes)));
  *
  * https://paulmillr.com/posts/deterministic-signatures/
  */
-export type ExtraEntropy = boolean | Bytes;
+export type ECDSAExtraEntropy = boolean | Bytes;
 // todo: better name
 const SIG_COMPACT = 'compact';
 const SIG_RECOVERED = 'recovered';
 const SIG_DER = 'der';
 const ALL_SIG = [SIG_COMPACT, SIG_RECOVERED, SIG_DER] as const;
-export type ECDSASigFormat = 'compact' | 'recovered' | 'der';
+export type ECDSASignatureFormat = 'compact' | 'recovered' | 'der';
 export type ECDSARecoverOpts = {
   prehash?: boolean;
 };
 export type ECDSAVerifyOpts = {
   prehash?: boolean;
   lowS?: boolean;
-  format?: ECDSASigFormat;
+  format?: ECDSASignatureFormat;
 };
 export type ECDSASignOpts = {
   prehash?: boolean;
   lowS?: boolean;
-  format?: ECDSASigFormat;
-  extraEntropy?: Uint8Array | boolean;
+  format?: ECDSASignatureFormat;
+  extraEntropy?: ECDSAExtraEntropy;
 };
 
 const defaultSignOpts: ECDSASignOpts = {
@@ -608,7 +608,7 @@ const _sign = (
   const h1o = int2octets(h1i); // msg octets
   const d = validateSecretKey(secretKey); // validate private key, convert to bigint
   const seedArgs = [int2octets(d), h1o]; // Step D of RFC6979 3.2
-  /** RFC6979 3.6: additional k' (optional). See {@link ExtraEntropy}. */
+  /** RFC6979 3.6: additional k' (optional). See {@link ECDSAExtraEntropy}. */
   if (extraEntropy != null && extraEntropy !== false) {
     // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
     // gen random bytes OR pass as-is
@@ -691,7 +691,7 @@ const callPrehash = (asynchronous: boolean, message: Bytes, opts: { prehash?: bo
 /**
  * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
  * const msg = new TextEncoder().encode('hello');
@@ -710,7 +710,7 @@ const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes
 /**
  * Sign a message using secp256k1. Async: uses built-in WebCrypto hashes.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
  * const msg = new TextEncoder().encode('hello');
@@ -864,19 +864,17 @@ const utils = {
   randomSecretKey: randomSecretKey as () => Bytes,
 };
 
-export type Sha256FnSync = undefined | ((msg: Bytes) => Bytes);
-export type HmacFnSync = undefined | ((key: Bytes, msg: Bytes) => Bytes);
 const _sha = 'SHA-256';
 const hashes = {
-  hmacSha256Async: async (key: Bytes, msg: Bytes): Promise<Bytes> => {
+  hmacSha256Async: async (key: Bytes, message: Bytes): Promise<Bytes> => {
     const s = subtle();
     const name = 'HMAC';
     const k = await s.importKey('raw', key, { name, hash: { name: _sha } }, false, ['sign']);
-    return u8n(await s.sign(name, k, msg));
+    return u8n(await s.sign(name, k, message));
   },
-  hmacSha256: undefined as HmacFnSync,
+  hmacSha256: undefined as undefined | ((key: Bytes, message: Bytes) => Bytes),
   sha256Async: async (msg: Bytes): Promise<Bytes> => u8n(await subtle().digest(_sha, msg)),
-  sha256: undefined as Sha256FnSync,
+  sha256: undefined as undefined | ((message: Bytes) => Bytes),
 };
 
 // Schnorr signatures are superior to ECDSA from above. Below is Schnorr-specific BIP0340 code.

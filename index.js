@@ -56,7 +56,7 @@ const abytes = (value, length, title = '') => {
         const prefix = title && `"${title}" `;
         const ofLen = needsLen ? ` of length ${length}` : '';
         const got = bytes ? `length=${len}` : `type=${typeof value}`;
-        throw new Error(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+        err(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
     }
     return value;
 };
@@ -96,7 +96,7 @@ const hexToBytes = (hex) => {
     return array;
 };
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
 // prettier-ignore
 const concatBytes = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
@@ -594,7 +594,7 @@ const _sign = (asynchronous, messageHash, secretKey, opts) => {
     const h1o = int2octets(h1i); // msg octets
     const d = validateSecretKey(secretKey); // validate private key, convert to bigint
     const seedArgs = [int2octets(d), h1o]; // Step D of RFC6979 3.2
-    /** RFC6979 3.6: additional k' (optional). See {@link ExtraEntropy}. */
+    /** RFC6979 3.6: additional k' (optional). See {@link ECDSAExtraEntropy}. */
     if (extraEntropy != null && extraEntropy !== false) {
         // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
         // gen random bytes OR pass as-is
@@ -680,7 +680,7 @@ const callPrehash = (asynchronous, message, opts) => {
 /**
  * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
  * const msg = new TextEncoder().encode('hello');
@@ -698,7 +698,7 @@ const sign = (message, secretKey, opts = {}) => {
 /**
  * Sign a message using secp256k1. Async: uses built-in WebCrypto hashes.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ExtraEntropy} will improve security.
+ * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
  * const msg = new TextEncoder().encode('hello');
@@ -825,11 +825,11 @@ const utils = {
 };
 const _sha = 'SHA-256';
 const hashes = {
-    hmacSha256Async: async (key, msg) => {
+    hmacSha256Async: async (key, message) => {
         const s = subtle();
         const name = 'HMAC';
         const k = await s.importKey('raw', key, { name, hash: { name: _sha } }, false, ['sign']);
-        return u8n(await s.sign(name, k, msg));
+        return u8n(await s.sign(name, k, message));
     },
     hmacSha256: undefined,
     sha256Async: async (msg) => u8n(await subtle().digest(_sha, msg)),
@@ -1046,4 +1046,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export below to easily use in REPL / browser console
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };
