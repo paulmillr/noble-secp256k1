@@ -1,8 +1,8 @@
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
-import * as items from '../index.js';
-import { getTypeTests } from './utils.js';
+import * as items from '../index.ts';
+import { getTypeTests } from './utils.ts';
 const { bytesToHex, concatBytes, hexToBytes, mod, invert } = items.etc;
 
 function hexa() {

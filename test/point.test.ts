@@ -1,10 +1,10 @@
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
-import * as secp256k1 from '../index.js';
-import './secp256k1.helpers.js';
-import { secp } from './secp256k1.helpers.js';
-import { getTypeTests } from './utils.js';
+import * as secp256k1 from '../index.ts';
+import './secp256k1.helpers.ts';
+import { secp } from './secp256k1.helpers.ts';
+import { getTypeTests } from './utils.ts';
 const { invert, mod, bytesToHex: hex, hexToBytes } = secp.etc;
 
 // prettier-ignore
