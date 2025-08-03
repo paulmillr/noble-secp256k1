@@ -10,7 +10,7 @@ const points = readFileSync(join('.', 'test/vectors/points.txt'), 'utf-8')
   .split('\n')
   .filter((a) => a)
   .slice(0, 1000)
-  .map(ps => hexToBytes(ps));
+  .map((ps) => hexToBytes(ps));
 (async () => {
   secp.hashes.sha256 = sha256;
   secp.hashes.hmacSha256 = (k, m) => hmac(sha256, k, m);
@@ -37,7 +37,5 @@ const points = readFileSync(join('.', 'test/vectors/points.txt'), 'utf-8')
   console.log();
   let i = 0;
   let len = points.length;
-  await mark('Point.fromBytes', 10000, () =>
-    secp.Point.fromBytes(points[i++ % len])
-  );
+  await mark('Point.fromBytes', 10000, () => secp.Point.fromBytes(points[i++ % len]));
 })();
