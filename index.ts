@@ -1019,9 +1019,9 @@ const _verifSchnorr = (
  * Will swallow errors & return false except for initial type validation of arguments.
  */
 const verifySchnorr = (s: Bytes, m: Bytes, p: Bytes): boolean =>
-  _verifSchnorr(true, s, m, p) as boolean;
+  _verifSchnorr(false, s, m, p) as boolean;
 const verifyAsyncSchnorr = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
-  _verifSchnorr(false, s, m, p) as Promise<boolean>;
+  _verifSchnorr(true, s, m, p) as Promise<boolean>;
 
 const schnorr: {
   getPublicKey: typeof pubSchnorr;

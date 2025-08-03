@@ -961,8 +961,8 @@ const _verifSchnorr = (asynchronous, signature, message, publicKey) => {
  * Verifies Schnorr signature.
  * Will swallow errors & return false except for initial type validation of arguments.
  */
-const verifySchnorr = (s, m, p) => _verifSchnorr(true, s, m, p);
-const verifyAsyncSchnorr = async (s, m, p) => _verifSchnorr(false, s, m, p);
+const verifySchnorr = (s, m, p) => _verifSchnorr(false, s, m, p);
+const verifyAsyncSchnorr = async (s, m, p) => _verifSchnorr(true, s, m, p);
 const schnorr = {
     getPublicKey: pubSchnorr,
     sign: signSchnorr,

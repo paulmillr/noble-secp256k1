@@ -47,14 +47,14 @@ import * as secp from '@noble/secp256k1';
 (async () => {
   // Uint8Arrays or hex strings are accepted:
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
-  const privKey = secp.utils.randomPrivateKey(); // Secure random private key
+  const privKey = secp.utils.randomSecretKey(); // Secure random private key
   // sha256 of 'hello world'
   const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
   const pubKey = secp.getPublicKey(privKey);
   const signature = await secp.signAsync(msgHash, privKey); // Sync methods below
   const isValid = secp.verify(signature, msgHash, pubKey);
 
-  const alicesPub = secp.getPublicKey(secp.utils.randomPrivateKey());
+  const alicesPub = secp.getPublicKey(secp.utils.randomSecretKey());
   const shared = secp.getSharedSecret(privKey, alicesPub); // Diffie-Hellman
   const pub2 = signature.recoverPublicKey(msgHash); // Public key recovery
 })();
@@ -96,7 +96,7 @@ There are optional utilities which convert hex strings, utf8 strings or bigints 
 
 ```ts
 import { getPublicKey, utils, ProjectivePoint } from '@noble/secp256k1';
-const privKey = utils.randomPrivateKey();
+const privKey = utils.randomSecretKey();
 const pubKey33b = getPublicKey(privKey);
 
 // Variants
@@ -115,7 +115,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { utf8ToBytes } from '@noble/hashes/utils';
 const msg = 'noble cryptography';
 const msgHash = sha256(utf8ToBytes(msg));
-const priv = secp.utils.randomPrivateKey();
+const priv = secp.utils.randomSecretKey();
 
 const sigA = secp.sign(msgHash, priv);
 
@@ -165,8 +165,8 @@ Setting `lowS: false` allows to create signatures, which is default openssl beha
 
 ```ts
 import * as secp from '@noble/secp256k1';
-const bobsPriv = secp.utils.randomPrivateKey();
-const alicesPub = secp.getPublicKey(secp.utils.randomPrivateKey());
+const bobsPriv = secp.utils.randomSecretKey();
+const alicesPub = secp.getPublicKey(secp.utils.randomSecretKey());
 
 // ECDH between Alice and Bob
 const shared33b = secp.getSharedSecret(bobsPriv, alicesPub);
@@ -186,7 +186,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { utf8ToBytes } from '@noble/hashes/utils';
 const msg = 'noble cryptography';
 const msgHash = sha256(utf8ToBytes(msg));
-const priv = secp.utils.randomPrivateKey();
+const priv = secp.utils.randomSecretKey();
 const pub1 = secp.getPubkicKey(priv);
 const sig = secp.sign(msgHash, priv);
 
@@ -216,7 +216,7 @@ const etc: {
 };
 const utils: {
   normPrivateKeyToScalar: (p: PrivKey) => bigint;
-  randomPrivateKey: () => Bytes; // Uses CSPRNG https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
+  randomSecretKey: () => Bytes; // Uses CSPRNG https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
   isValidPrivateKey: (key: Hex) => boolean;
   precompute(p: ProjectivePoint, windowSize?: number): ProjectivePoint;
 };
@@ -320,7 +320,7 @@ NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https
 Benchmarks measured with Apple M4. [noble-curves](https://github.com/paulmillr/noble-curves) enable faster performance.
 
 ```
-getPublicKey(utils.randomPrivateKey()) x 8,770 ops/sec @ 114μs/op
+getPublicKey(utils.randomSecretKey()) x 8,770 ops/sec @ 114μs/op
 signAsync x 4,848 ops/sec @ 206μs/op
 sign x 7,261 ops/sec @ 137μs/op
 verify x 817 ops/sec @ 1ms/op
