@@ -1,19 +1,3 @@
-/*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-/**
- * 4KB JS implementation of secp256k1 ECDSA / Schnorr signatures & ECDH.
- * Compliant with RFC6979 & BIP340.
- * @module
- */
-/**
- * Curve params. secp256k1 is short weierstrass / koblitz curve. Equation is y² == x³ + ax + b.
- * * P = `2n**256n-2n**32n-2n**977n` // field over which calculations are done
- * * N = `2n**256n - 0x14551231950b75fc4402da1732fc9bebfn` // group order, amount of curve points
- * * h = `1n` // cofactor
- * * a = `0n` // equation param
- * * b = `7n` // equation param
- * * Gx, Gy are coordinates of Generator / base point
- */
-declare const secp256k1_CURVE: WeierstrassOpts<bigint>;
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
 /** Signature instance, which allows recovering pubkey from it. */
@@ -32,6 +16,7 @@ export type WeierstrassOpts<T> = Readonly<{
 }>;
 /** Asserts something is Uint8Array. */
 declare const abytes: (value: Bytes, length?: number, title?: string) => Bytes;
+declare const hash: (msg: Bytes) => Bytes;
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint {
     x: bigint;
@@ -75,6 +60,7 @@ declare class Point {
      * @param safe safe mode guards against timing attacks; unsafe mode is faster
      */
     multiply(n: bigint, safe?: boolean): Point;
+    multiplyUnsafe(scalar: bigint): Point;
     /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
     toAffine(): AffinePoint;
     /** Checks if the point is valid and on-curve. */
@@ -229,7 +215,7 @@ declare const utils: {
 };
 export type Sha256FnSync = undefined | ((msg: Bytes) => Bytes);
 export type HmacFnSync = undefined | ((key: Bytes, msg: Bytes) => Bytes);
-export declare const hashes: {
+declare const hashes: {
     hmacSha256Async: (key: Bytes, msg: Bytes) => Promise<Bytes>;
     hmacSha256: HmacFnSync;
     sha256Async: (msg: Bytes) => Promise<Bytes>;
@@ -258,4 +244,4 @@ declare const schnorr: {
     signAsync: typeof signAsyncSchnorr;
     verifyAsync: typeof verifyAsyncSchnorr;
 };
-export { secp256k1_CURVE as CURVE, etc, getPublicKey, getSharedSecret, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, };

@@ -150,6 +150,7 @@ const callHash = (name: string) => {
   if (typeof fn !== 'function') err('hashes.' + name + ' not set');
   return fn;
 };
+const hash = (msg: Bytes): Bytes => callHash('sha256')(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint {
@@ -319,6 +320,9 @@ class Point {
       else if (safe) f = f.add(d);
     }
     return p;
+  }
+  multiplyUnsafe(scalar: bigint): Point {
+    return this.multiply(scalar, false);
   }
   /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
   toAffine(): AffinePoint {
@@ -863,7 +867,7 @@ const utils = {
 export type Sha256FnSync = undefined | ((msg: Bytes) => Bytes);
 export type HmacFnSync = undefined | ((key: Bytes, msg: Bytes) => Bytes);
 const _sha = 'SHA-256';
-export const hashes = {
+const hashes = {
   hmacSha256Async: async (key: Bytes, msg: Bytes): Promise<Bytes> => {
     const s = subtle();
     const name = 'HMAC';
@@ -1111,13 +1115,13 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
   return { p, f }; // return both real and fake points for JIT
 };
 
-// Point as ProjectivePoint,
 // !! Remove the export below to easily use in REPL / browser console
 export {
-  secp256k1_CURVE as CURVE,
   etc,
   getPublicKey,
   getSharedSecret,
+  hash,
+  hashes,
   keygen,
   Point,
   recoverPublicKey,
