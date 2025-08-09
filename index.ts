@@ -33,7 +33,7 @@ const lengths = {
   seed: L + L / 2,
 };
 /** Alias to Uint8Array. */
-export type Bytes = Uint8Array<any>;
+export type Bytes = Uint8Array;
 /** Signature instance, which allows recovering pubkey from it. */
 export type RecoveredSignature = Signature & { recovery: number };
 /** Weierstrass elliptic curve options. */
@@ -79,7 +79,7 @@ const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
   return value;
 };
 /** create Uint8Array */
-const u8n = (len: number) => new Uint8Array(len);
+const u8n = (len: number): Uint8Array => new Uint8Array(len);
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 const bytesToHex = (b: Bytes): string =>
   Array.from(abytes(b))
@@ -1166,6 +1166,5 @@ export {
   Signature,
   utils,
   verify,
-  verifyAsync
+  verifyAsync,
 };
-
