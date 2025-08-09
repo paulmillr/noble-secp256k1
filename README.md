@@ -31,7 +31,7 @@ it was created for the article [Learning fast elliptic-curve cryptography](https
   [curves](https://github.com/paulmillr/noble-curves),
   [hashes](https://github.com/paulmillr/noble-hashes),
   [post-quantum](https://github.com/paulmillr/noble-post-quantum),
-  4kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
+  5kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
 
 ## Usage
@@ -333,7 +333,7 @@ Point.fromBytes x 13,656 ops/sec @ 73μs/op
 noble-secp256k1 v2 improves security and reduces attack surface.
 The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
-- Disable some features to ensure 4x smaller than v1, 4KB bundle size:
+- Disable some features to ensure 4x smaller than v1, 5KB bundle size:
   - The features are now a part of [noble-curves](https://github.com/paulmillr/noble-curves),
     **switch to curves if you need them**. Curves is drop-in replacement.
   - DER encoding: toDERHex, toDERRawBytes, signing / verification of DER sigs

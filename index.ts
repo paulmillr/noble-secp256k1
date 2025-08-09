@@ -1,6 +1,6 @@
 /*! noble-secp256k1 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
- * 4KB JS implementation of secp256k1 ECDSA / Schnorr signatures & ECDH.
+ * 5KB JS implementation of secp256k1 ECDSA / Schnorr signatures & ECDH.
  * Compliant with RFC6979 & BIP340.
  * @module
  */
