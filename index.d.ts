@@ -69,6 +69,8 @@ declare class Point {
     toBytes(isCompressed?: boolean): Bytes;
     toHex(isCompressed?: boolean): string;
 }
+/** Normalize private key to scalar (bigint). Verifies scalar is in range 1<s<N */
+declare const secretKeyToScalar: (secretKey: Bytes) => bigint;
 /** Creates 33/65-byte public key from 32-byte private key. */
 declare const getPublicKey: (privKey: Bytes, isCompressed?: boolean) => Bytes;
 declare const isValidSecretKey: (secretKey: Bytes) => boolean;
@@ -101,20 +103,55 @@ declare class Signature {
  * https://paulmillr.com/posts/deterministic-signatures/
  */
 export type ECDSAExtraEntropy = boolean | Bytes;
+/**
+ * - `compact` is the default format
+ * - `recovered` is the same as compact, but with an extra byte indicating recovery byte
+ * - `der` is not supported; and provided for consistency.
+ *   Switch to noble-curves if you need der.
+ */
 export type ECDSASignatureFormat = 'compact' | 'recovered' | 'der';
+/**
+ * - `prehash`: (default: true) indicates whether to do sha256(message).
+ *   When a custom hash is used, it must be set to `false`.
+ */
 export type ECDSARecoverOpts = {
     prehash?: boolean;
 };
+/**
+ * - `prehash`: (default: true) indicates whether to do sha256(message).
+ *   When a custom hash is used, it must be set to `false`.
+ * - `lowS`: (default: true) prohibits signatures which have (sig.s >= CURVE.n/2n).
+ *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
+ *   which is default openssl behavior.
+ *   Non-malleable signatures can still be successfully verified in openssl.
+ * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
+ */
 export type ECDSAVerifyOpts = {
     prehash?: boolean;
     lowS?: boolean;
     format?: ECDSASignatureFormat;
 };
+/**
+ * - `prehash`: (default: true) indicates whether to do sha256(message).
+ *   When a custom hash is used, it must be set to `false`.
+ * - `lowS`: (default: true) prohibits signatures which have (sig.s >= CURVE.n/2n).
+ *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
+ *   which is default openssl behavior.
+ *   Non-malleable signatures can still be successfully verified in openssl.
+ * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
+ * - `extraEntropy`: (default: false) creates sigs with increased security, see {@link ECDSAExtraEntropy}
+ */
 export type ECDSASignOpts = {
     prehash?: boolean;
     lowS?: boolean;
     format?: ECDSASignatureFormat;
     extraEntropy?: ECDSAExtraEntropy;
+};
+declare const hashes: {
+    hmacSha256Async: (key: Bytes, message: Bytes) => Promise<Bytes>;
+    hmacSha256: undefined | ((key: Bytes, message: Bytes) => Bytes);
+    sha256Async: (msg: Bytes) => Promise<Bytes>;
+    sha256: undefined | ((message: Bytes) => Bytes);
 };
 /**
  * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
@@ -122,9 +159,9 @@ export type ECDSASignOpts = {
  * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * sign(msg, secretKey);
- * sign(sha256(msg), secretKey, { prehash: false });
+ * sign(keccak256(msg), secretKey, { prehash: false });
  * sign(msg, secretKey, { extraEntropy: true });
  * sign(msg, secretKey, { format: 'recovered' });
  * ```
@@ -136,9 +173,9 @@ declare const sign: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts) => 
  * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * await signAsync(msg, secretKey);
- * await signAsync(sha256(msg), secretKey, { prehash: false });
+ * await signAsync(keccak256(msg), secretKey, { prehash: false });
  * await signAsync(msg, secretKey, { extraEntropy: true });
  * await signAsync(msg, secretKey, { format: 'recovered' });
  * ```
@@ -152,9 +189,9 @@ declare const signAsync: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * verify(sig, msg, publicKey);
- * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, keccak256(msg), publicKey, { prehash: false });
  * verify(sig, msg, publicKey, { lowS: false });
  * verify(sigr, msg, publicKey, { format: 'recovered' });
  * ```
@@ -168,9 +205,9 @@ declare const verify: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * verify(sig, msg, publicKey);
- * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, keccak256(msg), publicKey, { prehash: false });
  * verify(sig, msg, publicKey, { lowS: false });
  * verify(sigr, msg, publicKey, { format: 'recovered' });
  * ```
@@ -204,6 +241,7 @@ declare const etc: {
     mod: (a: bigint, md?: bigint) => bigint;
     invert: (num: bigint, md?: bigint) => bigint;
     randomBytes: (len?: number) => Bytes;
+    secretKeyToScalar: typeof secretKeyToScalar;
     abytes: typeof abytes;
 };
 /** Curve-specific utilities for private keys. */
@@ -211,12 +249,6 @@ declare const utils: {
     isValidSecretKey: typeof isValidSecretKey;
     isValidPublicKey: typeof isValidPublicKey;
     randomSecretKey: () => Bytes;
-};
-declare const hashes: {
-    hmacSha256Async: (key: Bytes, message: Bytes) => Promise<Bytes>;
-    hmacSha256: undefined | ((key: Bytes, message: Bytes) => Bytes);
-    sha256Async: (msg: Bytes) => Promise<Bytes>;
-    sha256: undefined | ((message: Bytes) => Bytes);
 };
 /**
  * Schnorr public key is just `x` coordinate of Point as per BIP340.
@@ -244,4 +276,4 @@ declare const schnorrAsync: {
     signAsync: typeof signAsyncSchnorr;
     verifyAsync: typeof verifyAsyncSchnorr;
 };
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync };

@@ -1,17 +1,19 @@
 # noble-secp256k1
 
-Fastest 4KB JS implementation of secp256k1 signatures & ECDH.
+Fastest 5KB JS implementation of secp256k1 signatures & ECDH.
 
 - ✍️ [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
   signatures compliant with [RFC6979](https://www.rfc-editor.org/rfc/rfc6979)
+- ➰ Schnorr
+  signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 3.98KB gzipped (elliptic.js is 12x larger, tiny-secp256k1 is 20-40x larger)
+- 🪶 4.86KB (gzipped, elliptic.js is 10x larger, tiny-secp256k1 is 25x larger)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
 Curves are drop-in replacement and have more features:
-MSM, DER encoding, endomorphism, prehashing, custom point precomputes.
+MSM, DER encoding, endomorphism, prehashing, custom point precomputes, hash-to-curve, oprf.
 To upgrade from earlier version, see [Upgrading](#upgrading).
 
 898-byte version of the library is available for learning purposes in `test/misc/1kb.min.js`,
@@ -45,18 +47,16 @@ We support all major platforms and runtimes. For React Native, additional polyfi
 ```js
 import * as secp from '@noble/secp256k1';
 (async () => {
-  // Uint8Arrays or hex strings are accepted:
-  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
-  const privKey = secp.utils.randomSecretKey(); // Secure random private key
-  // sha256 of 'hello world'
-  const msgHash = 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
-  const pubKey = secp.getPublicKey(privKey);
-  const signature = await secp.signAsync(msgHash, privKey); // Sync methods below
-  const isValid = secp.verify(signature, msgHash, pubKey);
+  const { secretKey, publicKey } = secp.keygen();
+  // const publicKey = secp.getPublicKey(secretKey);
+  const msg = new TextEncoder().encode('hello noble');
+  const sig = await secp.signAsync(msg, secretKey);
+  const isValid = await secp.verifyAsync(sig, msg, publicKey);
 
-  const alicesPub = secp.getPublicKey(secp.utils.randomSecretKey());
-  const shared = secp.getSharedSecret(privKey, alicesPub); // Diffie-Hellman
-  const pub2 = signature.recoverPublicKey(msgHash); // Public key recovery
+  const bobsKeys = secp.keygen();
+  const shared = secp.getSharedSecret(secretKey, bobsKeys.publicKey); // Diffie-Hellman
+  const sigr = await secp.signAsync(msg, secretKey, { format: 'recovered' });
+  const publicKey2 = secp.recoverPublicKey(sigr, msg);
 })();
 ```
 
@@ -68,41 +68,52 @@ To enable sync methods:
 ```ts
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
+secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256 = sha256;
 ```
 
-### React Native: polyfill getRandomValues and sha512
+### React Native: polyfill getRandomValues and sha256
 
 ```ts
 import 'react-native-get-random-values';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-secp.etc.hmacSha256Sync = (k, ...m) => hmac(sha256, k, secp.etc.concatBytes(...m));
-secp.etc.hmacSha256Async = (k, ...m) => Promise.resolve(secp.etc.hmacSha256Sync(k, ...m));
+secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256 = sha256;
+secp.hashes.hmacSha256Async = async (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256Async = async (msg) => sha256(msg);
 ```
 
 ## API
 
-There are 3 main methods:
+There are 4 main methods, which accept Uint8Array-s:
 
-* `getPublicKey(privateKey)`
-* `sign(messageHash, privateKey)` and `signAsync(messageHash, privateKey)`
-* `verify(signature, messageHash, publicKey)`
+* `keygen()`
+* `getPublicKey(secretKey)`
+* `sign(messageHash, secretKey)` and `signAsync(messageHash, secretKey)`
+* `verify(signature, messageHash, publicKey)` and `verifyAsync(signature, messageHash, publicKey)`
 
-Functions generally accept Uint8Array.
-There are optional utilities which convert hex strings, utf8 strings or bigints to u8a.
+### keygen
+
+```ts
+import * as secp from '@noble/secp256k1';
+(async () => {
+  const keys = secp.keygen();
+  const { secretKey, publicKey } = keys;
+})();
+```
 
 ### getPublicKey
 
 ```ts
-import { getPublicKey, utils, ProjectivePoint } from '@noble/secp256k1';
-const privKey = utils.randomSecretKey();
-const pubKey33b = getPublicKey(privKey);
+import * as secp from '@noble/secp256k1';
+const secretKey = secp.utils.randomSecretKey();
+const pubKey33b = secp.getPublicKey(secretKey);
 
 // Variants
-const pubKey65b = getPublicKey(privKey, false);
-const pubKeyPoint = ProjectivePoint.fromPrivateKey(privKey);
-const samePoint = ProjectivePoint.fromHex(pubKeyPoint.toHex());
+const pubKey65b = secp.getPublicKey(secretKey, false);
+const pubKeyPoint = secp.Point.fromBytes(pubKey65b);
+const samePoint = pubKeyPoint.toBytes();
 ```
 
 Generates 33-byte compressed (default) or 65-byte public key from 32-byte private key.
@@ -111,67 +122,69 @@ Generates 33-byte compressed (default) or 65-byte public key from 32-byte privat
 
 ```ts
 import * as secp from '@noble/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
-import { utf8ToBytes } from '@noble/hashes/utils';
-const msg = 'noble cryptography';
-const msgHash = sha256(utf8ToBytes(msg));
-const priv = secp.utils.randomSecretKey();
+const { secretKey } = secp.keygen();
+const msg = 'hello noble';
+const sig = secp.sign(msg, secretKey);
 
-const sigA = secp.sign(msgHash, priv);
+// async
+const sigB = await secp.signAsync(msg, secretKey);
 
-// Variants
-const sigB = await secp.signAsync(msgHash, priv);
-const sigC = secp.sign(msgHash, priv, { extraEntropy: true }); // hedged sig
-const sigC2 = secp.sign(msgHash, priv, { extraEntropy: Uint8Array.from([0xca, 0xfe]) });
-const sigD = secp.sign(msgHash, priv, { lowS: false }); // malleable sig
+// recovered, allows `recoverPublicKey(sigR, msg)`
+const sigR = secp.sign(msg, secretKey, { format: 'recovered' });
+// custom hash
+import { keccak256 } from '@noble/hashes/sha3.js';
+const sigH = secp.sign(keccak256(msg), secretKey, { prehash: false });
+// hedged sig
+const sigC = secp.sign(msg, secretKey, { extraEntropy: true });
+const sigC2 = secp.sign(msg, secretKey, { extraEntropy: Uint8Array.from([0xca, 0xfe]) });
+// malleable sig
+const sigD = secp.sign(msg, secretKey, { lowS: false });
 ```
 
-Generates low-s deterministic-k RFC6979 ECDSA signature. Requries hash of message,
-which means you'll need to do something like `sha256(message)` before signing.
+Generates low-s deterministic-k RFC6979 ECDSA signature.
 
-`extraEntropy: true` enables hedged signatures. They incorporate
+- Message will be hashed with sha256. If you want to use a different hash function,
+make sure to use `{ prehash: false }`.
+- `extraEntropy: true` enables hedged signatures. They incorporate
 extra randomness into RFC6979 (described in section 3.6),
 to provide additional protection against fault attacks.
 Check out blog post [Deterministic signatures are not your friends](https://paulmillr.com/posts/deterministic-signatures/).
 Even if their RNG is broken, they will fall back to determinism.
-
-Default behavior `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH.
-Setting `lowS: false` allows to create malleable signatures, which is default openssl behavior.
-Non-malleable signatures can still be successfully verified in openssl.
+- Default behavior `lowS: true` prohibits signatures which have (sig.s >= CURVE.n/2n) and is compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures, which is default openssl behavior. Non-malleable signatures can still be successfully verified in openssl.
 
 ### verify
 
 ```ts
 import * as secp from '@noble/secp256k1';
-const hex = secp.etc.hexToBytes;
-const sig = hex(
-  'ddc633c5b48a1a6725c31201892715dda3058350f7b444e89d32c33c90d9c9e218d7eaf02c2254e88c3b33d755394b08bcc7efd13df02338510b750b64572983'
-);
-const msgHash = hex('736403f76264eccc1b77ba58dc8fc690e76b2b1532ba82c736a60f3862082db3');
-// const priv = 'd60937c2a1ece169888d4c48717dfcc0e1a7af915505823148cca11859210e9c';
-const pubKey = hex('020b6d70b68873ff8fd729adf5cf4bf45021b34236f991768249cba06b11136ec6');
+const { secretKey, publicKey } = secp.keygen();
+const msg = 'hello noble';
+const sig = secp.sign(msg, secretKey);
+const isValid = secp.verify(sig, msg, publicKey);
 
-// verify
-const isValid = secp.verify(sig, msgHash, pubKey);
-const isValidLoose = secp.verify(sig, msgHash, pubKey, { lowS: false });
+// custom hash
+import { keccak256 } from '@noble/hashes/sha3.js';
+const sigH = secp.sign(keccak256(msg), secretKey, { prehash: false });
 ```
 
 Verifies ECDSA signature.
-Default behavior `lowS: true` prohibits malleable signatures which have (`sig.s >= CURVE.n/2n`) and
-is compatible with BTC / ETH.
-Setting `lowS: false` allows to create signatures, which is default openssl behavior.
+
+- Message will be hashed with sha256. If you want to use a different hash function,
+make sure to use `{ prehash: false }`.
+- Default behavior `lowS: true` prohibits malleable signatures which have (`sig.s >= CURVE.n/2n`) and
+  is compatible with BTC / ETH.
+  Setting `lowS: false` allows to create signatures, which is default openssl behavior.
 
 ### getSharedSecret
 
 ```ts
 import * as secp from '@noble/secp256k1';
-const bobsPriv = secp.utils.randomSecretKey();
-const alicesPub = secp.getPublicKey(secp.utils.randomSecretKey());
-
-// ECDH between Alice and Bob
-const shared33b = secp.getSharedSecret(bobsPriv, alicesPub);
-const shared65b = secp.getSharedSecret(bobsPriv, alicesPub, false);
-const sharedPoint = secp.ProjectivePoint.fromHex(alicesPub).multiply(bobsPriv);
+const alice = secp.keygen();
+const bob = secp.keygen();
+const shared33b = secp.getSharedSecret(alice.secretKey, bob.publicKey);
+const shared65b = secp.getSharedSecret(bob.secretKey, alice.publicKey, false);
+const sharedPoint = secp.Point.fromBytes(bob.publicKey).multiply(
+  secp.etc.secretKeyToScalar(alice.secretKey)
+);
 ```
 
 Computes ECDH (Elliptic Curve Diffie-Hellman) shared secret between
@@ -182,15 +195,15 @@ key A and different key B.
 ```ts
 import * as secp from '@noble/secp256k1';
 
-import { sha256 } from '@noble/hashes/sha256';
-import { utf8ToBytes } from '@noble/hashes/utils';
-const msg = 'noble cryptography';
-const msgHash = sha256(utf8ToBytes(msg));
-const priv = secp.utils.randomSecretKey();
-const pub1 = secp.getPubkicKey(priv);
-const sig = secp.sign(msgHash, priv);
+const { secretKey, publicKey } = secp.keygen();
+const msg = 'hello noble';
+const sigR = secp.sign(msg, secretKey, { format: 'recovered' });
+const publicKey2 = secp.recoverPublicKey(sigR, msg);
 
-const pub2 = sig.recoverPublicKey(msgHash);
+// custom hash
+import { keccak256 } from '@noble/hashes/sha3.js';
+const sigR = secp.sign(keccak256(msg), secretKey, { format: 'recovered', prehash: false });
+const publicKey2 = secp.recoverPublicKey(sigR, keccak256(msg), { prehash: false });
 ```
 
 Recover public key from Signature instance with `recovery` bit set.
@@ -199,60 +212,41 @@ Recover public key from Signature instance with `recovery` bit set.
 
 A bunch of useful **utilities** are also exposed:
 
-```typescript
-type Bytes = Uint8Array;
-const etc: {
-  hexToBytes: (hex: string) => Bytes;
-  bytesToHex: (b: Bytes) => string;
-  concatBytes: (...arrs: Bytes[]) => Bytes;
-  bytesToNumberBE: (b: Bytes) => bigint;
-  numberToBytesBE: (num: bigint) => Bytes;
-  mod: (a: bigint, b?: bigint) => bigint;
-  invert: (num: bigint, md?: bigint) => bigint;
-  hmacSha256Async: (key: Bytes, ...msgs: Bytes[]) => Promise<Bytes>;
-  hmacSha256Sync: HmacFnSync;
-  hashToPrivateKey: (hash: Hex) => Bytes;
-  randomBytes: (len: number) => Bytes;
-};
-const utils: {
-  normPrivateKeyToScalar: (p: PrivKey) => bigint;
-  randomSecretKey: () => Bytes; // Uses CSPRNG https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
-  isValidPrivateKey: (key: Hex) => boolean;
-  precompute(p: ProjectivePoint, windowSize?: number): ProjectivePoint;
-};
-class ProjectivePoint {
-  constructor(px: bigint, py: bigint, pz: bigint);
-  static readonly BASE: ProjectivePoint;
-  static readonly ZERO: ProjectivePoint;
-  static fromAffine(point: AffinePoint): ProjectivePoint;
-  static fromHex(hex: Hex): ProjectivePoint;
-  static fromPrivateKey(n: PrivKey): ProjectivePoint;
+```ts
+import * as secp from '@noble/secp256k1';
+
+const { bytesToHex, hexToBytes, concatBytes, mod, invert, randomBytes } = secp.etc;
+const { isValidSecretKey, isValidPublicKey, randomSecretKey } = secp.utils;
+const { Point } = secp;
+console.log(Point.CURVE(), Point.BASE);
+/*
+class Point {
+  static BASE: Point;
+  static ZERO: Point;
+  readonly X: bigint;
+  readonly Y: bigint;
+  readonly Z: bigint;
+  constructor(X: bigint, Y: bigint, Z: bigint);
+  static CURVE(): WeierstrassOpts<bigint>;
+  static fromAffine(ap: AffinePoint): Point;
+  static fromBytes(bytes: Bytes): Point;
+  static fromHex(hex: string): Point;
   get x(): bigint;
   get y(): bigint;
-  add(other: ProjectivePoint): ProjectivePoint;
-  assertValidity(): void;
-  equals(other: ProjectivePoint): boolean;
-  multiply(n: bigint): ProjectivePoint;
-  negate(): ProjectivePoint;
-  subtract(other: ProjectivePoint): ProjectivePoint;
+  equals(other: Point): boolean;
+  is0(): boolean;
+  negate(): Point;
+  double(): Point;
+  add(other: Point): Point;
+  subtract(other: Point): Point;
+  multiply(n: bigint): Point;
+  multiplyUnsafe(scalar: bigint): Point;
   toAffine(): AffinePoint;
+  assertValidity(): Point;
+  toBytes(isCompressed?: boolean): Bytes;
   toHex(isCompressed?: boolean): string;
-  toRawBytes(isCompressed?: boolean): Bytes;
 }
-class Signature {
-  constructor(r: bigint, s: bigint, recovery?: number | undefined);
-  static fromCompact(hex: Hex): Signature;
-  readonly r: bigint;
-  readonly s: bigint;
-  readonly recovery?: number | undefined;
-  ok(): Signature;
-  hasHighS(): boolean;
-  normalizeS(): Signature;
-  recoverPublicKey(msgh: Hex): Point;
-  toBytes(): Bytes;
-  toCompactHex(): string;
-}
-CURVE; // curve prime; order; equation params, generator coordinates
+*/
 ```
 
 ## Security
@@ -320,13 +314,16 @@ NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https
 Benchmarks measured with Apple M4. [noble-curves](https://github.com/paulmillr/noble-curves) enable faster performance.
 
 ```
-getPublicKey(utils.randomSecretKey()) x 8,770 ops/sec @ 114μs/op
-signAsync x 4,848 ops/sec @ 206μs/op
-sign x 7,261 ops/sec @ 137μs/op
-verify x 817 ops/sec @ 1ms/op
-getSharedSecret x 688 ops/sec @ 1ms/op
-recoverPublicKey x 839 ops/sec @ 1ms/op
-Point.fromHex (decompression) x 12,937 ops/sec @ 77μs/op
+keygen x 7,643 ops/sec @ 130μs/op
+sign x 7,620 ops/sec @ 131μs/op
+verify x 823 ops/sec @ 1ms/op
+getSharedSecret x 707 ops/sec @ 1ms/op
+recoverPublicKey x 790 ops/sec @ 1ms/op
+
+signAsync x 4,874 ops/sec @ 205μs/op
+verifyAsync x 811 ops/sec @ 1ms/op
+
+Point.fromBytes x 13,656 ops/sec @ 73μs/op
 ```
 
 ## Upgrading
@@ -374,7 +371,7 @@ The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
 - `npm install && npm run build && npm test` will build the code and run tests.
 - `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
-- `npm run loc` will count total output size, important to be less than 4KB
+- `npm run build:release` will build single non-module file
 
 Check out [github.com/paulmillr/guidelines](https://github.com/paulmillr/guidelines)
 for general coding practices and rules.

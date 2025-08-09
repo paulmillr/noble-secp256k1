@@ -373,7 +373,7 @@ const B256 = 2n ** 256n; // secp256k1 is weierstrass curve. Equation is x³ + ax
 /** Number to 32b. Must be 0 <= num < B256. validate, pad, to bytes. */
 const numTo32b = (num: bigint): Bytes => hexToBytes(padh(arange(num, 0n, B256), L2));
 /** Normalize private key to scalar (bigint). Verifies scalar is in range 1<s<N */
-const validateSecretKey = (secretKey: Bytes): bigint => {
+const secretKeyToScalar = (secretKey: Bytes): bigint => {
   const num = bytesToNumBE(abytes(secretKey, L, 'secret key'));
   return arange(num, 1n, N, 'invalid secret key: outside of range');
 };
@@ -381,12 +381,12 @@ const validateSecretKey = (secretKey: Bytes): bigint => {
 const highS = (n: bigint): boolean => n > N >> 1n;
 /** Creates 33/65-byte public key from 32-byte private key. */
 const getPublicKey = (privKey: Bytes, isCompressed = true): Bytes => {
-  return G.multiply(validateSecretKey(privKey)).toBytes(isCompressed);
+  return G.multiply(secretKeyToScalar(privKey)).toBytes(isCompressed);
 };
 
 const isValidSecretKey = (secretKey: Bytes): boolean => {
   try {
-    return !!validateSecretKey(secretKey);
+    return !!secretKeyToScalar(secretKey);
   } catch (error) {
     return false;
   }
@@ -494,15 +494,44 @@ const SIG_COMPACT = 'compact';
 const SIG_RECOVERED = 'recovered';
 const SIG_DER = 'der';
 const ALL_SIG = [SIG_COMPACT, SIG_RECOVERED, SIG_DER] as const;
+/**
+ * - `compact` is the default format
+ * - `recovered` is the same as compact, but with an extra byte indicating recovery byte
+ * - `der` is not supported; and provided for consistency.
+ *   Switch to noble-curves if you need der.
+ */
 export type ECDSASignatureFormat = 'compact' | 'recovered' | 'der';
+/**
+ * - `prehash`: (default: true) indicates whether to do sha256(message).
+ *   When a custom hash is used, it must be set to `false`.
+ */
 export type ECDSARecoverOpts = {
   prehash?: boolean;
 };
+/**
+ * - `prehash`: (default: true) indicates whether to do sha256(message).
+ *   When a custom hash is used, it must be set to `false`.
+ * - `lowS`: (default: true) prohibits signatures which have (sig.s >= CURVE.n/2n).
+ *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
+ *   which is default openssl behavior.
+ *   Non-malleable signatures can still be successfully verified in openssl.
+ * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
+ */
 export type ECDSAVerifyOpts = {
   prehash?: boolean;
   lowS?: boolean;
   format?: ECDSASignatureFormat;
 };
+/**
+ * - `prehash`: (default: true) indicates whether to do sha256(message).
+ *   When a custom hash is used, it must be set to `false`.
+ * - `lowS`: (default: true) prohibits signatures which have (sig.s >= CURVE.n/2n).
+ *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
+ *   which is default openssl behavior.
+ *   Non-malleable signatures can still be successfully verified in openssl.
+ * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
+ * - `extraEntropy`: (default: false) creates sigs with increased security, see {@link ECDSAExtraEntropy}
+ */
 export type ECDSASignOpts = {
   prehash?: boolean;
   lowS?: boolean;
@@ -516,12 +545,32 @@ const defaultSignOpts: ECDSASignOpts = {
   format: SIG_COMPACT,
   extraEntropy: false,
 };
+
+const _sha = 'SHA-256';
+const hashes = {
+  hmacSha256Async: async (key: Bytes, message: Bytes): Promise<Bytes> => {
+    const s = subtle();
+    const name = 'HMAC';
+    const k = await s.importKey('raw', key, { name, hash: { name: _sha } }, false, ['sign']);
+    return u8n(await s.sign(name, k, message));
+  },
+  hmacSha256: undefined as undefined | ((key: Bytes, message: Bytes) => Bytes),
+  sha256Async: async (msg: Bytes): Promise<Bytes> => u8n(await subtle().digest(_sha, msg)),
+  sha256: undefined as undefined | ((message: Bytes) => Bytes),
+};
+
+const callPrehash = (asynchronous: boolean, message: Bytes, opts: { prehash?: boolean }) => {
+  abytes(message, undefined, 'message');
+  if (!opts.prehash) return message;
+  return asynchronous ? hashes.sha256Async(message) : callHash('sha256')(message);
+};
+
 type Pred<T> = (v: Bytes) => T | undefined;
 const NULL = u8n(0);
 const byte0 = u8of(0x00);
 const byte1 = u8of(0x01);
-const _maxDrbg = 1000;
-const _drbgErr = 'drbg: tried max values';
+const _maxDrbgIters = 1000;
+const _drbgErr = 'drbg: tried max amount of iterations';
 // HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
 const hmacDrbg = <T>(seed: Bytes, pred: Pred<T>): T => {
   let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
@@ -543,7 +592,7 @@ const hmacDrbg = <T>(seed: Bytes, pred: Pred<T>): T => {
   };
   // HMAC-DRBG generate() function
   const gen = () => {
-    if (i++ >= _maxDrbg) err(_drbgErr);
+    if (i++ >= _maxDrbgIters) err(_drbgErr);
     v = h(); // v = hmac(k || v)
     return v; // this diverges from noble-curves: we don't allow arbitrary output len!
   };
@@ -575,7 +624,7 @@ const hmacDrbgAsync = async <T>(seed: Bytes, pred: Pred<T>): Promise<T> => {
   };
   // HMAC-DRBG generate() function
   const gen = async () => {
-    if (i++ >= _maxDrbg) err(_drbgErr);
+    if (i++ >= _maxDrbgIters) err(_drbgErr);
     v = await h(); // v = hmac(K || V)
     return v; // this diverges from noble-curves: we don't allow arbitrary output len!
   };
@@ -600,7 +649,7 @@ const _sign = <T>(
   const int2octets = numTo32b; // int to octets
   const h1i = bits2int_modN(messageHash); // msg bigint
   const h1o = int2octets(h1i); // msg octets
-  const d = validateSecretKey(secretKey); // validate private key, convert to bigint
+  const d = secretKeyToScalar(secretKey); // validate private key, convert to bigint
   const seedArgs = [int2octets(d), h1o]; // Step D of RFC6979 3.2
   /** RFC6979 3.6: additional k' (optional). See {@link ECDSAExtraEntropy}. */
   if (extraEntropy != null && extraEntropy !== false) {
@@ -675,21 +724,15 @@ const setDefaults = (opts: ECDSASignOpts): Required<ECDSASignOpts> => {
   return res as Required<ECDSASignOpts>;
 };
 
-const callPrehash = (asynchronous: boolean, message: Bytes, opts: { prehash?: boolean }) => {
-  abytes(message, undefined, 'message');
-  if (!opts.prehash) return message;
-  return asynchronous ? hashes.sha256Async(message) : callHash('sha256')(message);
-};
-
 /**
  * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
  * Prehashes message with sha256, disable using `prehash: false`.
  * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * sign(msg, secretKey);
- * sign(sha256(msg), secretKey, { prehash: false });
+ * sign(keccak256(msg), secretKey, { prehash: false });
  * sign(msg, secretKey, { extraEntropy: true });
  * sign(msg, secretKey, { format: 'recovered' });
  * ```
@@ -706,9 +749,9 @@ const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes
  * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * await signAsync(msg, secretKey);
- * await signAsync(sha256(msg), secretKey, { prehash: false });
+ * await signAsync(keccak256(msg), secretKey, { prehash: false });
  * await signAsync(msg, secretKey, { extraEntropy: true });
  * await signAsync(msg, secretKey, { format: 'recovered' });
  * ```
@@ -731,9 +774,9 @@ const signAsync = async (
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * verify(sig, msg, publicKey);
- * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, keccak256(msg), publicKey, { prehash: false });
  * verify(sig, msg, publicKey, { lowS: false });
  * verify(sigr, msg, publicKey, { format: 'recovered' });
  * ```
@@ -757,9 +800,9 @@ const verify = (
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
- * const msg = new TextEncoder().encode('hello');
+ * const msg = new TextEncoder().encode('hello noble');
  * verify(sig, msg, publicKey);
- * verify(sig, sha256(msg), publicKey, { prehash: false });
+ * verify(sig, keccak256(msg), publicKey, { prehash: false });
  * verify(sig, msg, publicKey, { lowS: false });
  * verify(sigr, msg, publicKey, { format: 'recovered' });
  * ```
@@ -819,7 +862,7 @@ const recoverPublicKeyAsync = async (
  * @returns public key C
  */
 const getSharedSecret = (secretKeyA: Bytes, publicKeyB: Bytes, isCompressed = true): Bytes => {
-  return Point.fromBytes(publicKeyB).multiply(validateSecretKey(secretKeyA)).toBytes(isCompressed);
+  return Point.fromBytes(publicKeyB).multiply(secretKeyToScalar(secretKeyA)).toBytes(isCompressed);
 };
 
 // FIPS 186 B.4.1 compliant key generation produces private keys
@@ -847,6 +890,7 @@ const etc = {
   mod: M as (a: bigint, md?: bigint) => bigint,
   invert: invert as (num: bigint, md?: bigint) => bigint, // math utilities
   randomBytes: randomBytes as (len?: number) => Bytes,
+  secretKeyToScalar: secretKeyToScalar as typeof secretKeyToScalar,
   abytes: abytes as typeof abytes,
 };
 
@@ -855,19 +899,6 @@ const utils = {
   isValidSecretKey: isValidSecretKey as typeof isValidSecretKey,
   isValidPublicKey: isValidPublicKey as typeof isValidPublicKey,
   randomSecretKey: randomSecretKey as () => Bytes,
-};
-
-const _sha = 'SHA-256';
-const hashes = {
-  hmacSha256Async: async (key: Bytes, message: Bytes): Promise<Bytes> => {
-    const s = subtle();
-    const name = 'HMAC';
-    const k = await s.importKey('raw', key, { name, hash: { name: _sha } }, false, ['sign']);
-    return u8n(await s.sign(name, k, message));
-  },
-  hmacSha256: undefined as undefined | ((key: Bytes, message: Bytes) => Bytes),
-  sha256Async: async (msg: Bytes): Promise<Bytes> => u8n(await subtle().digest(_sha, msg)),
-  sha256: undefined as undefined | ((message: Bytes) => Bytes),
 };
 
 // Schnorr signatures are superior to ECDSA from above. Below is Schnorr-specific BIP0340 code.
@@ -890,7 +921,7 @@ const taggedHashAsync = async (tag: string, ...messages: Bytes[]): Promise<Bytes
 // ECDSA compact points are 33-byte. Schnorr is 32: we strip first byte 0x02 or 0x03
 // Calculate point, scalar and bytes
 const extpubSchnorr = (priv: Bytes) => {
-  const d_ = validateSecretKey(priv);
+  const d_ = secretKeyToScalar(priv);
   const p = G.multiply(d_); // P = d'⋅G; 0 < d' < n check is done inside
   const { x, y } = p.assertValidity().toAffine(); // validate Point is not at infinity
   const d = isEven(y) ? d_ : modN(-d_);
@@ -1135,5 +1166,6 @@ export {
   Signature,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+
