@@ -82,7 +82,6 @@ declare class Signature {
     static fromBytes(b: Bytes, format?: ECDSASignatureFormat): Signature;
     addRecoveryBit(bit: number): RecoveredSignature;
     hasHighS(): boolean;
-    normalizeS(): Signature;
     toBytes(format?: ECDSASignatureFormat): Bytes;
 }
 /**
@@ -239,7 +238,10 @@ declare const schnorr: {
     getPublicKey: typeof pubSchnorr;
     sign: typeof signSchnorr;
     verify: typeof verifySchnorr;
+};
+declare const schnorrAsync: {
+    getPublicKey: typeof pubSchnorr;
     signAsync: typeof signAsyncSchnorr;
     verifyAsync: typeof verifyAsyncSchnorr;
 };
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync };

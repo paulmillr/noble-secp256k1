@@ -447,10 +447,6 @@ class Signature {
   hasHighS(): boolean {
     return highS(this.s);
   }
-  normalizeS(): Signature {
-    const { r, s, recovery } = this;
-    return highS(s) ? new Signature(r, modN(-s), recovery) : this;
-  }
   toBytes(format: ECDSASignatureFormat = SIG_COMPACT): Bytes {
     const { r, s, recovery } = this;
     const res = concatBytes(numTo32b(r), numTo32b(s));
@@ -521,86 +517,84 @@ const defaultSignOpts: ECDSASignOpts = {
   extraEntropy: false,
 };
 type Pred<T> = (v: Bytes) => T | undefined;
+const NULL = u8n(0);
+const byte0 = u8of(0x00);
+const byte1 = u8of(0x01);
+const _maxDrbg = 1000;
+const _drbgErr = 'drbg: tried max values';
 // HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
-const hmacDrbg = <T>(asynchronous: boolean) => {
+const hmacDrbg = <T>(seed: Bytes, pred: Pred<T>): T => {
   let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
   let k = u8n(L); // In our case, it's always equal to L
   let i = 0; // Iterations counter, will throw when over max
-  const NULL = u8n(0);
   const reset = () => {
     v.fill(1);
     k.fill(0);
-    i = 0;
   };
-  const max = 1000;
-  const _e = 'drbg: tried 1000 values';
-  if (asynchronous) {
-    // asynchronous=true
-    // h = hmac(K || V || ...)
-    const h = (...b: Bytes[]) => hashes.hmacSha256Async(k, concatBytes(v, ...b));
-    const reseed = async (seed = NULL) => {
-      // HMAC-DRBG reseed() function. Steps D-G
-      k = await h(u8of(0x00), seed); // k = hmac(K || V || 0x00 || seed)
-      v = await h(); // v = hmac(K || V)
-      if (seed.length === 0) return;
-      k = await h(u8of(0x01), seed); // k = hmac(K || V || 0x01 || seed)
-      v = await h(); // v = hmac(K || V)
-    };
-    // HMAC-DRBG generate() function
-    const gen = async () => {
-      if (i++ >= max) err(_e);
-      v = await h(); // v = hmac(K || V)
-      return v; // this diverges from noble-curves: we don't allow arbitrary output len!
-    };
-    // Do not reuse returned fn for more than 1 sig:
-    // 1) it's slower (JIT screws up). 2. unsafe (async race conditions)
-    return async (seed: Bytes, pred: Pred<T>): Promise<T> => {
-      reset();
-      await reseed(seed); // Steps D-G
-      let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
-      while (!(res = pred(await gen()))) await reseed(); // test predicate until it returns ok
-      reset();
-      return res!;
-    };
-  } else {
-    // asynchronous=false; same as above, but synchronous
-    // h = hmac(K || V || ...)
-    const h = (...b: Bytes[]) => callHash('hmacSha256')(k, concatBytes(v, ...b));
-    const reseed = (seed = NULL) => {
-      // HMAC-DRBG reseed() function. Steps D-G
-      k = h(u8of(0x00), seed); // k = hmac(k || v || 0x00 || seed)
-      v = h(); // v = hmac(k || v)
-      if (seed.length === 0) return;
-      k = h(u8of(0x01), seed); // k = hmac(k || v || 0x01 || seed)
-      v = h(); // v = hmac(k || v)
-    };
-    // HMAC-DRBG generate() function
-    const gen = () => {
-      if (i++ >= max) err(_e);
-      v = h(); // v = hmac(k || v)
-      return v; // this diverges from noble-curves: we don't allow arbitrary output len!
-    };
-    // Do not reuse returned fn for more than 1 sig:
-    // 1) it's slower (JIT screws up). 2. unsafe (async race conditions)
-    return (seed: Bytes, pred: Pred<T>): T => {
-      reset();
-      reseed(seed); // Steps D-G
-      let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
-      while (!(res = pred(gen()))) reseed(); // test predicate until it returns ok
-      reset();
-      return res!;
-    };
-  }
+  // h = hmac(K || V || ...)
+  const h = (...b: Bytes[]) => callHash('hmacSha256')(k, concatBytes(v, ...b));
+  const reseed = (seed = NULL) => {
+    // HMAC-DRBG reseed() function. Steps D-G
+    k = h(byte0, seed); // k = hmac(k || v || 0x00 || seed)
+    v = h(); // v = hmac(k || v)
+    if (seed.length === 0) return;
+    k = h(byte1, seed); // k = hmac(k || v || 0x01 || seed)
+    v = h(); // v = hmac(k || v)
+  };
+  // HMAC-DRBG generate() function
+  const gen = () => {
+    if (i++ >= _maxDrbg) err(_drbgErr);
+    v = h(); // v = hmac(k || v)
+    return v; // this diverges from noble-curves: we don't allow arbitrary output len!
+  };
+  reset();
+  reseed(seed); // Steps D-G
+  let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+  while (!(res = pred(gen()))) reseed(); // test predicate until it returns ok
+  reset();
+  return res!;
+};
+
+const hmacDrbgAsync = async <T>(seed: Bytes, pred: Pred<T>): Promise<T> => {
+  let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
+  let k = u8n(L); // In our case, it's always equal to L
+  let i = 0; // Iterations counter, will throw when over max
+  const reset = () => {
+    v.fill(1);
+    k.fill(0);
+  };
+  // h = hmac(K || V || ...)
+  const h = (...b: Bytes[]) => hashes.hmacSha256Async(k, concatBytes(v, ...b));
+  const reseed = async (seed = NULL) => {
+    // HMAC-DRBG reseed() function. Steps D-G
+    k = await h(byte0, seed); // k = hmac(K || V || 0x00 || seed)
+    v = await h(); // v = hmac(K || V)
+    if (seed.length === 0) return;
+    k = await h(byte1, seed); // k = hmac(K || V || 0x01 || seed)
+    v = await h(); // v = hmac(K || V)
+  };
+  // HMAC-DRBG generate() function
+  const gen = async () => {
+    if (i++ >= _maxDrbg) err(_drbgErr);
+    v = await h(); // v = hmac(K || V)
+    return v; // this diverges from noble-curves: we don't allow arbitrary output len!
+  };
+  reset();
+  await reseed(seed); // Steps D-G
+  let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+  while (!(res = pred(await gen()))) await reseed(); // test predicate until it returns ok
+  reset();
+  return res!;
 };
 
 // RFC6979 signature generation, preparation step.
 // Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.2 & RFC6979.
-const _sign = (
-  asynchronous: boolean,
+const _sign = <T>(
   messageHash: Bytes,
   secretKey: Bytes,
-  opts: ECDSASignOpts
-) => {
+  opts: ECDSASignOpts,
+  hmacDrbg: (seed: Bytes, pred: Pred<Bytes>) => T
+): T => {
   let { lowS, extraEntropy } = opts; // generates low-s sigs by default
   // RFC6979 3.2: we skip step A
   const int2octets = numTo32b; // int to octets
@@ -646,8 +640,7 @@ const _sign = (
     const sig = new Signature(r, normS, recovery) as RecoveredSignature; // use normS, not s
     return sig.toBytes(opts.format);
   };
-  // const { seed, k2sig } = prepSig(message, secretKey, opts);
-  return hmacDrbg<Bytes>(asynchronous)(seed, k2sig);
+  return hmacDrbg(seed, k2sig);
 };
 
 // Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
@@ -704,7 +697,7 @@ const callPrehash = (asynchronous: boolean, message: Bytes, opts: { prehash?: bo
 const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes => {
   opts = setDefaults(opts);
   message = callPrehash(false, message, opts);
-  return _sign(false, message, secretKey, opts) as Bytes;
+  return _sign(message, secretKey, opts, hmacDrbg);
 };
 
 /**
@@ -727,7 +720,7 @@ const signAsync = async (
 ): Promise<Bytes> => {
   opts = setDefaults(opts);
   message = await callPrehash(true, message, opts);
-  return _sign(true, message, secretKey, opts) as Promise<Bytes>;
+  return _sign(message, secretKey, opts, hmacDrbgAsync);
 };
 
 /**
@@ -976,17 +969,18 @@ const signAsyncSchnorr = async (
   return sig;
 };
 
-const finishVerif = (P: Point, r: bigint, s: bigint, e: bigint) => {
-  const { x, y } = doubleScalarMulUns(P, s, modN(-e)).toAffine(); // R = s⋅G - e⋅P
-  if (!isEven(y) || x !== r) return false; // -eP == (n-e)P
-  return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
+// const finishVerif = (P_: Point, r: bigint, s: bigint, e: bigint) => {};
+
+type MaybePromise<T> = T | Promise<T>;
+const callSyncAsyncFn = <T, O>(res: MaybePromise<T>, later: (res2: T) => O) => {
+  return res instanceof Promise ? res.then(later) : later(res);
 };
 
 const _verifSchnorr = (
-  asynchronous: boolean,
   signature: Bytes,
   message: Bytes,
-  publicKey: Bytes
+  publicKey: Bytes,
+  challengeFn: (...args: Bytes[]) => bigint | Promise<bigint>
 ): boolean | Promise<boolean> => {
   const sig = abytes(signature, L2, 'signature');
   const msg = abytes(message, undefined, 'message');
@@ -1007,8 +1001,12 @@ const _verifSchnorr = (
     const s = sliceBytesNumBE(sig, L, L2); // Let s = int(sig[32:64]); fail if s ≥ n.
     arange(s, 1n, N);
     const i = concatBytes(numTo32b(r), px, msg);
-    if (asynchronous) return challengeAsync(i).then((e) => finishVerif(P_, r, s, e));
-    return finishVerif(P_, r, s, challenge(i)); // int(challenge(bytes(r)||bytes(P)||m))%n
+    // int(challenge(bytes(r)||bytes(P)||m))%n
+    return callSyncAsyncFn(challengeFn(i), (e) => {
+      const { x, y } = doubleScalarMulUns(P_, s, modN(-e)).toAffine(); // R = s⋅G - e⋅P
+      if (!isEven(y) || x !== r) return false; // -eP == (n-e)P
+      return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
+    });
   } catch (error) {
     return false;
   }
@@ -1019,20 +1017,26 @@ const _verifSchnorr = (
  * Will swallow errors & return false except for initial type validation of arguments.
  */
 const verifySchnorr = (s: Bytes, m: Bytes, p: Bytes): boolean =>
-  _verifSchnorr(false, s, m, p) as boolean;
+  _verifSchnorr(s, m, p, challenge) as boolean;
 const verifyAsyncSchnorr = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
-  _verifSchnorr(true, s, m, p) as Promise<boolean>;
+  _verifSchnorr(s, m, p, challengeAsync) as Promise<boolean>;
 
 const schnorr: {
   getPublicKey: typeof pubSchnorr;
   sign: typeof signSchnorr;
   verify: typeof verifySchnorr;
-  signAsync: typeof signAsyncSchnorr;
-  verifyAsync: typeof verifyAsyncSchnorr;
 } = {
   getPublicKey: pubSchnorr,
   sign: signSchnorr,
   verify: verifySchnorr,
+};
+
+const schnorrAsync: {
+  getPublicKey: typeof pubSchnorr;
+  signAsync: typeof signAsyncSchnorr;
+  verifyAsync: typeof verifyAsyncSchnorr;
+} = {
+  getPublicKey: pubSchnorr,
   signAsync: signAsyncSchnorr,
   verifyAsync: verifyAsyncSchnorr,
 };
@@ -1125,10 +1129,12 @@ export {
   recoverPublicKey,
   recoverPublicKeyAsync,
   schnorr,
+  schnorrAsync,
   sign,
   signAsync,
   Signature,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+
