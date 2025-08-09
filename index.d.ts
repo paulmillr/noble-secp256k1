@@ -1,5 +1,5 @@
 /** Alias to Uint8Array. */
-export type Bytes = Uint8Array;
+export type Bytes = Uint8Array<any>;
 /** Signature instance, which allows recovering pubkey from it. */
 export type RecoveredSignature = Signature & {
     recovery: number;
@@ -244,4 +244,4 @@ declare const schnorrAsync: {
     signAsync: typeof signAsyncSchnorr;
     verifyAsync: typeof verifyAsyncSchnorr;
 };
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync, };

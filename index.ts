@@ -33,7 +33,7 @@ const lengths = {
   seed: L + L / 2,
 };
 /** Alias to Uint8Array. */
-export type Bytes = Uint8Array;
+export type Bytes = Uint8Array<any>;
 /** Signature instance, which allows recovering pubkey from it. */
 export type RecoveredSignature = Signature & { recovery: number };
 /** Weierstrass elliptic curve options. */
@@ -1135,6 +1135,5 @@ export {
   Signature,
   utils,
   verify,
-  verifyAsync
+  verifyAsync,
 };
-
