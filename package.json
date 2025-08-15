@@ -21,7 +21,6 @@
     "build": "tsc",
     "build:release": "npx --no @paulmillr/jsbt esbuild test/build",
     "bench": "node test/benchmark.ts",
-    "lint": "prettier --check 'index.ts' 'test/*.{js,ts}'",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/index.ts",
     "test:bun": "bun test/index.ts",
