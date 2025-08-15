@@ -7,11 +7,16 @@
     "index.d.ts",
     "index.ts"
   ],
-  "type": "module",
-  "main": "index.js",
-  "module": "index.js",
-  "types": "index.d.ts",
-  "sideEffects": false,
+  "devDependencies": {
+    "@noble/hashes": "2.0.0-beta.3",
+    "@paulmillr/jsbt": "0.4.1",
+    "@types/node": "24.2.1",
+    "fast-check": "4.2.0",
+    "micro-bmark": "0.4.2",
+    "micro-should": "0.5.3",
+    "prettier": "3.6.2",
+    "typescript": "5.9.2"
+  },
   "scripts": {
     "build": "tsc",
     "build:release": "npx --no @paulmillr/jsbt esbuild test/build",
@@ -22,23 +27,6 @@
     "test:bun": "bun test/index.ts",
     "test:deno": "deno --allow-env --allow-read test/index.ts",
     "test:node20": "cd test; npx tsc; node compiled/test/index.js"
-  },
-  "author": "Paul Miller (https://paulmillr.com)",
-  "homepage": "https://paulmillr.com/noble/",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/paulmillr/noble-secp256k1.git"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "@noble/hashes": "2.0.0-beta.3",
-    "@paulmillr/jsbt": "0.4.1",
-    "@types/node": "24.2.1",
-    "fast-check": "4.2.0",
-    "micro-bmark": "0.4.2",
-    "micro-should": "0.5.3",
-    "prettier": "3.6.2",
-    "typescript": "5.9.2"
   },
   "keywords": [
     "secp256k1",
@@ -54,5 +42,17 @@
     "bitcoin",
     "ethereum"
   ],
-  "funding": "https://paulmillr.com/funding/"
+  "homepage": "https://paulmillr.com/noble/",
+  "funding": "https://paulmillr.com/funding/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulmillr/noble-secp256k1.git"
+  },
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
+  "sideEffects": false,
+  "author": "Paul Miller (https://paulmillr.com)",
+  "license": "MIT"
 }
