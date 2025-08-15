@@ -143,11 +143,11 @@ const apoint = (p) => (p instanceof Point ? p : err('Point expected'));
 // -----------------
 /** secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0, making it x³+b */
 const koblitz = (x) => M(M(x * x) * x + _b);
-/** assert is field element, including 0 */
+/** assert is element of field mod P (incl. 0) */
 const FpIsValid = (n) => arange(n, 0n, P);
-/** assert is field element and not 0 */
+/** assert is element of field mod P (excl. 0) */
 const FpIsValidNot0 = (n) => arange(n, 1n, P);
-/** assert is group elem */
+/** assert is element of field mod N (excl. 0) */
 const FnIsValidNot0 = (n) => arange(n, 1n, N);
 const isEven = (y) => (y & 1n) === 0n;
 /** create Uint8Array of byte n */
@@ -514,11 +514,11 @@ const hashes = {
     sha256Async: async (msg) => u8n(await subtle().digest(_sha, msg)),
     sha256: undefined,
 };
-const callPrehash = (asynchronous, message, opts) => {
-    abytes(message, undefined, 'message');
+const prepMsg = (msg, opts, async_) => {
+    abytes(msg, undefined, 'message');
     if (!opts.prehash)
-        return message;
-    return asynchronous ? hashes.sha256Async(message) : callHash('sha256')(message);
+        return msg;
+    return async_ ? hashes.sha256Async(msg) : callHash('sha256')(msg);
 };
 const NULL = u8n(0);
 const byte0 = u8of(0x00);
@@ -560,6 +560,7 @@ const hmacDrbg = (seed, pred) => {
     reset();
     return res;
 };
+// Identical to hmacDrbg, but async: uses built-in WebCrypto
 const hmacDrbgAsync = async (seed, pred) => {
     let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
     let k = u8n(L); // In our case, it's always equal to L
@@ -695,7 +696,7 @@ const setDefaults = (opts) => {
  */
 const sign = (message, secretKey, opts = {}) => {
     opts = setDefaults(opts);
-    message = callPrehash(false, message, opts);
+    message = prepMsg(message, opts, false);
     return _sign(message, secretKey, opts, hmacDrbg);
 };
 /**
@@ -713,14 +714,14 @@ const sign = (message, secretKey, opts = {}) => {
  */
 const signAsync = async (message, secretKey, opts = {}) => {
     opts = setDefaults(opts);
-    message = await callPrehash(true, message, opts);
+    message = await prepMsg(message, opts, true);
     return _sign(message, secretKey, opts, hmacDrbgAsync);
 };
 /**
  * Verify a signature using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
- * @param signature - signature, default is 64-byte "compact" format
- * @param message - message which has been signed
- * @param publicKey - public key
+ * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param message - message which was signed. Keep in mind `prehash` from opts.
+ * @param publicKey - public key which
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
@@ -733,14 +734,14 @@ const signAsync = async (message, secretKey, opts = {}) => {
  */
 const verify = (signature, message, publicKey, opts = {}) => {
     opts = setDefaults(opts);
-    message = callPrehash(false, message, opts);
+    message = prepMsg(message, opts, false);
     return _verify(signature, message, publicKey, opts);
 };
 /**
  * Verify a signature using secp256k1. Async: uses built-in WebCrypto hashes.
- * @param signature - signature, default is 64-byte "compact" format
- * @param message - message which has been signed
- * @param publicKey - public key
+ * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param message - message which was signed. Keep in mind `prehash` from opts.
+ * @param publicKey - public key which
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
@@ -753,7 +754,7 @@ const verify = (signature, message, publicKey, opts = {}) => {
  */
 const verifyAsync = async (sig, message, publicKey, opts = {}) => {
     opts = setDefaults(opts);
-    message = await callPrehash(true, message, opts);
+    message = await prepMsg(message, opts, true);
     return _verify(sig, message, publicKey, opts);
 };
 const _recover = (signature, messageHash) => {
@@ -779,11 +780,11 @@ const _recover = (signature, messageHash) => {
  * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
  */
 const recoverPublicKey = (signature, message, opts = {}) => {
-    message = callPrehash(false, message, setDefaults(opts));
+    message = prepMsg(message, setDefaults(opts), false);
     return _recover(signature, message);
 };
 const recoverPublicKeyAsync = async (signature, message, opts = {}) => {
-    message = await callPrehash(true, message, setDefaults(opts));
+    message = await prepMsg(message, setDefaults(opts), true);
     return _recover(signature, message);
 };
 /**

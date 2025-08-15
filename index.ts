@@ -79,7 +79,7 @@ const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
   return value;
 };
 /** create Uint8Array */
-const u8n = (len: number): Uint8Array => new Uint8Array(len);
+const u8n = (len: number): Bytes => new Uint8Array(len);
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 const bytesToHex = (b: Bytes): string =>
   Array.from(abytes(b))
@@ -162,15 +162,15 @@ export type AffinePoint = {
 
 /** secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0, making it x³+b */
 const koblitz = (x: bigint) => M(M(x * x) * x + _b);
-/** assert is field element, including 0 */
+/** assert is element of field mod P (incl. 0) */
 const FpIsValid = (n: bigint) => arange(n, 0n, P);
-/** assert is field element and not 0 */
+/** assert is element of field mod P (excl. 0) */
 const FpIsValidNot0 = (n: bigint) => arange(n, 1n, P);
-/** assert is group elem */
+/** assert is element of field mod N (excl. 0) */
 const FnIsValidNot0 = (n: bigint) => arange(n, 1n, N);
 const isEven = (y: bigint) => (y & 1n) === 0n;
 /** create Uint8Array of byte n */
-const u8of = (n: number) => Uint8Array.of(n);
+const u8of = (n: number): Bytes => Uint8Array.of(n);
 const getPrefix = (y: bigint) => u8of(isEven(y) ? 0x02 : 0x03);
 /** lift_x from BIP340 calculates square root. Validates x, then validates root*root. */
 const lift_x = (x: bigint) => {
@@ -559,10 +559,10 @@ const hashes = {
   sha256: undefined as undefined | ((message: Bytes) => Bytes),
 };
 
-const callPrehash = (asynchronous: boolean, message: Bytes, opts: { prehash?: boolean }) => {
-  abytes(message, undefined, 'message');
-  if (!opts.prehash) return message;
-  return asynchronous ? hashes.sha256Async(message) : callHash('sha256')(message);
+const prepMsg = (msg: Bytes, opts: ECDSARecoverOpts, async_: boolean): Bytes | Promise<Bytes> => {
+  abytes(msg, undefined, 'message');
+  if (!opts.prehash) return msg;
+  return async_ ? hashes.sha256Async(msg) : callHash('sha256')(msg);
 };
 
 type Pred<T> = (v: Bytes) => T | undefined;
@@ -572,7 +572,7 @@ const byte1 = u8of(0x01);
 const _maxDrbgIters = 1000;
 const _drbgErr = 'drbg: tried max amount of iterations';
 // HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
-const hmacDrbg = <T>(seed: Bytes, pred: Pred<T>): T => {
+const hmacDrbg = (seed: Bytes, pred: Pred<Bytes>): Bytes => {
   let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
   let k = u8n(L); // In our case, it's always equal to L
   let i = 0; // Iterations counter, will throw when over max
@@ -598,13 +598,14 @@ const hmacDrbg = <T>(seed: Bytes, pred: Pred<T>): T => {
   };
   reset();
   reseed(seed); // Steps D-G
-  let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+  let res: Bytes | undefined = undefined; // Step H: grind until k is in [1..n-1]
   while (!(res = pred(gen()))) reseed(); // test predicate until it returns ok
   reset();
   return res!;
 };
 
-const hmacDrbgAsync = async <T>(seed: Bytes, pred: Pred<T>): Promise<T> => {
+// Identical to hmacDrbg, but async: uses built-in WebCrypto
+const hmacDrbgAsync = async (seed: Bytes, pred: Pred<Bytes>): Promise<Bytes> => {
   let v = u8n(L); // Steps B, C of RFC6979 3.2: set hashLen
   let k = u8n(L); // In our case, it's always equal to L
   let i = 0; // Iterations counter, will throw when over max
@@ -630,7 +631,7 @@ const hmacDrbgAsync = async <T>(seed: Bytes, pred: Pred<T>): Promise<T> => {
   };
   reset();
   await reseed(seed); // Steps D-G
-  let res: T | undefined = undefined; // Step H: grind until k is in [1..n-1]
+  let res: Bytes | undefined = undefined; // Step H: grind until k is in [1..n-1]
   while (!(res = pred(await gen()))) await reseed(); // test predicate until it returns ok
   reset();
   return res!;
@@ -739,7 +740,7 @@ const setDefaults = (opts: ECDSASignOpts): Required<ECDSASignOpts> => {
  */
 const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes => {
   opts = setDefaults(opts);
-  message = callPrehash(false, message, opts);
+  message = prepMsg(message, opts, false) as Bytes;
   return _sign(message, secretKey, opts, hmacDrbg);
 };
 
@@ -762,15 +763,15 @@ const signAsync = async (
   opts: ECDSASignOpts = {}
 ): Promise<Bytes> => {
   opts = setDefaults(opts);
-  message = await callPrehash(true, message, opts);
+  message = await prepMsg(message, opts, true);
   return _sign(message, secretKey, opts, hmacDrbgAsync);
 };
 
 /**
  * Verify a signature using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
- * @param signature - signature, default is 64-byte "compact" format
- * @param message - message which has been signed
- * @param publicKey - public key
+ * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param message - message which was signed. Keep in mind `prehash` from opts.
+ * @param publicKey - public key which
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
@@ -788,15 +789,15 @@ const verify = (
   opts: ECDSAVerifyOpts = {}
 ): boolean => {
   opts = setDefaults(opts);
-  message = callPrehash(false, message, opts);
+  message = prepMsg(message, opts, false) as Bytes;
   return _verify(signature, message, publicKey, opts);
 };
 
 /**
  * Verify a signature using secp256k1. Async: uses built-in WebCrypto hashes.
- * @param signature - signature, default is 64-byte "compact" format
- * @param message - message which has been signed
- * @param publicKey - public key
+ * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param message - message which was signed. Keep in mind `prehash` from opts.
+ * @param publicKey - public key which
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
@@ -814,7 +815,7 @@ const verifyAsync = async (
   opts: ECDSAVerifyOpts = {}
 ): Promise<boolean> => {
   opts = setDefaults(opts);
-  message = await callPrehash(true, message, opts);
+  message = await prepMsg(message, opts, true);
   return _verify(sig, message, publicKey, opts);
 };
 
@@ -842,7 +843,7 @@ const _recover = (signature: Bytes, messageHash: Bytes) => {
  * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
  */
 const recoverPublicKey = (signature: Bytes, message: Bytes, opts: ECDSARecoverOpts = {}): Bytes => {
-  message = callPrehash(false, message, setDefaults(opts));
+  message = prepMsg(message, setDefaults(opts), false) as Bytes;
   return _recover(signature, message);
 };
 
@@ -851,7 +852,7 @@ const recoverPublicKeyAsync = async (
   message: Bytes,
   opts: ECDSARecoverOpts = {}
 ): Promise<Bytes> => {
-  message = await callPrehash(true, message, setDefaults(opts));
+  message = await prepMsg(message, setDefaults(opts), true);
   return _recover(signature, message);
 };
 
@@ -1166,5 +1167,6 @@ export {
   Signature,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+

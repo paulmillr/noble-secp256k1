@@ -183,9 +183,9 @@ declare const sign: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts) => 
 declare const signAsync: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts) => Promise<Bytes>;
 /**
  * Verify a signature using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
- * @param signature - signature, default is 64-byte "compact" format
- * @param message - message which has been signed
- * @param publicKey - public key
+ * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param message - message which was signed. Keep in mind `prehash` from opts.
+ * @param publicKey - public key which
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
@@ -199,9 +199,9 @@ declare const signAsync: (message: Bytes, secretKey: Bytes, opts?: ECDSASignOpts
 declare const verify: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: ECDSAVerifyOpts) => boolean;
 /**
  * Verify a signature using secp256k1. Async: uses built-in WebCrypto hashes.
- * @param signature - signature, default is 64-byte "compact" format
- * @param message - message which has been signed
- * @param publicKey - public key
+ * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param message - message which was signed. Keep in mind `prehash` from opts.
+ * @param publicKey - public key which
  * @param opts - see {@link ECDSAVerifyOpts} for details.
  * @example
  * ```js
