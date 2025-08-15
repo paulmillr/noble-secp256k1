@@ -122,6 +122,7 @@ const concatBytes = (...arrs: Bytes[]): Bytes => {
 const randomBytes = (len: number = L): Bytes => {
   const c = cr();
   return c.getRandomValues(u8n(len));
+
 };
 const big = BigInt;
 const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range'): bigint =>
@@ -1167,5 +1168,6 @@ export {
   Signature,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+
