@@ -40,8 +40,6 @@ it was created for the article [Learning fast elliptic-curve cryptography](https
 
 > `deno add jsr:@noble/secp256k1`
 
-> `deno doc jsr:@noble/secp256k1` # command-line documentation
-
 We support all major platforms and runtimes. For React Native, additional polyfills are needed: see below.
 
 ```js
