@@ -1,5 +1,5 @@
+import { describe, should } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
-import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
 import * as secp256k1 from '../index.ts';
 import './secp256k1.helpers.ts';

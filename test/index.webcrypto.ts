@@ -1,4 +1,4 @@
-import { should } from 'micro-should';
+import { should } from '@paulmillr/jsbt/test.js';
 import './basic.test.js';
 import './secp256k1.test.js';
 import './utils.test.js';

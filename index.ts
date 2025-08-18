@@ -1167,6 +1167,5 @@ export {
   Signature,
   utils,
   verify,
-  verifyAsync
+  verifyAsync,
 };
-

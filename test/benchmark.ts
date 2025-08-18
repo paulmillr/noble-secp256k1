@@ -1,6 +1,6 @@
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import mark from 'micro-bmark';
+import mark from '@paulmillr/jsbt/bench.js';
 import * as curve from '../index.ts';
 
 (async () => {
@@ -8,12 +8,16 @@ import * as curve from '../index.ts';
   curve.hashes.hmacSha256 = (k, m) => hmac(sha256, k, m);
   let keys, bobKeys, sig, sigr;
   const msg = new TextEncoder().encode('hello noble');
-  await mark('init', 1, () => {
-    keys = curve.keygen();
-    bobKeys = curve.keygen();
-    sig = curve.sign(msg, keys.secretKey);
-    sigr = curve.sign(msg, keys.secretKey, { format: 'recovered' });
-  });
+  await mark(
+    'init',
+    () => {
+      keys = curve.keygen();
+      bobKeys = curve.keygen();
+      sig = curve.sign(msg, keys.secretKey);
+      sigr = curve.sign(msg, keys.secretKey, { format: 'recovered' });
+    },
+    1
+  );
   await mark('keygen', () => curve.keygen());
   await mark('sign', () => curve.sign(msg, keys.secretKey));
   await mark('verify', () => curve.verify(sig, msg, keys.publicKey));
