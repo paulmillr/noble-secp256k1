@@ -805,10 +805,11 @@ const randomSecretKey = (seed = randomBytes(lengths.seed)) => {
     const num = M(bytesToNumBE(seed), N - 1n);
     return numTo32b(num + 1n);
 };
-const keygen = (seed) => {
+const createKeygen = (getPublicKey) => (seed) => {
     const secretKey = randomSecretKey(seed);
     return { secretKey, publicKey: getPublicKey(secretKey) };
 };
+const keygen = createKeygen(getPublicKey);
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
     hexToBytes: hexToBytes,
@@ -863,6 +864,7 @@ const challengeAsync = async (...args) => bytesModN(await taggedHashAsync(T_CHAL
 const pubSchnorr = (secretKey) => {
     return extpubSchnorr(secretKey).px; // d'=int(sk). Fail if d'=0 or d'≥n. Ret bytes(d'⋅G)
 };
+const keygenSchnorr = createKeygen(pubSchnorr);
 // Common preparation fn for both sync and async signing
 const prepSigSchnorr = (message, secretKey, auxRand) => {
     const { px, d } = extpubSchnorr(secretKey);
@@ -900,7 +902,7 @@ const signSchnorr = (message, secretKey, auxRand = randomBytes(L)) => {
         err(E_INVSIG);
     return sig;
 };
-const signAsyncSchnorr = async (message, secretKey, auxRand = randomBytes(L)) => {
+const signSchnorrAsync = async (message, secretKey, auxRand = randomBytes(L)) => {
     const { m, px, d, a } = prepSigSchnorr(message, secretKey, auxRand);
     const aux = await taggedHashAsync(T_AUX, a);
     // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
@@ -912,7 +914,7 @@ const signAsyncSchnorr = async (message, secretKey, auxRand = randomBytes(L)) =>
     const e = await challengeAsync(rx, px, m);
     const sig = createSigSchnorr(k, rx, e, d);
     // If Verify(bytes(P), m, sig) (see below) returns failure, abort
-    if (!(await verifyAsyncSchnorr(sig, m, px)))
+    if (!(await verifySchnorrAsync(sig, m, px)))
         err(E_INVSIG);
     return sig;
 };
@@ -956,16 +958,14 @@ const _verifSchnorr = (signature, message, publicKey, challengeFn) => {
  * Will swallow errors & return false except for initial type validation of arguments.
  */
 const verifySchnorr = (s, m, p) => _verifSchnorr(s, m, p, challenge);
-const verifyAsyncSchnorr = async (s, m, p) => _verifSchnorr(s, m, p, challengeAsync);
+const verifySchnorrAsync = async (s, m, p) => _verifSchnorr(s, m, p, challengeAsync);
 const schnorr = {
+    keygen: keygenSchnorr,
     getPublicKey: pubSchnorr,
     sign: signSchnorr,
     verify: verifySchnorr,
-};
-const schnorrAsync = {
-    getPublicKey: pubSchnorr,
-    signAsync: signAsyncSchnorr,
-    verifyAsync: verifyAsyncSchnorr,
+    signAsync: signSchnorrAsync,
+    verifyAsync: verifySchnorrAsync,
 };
 // ## Precomputes
 // --------------
@@ -1043,4 +1043,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export below to easily use in REPL / browser console
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };

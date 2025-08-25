@@ -206,6 +206,23 @@ const publicKey2 = secp.recoverPublicKey(sigR, keccak256(msg), { prehash: false 
 
 Recover public key from Signature instance with `recovery` bit set.
 
+### schnorr
+
+```ts
+import { schnorr } from '@noble/secp256k1';
+const { secretKey, publicKey } = schnorr.keygen();
+const msg = new TextEncoder().encode('hello noble');
+const sig = schnorr.sign(msg, secretKey);
+const isValid = schnorr.verify(sig, msg, publicKey);
+
+const sig = await schnorr.signAsync(msg, secretKey);
+const isValid = await schnorr.verifyAsync(sig, msg, publicKey);
+```
+
+Schnorr
+signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
+are supported.
+
 ### utils
 
 A bunch of useful **utilities** are also exposed:
@@ -326,9 +343,39 @@ Point.fromBytes x 13,656 ops/sec @ 73μs/op
 
 ## Upgrading
 
+### v2 to v3
+
+v3 brings the package closer to noble-curves v2.
+
+- Add Schnorr signatures
+- Most methods now expect Uint8Array, string hex inputs are prohibited
+- Add `keygen`, `keygenAsync` method
+- sign, verify: Switch to **prehashed messages**. Instead of
+  messageHash, the methods now expect unhashed message.
+  To bring back old behavior, use option `{prehash: false}`
+- sign, verify: Switch to **Uint8Array signatures** (format: 'compact') by default.
+- verify: **der format must be explicitly specified** in `{format: 'der'}`.
+  This reduces malleability
+- verify: **prohibit Signature-instance** signature. User must now always do
+  `signature.toBytes()`
+- Node v20.19 is now the minimum required version
+- Various small changes for types
+- etc: hashes are now set in `hashes` object. Also sha256 needs to be set now for `prehash: true`:
+
+```js
+// before
+// etc.hmacSha256Sync = (key, ...messages) => hmac(sha256, key, etc.concatBytes(...messages));
+// etc.hmacSha256Async = (key, ...messages) => Promise.resolve(etc.hmacSha256Sync(key, ...messages));
+// after
+hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+hashes.sha256 = sha256;
+hashes.hmacSha256Async = async (key, msg) => hmac(sha256, key, msg);
+hashes.sha256Async = async (msg) => sha256(msg);
+```
+
 ### v1 to v2
 
-noble-secp256k1 v2 improves security and reduces attack surface.
+v2 improves security and reduces attack surface.
 The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
 - Disable some features to ensure 4x smaller than v1, 5KB bundle size:

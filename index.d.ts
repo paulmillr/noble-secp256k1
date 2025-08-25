@@ -230,7 +230,8 @@ type KeysSecPub = {
     secretKey: Bytes;
     publicKey: Bytes;
 };
-declare const keygen: (seed?: Bytes) => KeysSecPub;
+type KeygenFn = (seed?: Bytes) => KeysSecPub;
+declare const keygen: KeygenFn;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
     hexToBytes: (hex: string) => Bytes;
@@ -254,26 +255,25 @@ declare const utils: {
  * Schnorr public key is just `x` coordinate of Point as per BIP340.
  */
 declare const pubSchnorr: (secretKey: Bytes) => Bytes;
+declare const keygenSchnorr: KeygenFn;
 /**
  * Creates Schnorr signature as per BIP340. Verifies itself before returning anything.
  * auxRand is optional and is not the sole source of k generation: bad CSPRNG won't be dangerous.
  */
 declare const signSchnorr: (message: Bytes, secretKey: Bytes, auxRand?: Bytes) => Bytes;
-declare const signAsyncSchnorr: (message: Bytes, secretKey: Bytes, auxRand?: Bytes) => Promise<Bytes>;
+declare const signSchnorrAsync: (message: Bytes, secretKey: Bytes, auxRand?: Bytes) => Promise<Bytes>;
 /**
  * Verifies Schnorr signature.
  * Will swallow errors & return false except for initial type validation of arguments.
  */
 declare const verifySchnorr: (s: Bytes, m: Bytes, p: Bytes) => boolean;
-declare const verifyAsyncSchnorr: (s: Bytes, m: Bytes, p: Bytes) => Promise<boolean>;
+declare const verifySchnorrAsync: (s: Bytes, m: Bytes, p: Bytes) => Promise<boolean>;
 declare const schnorr: {
+    keygen: typeof keygenSchnorr;
     getPublicKey: typeof pubSchnorr;
     sign: typeof signSchnorr;
     verify: typeof verifySchnorr;
+    signAsync: typeof signSchnorrAsync;
+    verifyAsync: typeof verifySchnorrAsync;
 };
-declare const schnorrAsync: {
-    getPublicKey: typeof pubSchnorr;
-    signAsync: typeof signAsyncSchnorr;
-    verifyAsync: typeof verifyAsyncSchnorr;
-};
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, schnorrAsync, sign, signAsync, Signature, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync };

@@ -876,10 +876,12 @@ const randomSecretKey = (seed = randomBytes(lengths.seed)) => {
 };
 
 type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
-const keygen = (seed?: Bytes): KeysSecPub => {
+type KeygenFn = (seed?: Bytes) => KeysSecPub;
+const createKeygen = (getPublicKey: (secretKey: Bytes) => Bytes) => (seed?: Bytes): KeysSecPub => {
   const secretKey = randomSecretKey(seed);
   return { secretKey, publicKey: getPublicKey(secretKey) };
-};
+}
+const keygen: KeygenFn = createKeygen(getPublicKey);
 
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
@@ -942,6 +944,8 @@ const pubSchnorr = (secretKey: Bytes): Bytes => {
   return extpubSchnorr(secretKey).px; // d'=int(sk). Fail if d'=0 or d'≥n. Ret bytes(d'⋅G)
 };
 
+const keygenSchnorr: KeygenFn = createKeygen(pubSchnorr);
+
 // Common preparation fn for both sync and async signing
 const prepSigSchnorr = (message: Bytes, secretKey: Bytes, auxRand: Bytes) => {
   const { px, d } = extpubSchnorr(secretKey);
@@ -981,7 +985,7 @@ const signSchnorr = (message: Bytes, secretKey: Bytes, auxRand: Bytes = randomBy
   return sig;
 };
 
-const signAsyncSchnorr = async (
+const signSchnorrAsync = async (
   message: Bytes,
   secretKey: Bytes,
   auxRand: Bytes = randomBytes(L)
@@ -997,7 +1001,7 @@ const signAsyncSchnorr = async (
   const e = await challengeAsync(rx, px, m);
   const sig = createSigSchnorr(k, rx, e, d);
   // If Verify(bytes(P), m, sig) (see below) returns failure, abort
-  if (!(await verifyAsyncSchnorr(sig, m, px))) err(E_INVSIG);
+  if (!(await verifySchnorrAsync(sig, m, px))) err(E_INVSIG);
   return sig;
 };
 
@@ -1050,27 +1054,23 @@ const _verifSchnorr = (
  */
 const verifySchnorr = (s: Bytes, m: Bytes, p: Bytes): boolean =>
   _verifSchnorr(s, m, p, challenge) as boolean;
-const verifyAsyncSchnorr = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
+const verifySchnorrAsync = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
   _verifSchnorr(s, m, p, challengeAsync) as Promise<boolean>;
 
 const schnorr: {
+  keygen: typeof keygenSchnorr,
   getPublicKey: typeof pubSchnorr;
   sign: typeof signSchnorr;
   verify: typeof verifySchnorr;
+  signAsync: typeof signSchnorrAsync,
+  verifyAsync: typeof verifySchnorrAsync
 } = {
+  keygen: keygenSchnorr,
   getPublicKey: pubSchnorr,
   sign: signSchnorr,
   verify: verifySchnorr,
-};
-
-const schnorrAsync: {
-  getPublicKey: typeof pubSchnorr;
-  signAsync: typeof signAsyncSchnorr;
-  verifyAsync: typeof verifyAsyncSchnorr;
-} = {
-  getPublicKey: pubSchnorr,
-  signAsync: signAsyncSchnorr,
-  verifyAsync: verifyAsyncSchnorr,
+  signAsync: signSchnorrAsync,
+  verifyAsync: verifySchnorrAsync,
 };
 
 // ## Precomputes
@@ -1152,20 +1152,11 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
 // !! Remove the export below to easily use in REPL / browser console
 export {
   etc,
-  getPublicKey,
-  getSharedSecret,
-  hash,
-  hashes,
+  getPublicKey, getSharedSecret,
+  hash, hashes,
   keygen,
-  Point,
-  recoverPublicKey,
-  recoverPublicKeyAsync,
-  schnorr,
-  schnorrAsync,
-  sign,
-  signAsync,
-  Signature,
-  utils,
-  verify,
-  verifyAsync,
+  Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync,
+
+  Signature, utils, verify, verifyAsync
 };
+
