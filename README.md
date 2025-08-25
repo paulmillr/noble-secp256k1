@@ -368,11 +368,8 @@ The goal of v2 is to provide minimum possible JS library which is safe and fast.
 ## Contributing & testing
 
 - `npm install && npm run build && npm test` will build the code and run tests.
-- `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
+- `npm run bench` will run benchmarks
 - `npm run build:release` will build single non-module file
-
-Check out [github.com/paulmillr/guidelines](https://github.com/paulmillr/guidelines)
-for general coding practices and rules.
 
 See [paulmillr.com/noble](https://paulmillr.com/noble/)
 for useful resources, articles, documentation and demos
@@ -380,4 +377,8 @@ related to the library.
 
 ## License
 
-MIT (c) Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
+The MIT License (MIT)
+
+Copyright (c) 2019 Paul Miller [(https://paulmillr.com)](https://paulmillr.com)
+
+See LICENSE file.
