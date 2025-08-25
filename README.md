@@ -8,7 +8,7 @@ Fastest 5KB JS implementation of secp256k1 signatures & ECDH.
   signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 4.86KB (gzipped, elliptic.js is 10x larger, tiny-secp256k1 is 25x larger)
+- 🪶 4.94KB (gzipped, elliptic.js is 10x larger, tiny-secp256k1 is 25x larger)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
@@ -55,6 +55,15 @@ import * as secp from '@noble/secp256k1';
   const shared = secp.getSharedSecret(secretKey, bobsKeys.publicKey); // Diffie-Hellman
   const sigr = await secp.signAsync(msg, secretKey, { format: 'recovered' });
   const publicKey2 = secp.recoverPublicKey(sigr, msg);
+})();
+
+// Schnorr signatures from BIP340
+(async () => {
+  const schnorr = secp.schnorr;
+  const { secretKey, publicKey } = schnorr.keygen();
+  const msg = new TextEncoder().encode('hello noble');
+  const sig = await schnorr.signAsync(msg, secretKey);
+  const isValid = await schnorr.verifyAsync(sig, msg, publicKey);
 })();
 ```
 
