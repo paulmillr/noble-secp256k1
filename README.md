@@ -14,7 +14,7 @@ The module is a sister project of [noble-curves](https://github.com/paulmillr/no
 Use noble-secp256k1 if you need smaller attack surface & better auditability.
 Switch to noble-curves (drop-in) if you need features like MSM, DER encoding, custom point precomputes.
 
-898-byte version of the library is available for learning purposes in `test/misc/1kb.min.js`,
+898-byte version of the library is available for learning purposes in [`test/misc/1kb.min.js`](https://github.com/paulmillr/noble-secp256k1/blob/c38e57d17a2ecfdb9b8a80890a8e1a2cc140aa04/test/misc/1kb.min.js),
 it was created for the article [Learning fast elliptic-curve cryptography](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ cryptography
