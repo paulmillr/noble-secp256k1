@@ -10,11 +10,9 @@ Fastest 5KB JS implementation of secp256k1 signatures & ECDH.
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
 - 🪶 4.94KB (gzipped, elliptic.js is 10x larger, tiny-secp256k1 is 25x larger)
 
-The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
-focusing on smaller attack surface & better auditability.
-Curves are drop-in replacement and have more features:
-MSM, DER encoding, endomorphism, prehashing, custom point precomputes, hash-to-curve, oprf.
-To upgrade from earlier version, see [Upgrading](#upgrading).
+The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
+Use noble-secp256k1 if you need smaller attack surface & better auditability.
+Switch to noble-curves (drop-in) if you need features like MSM, DER encoding, custom point precomputes.
 
 898-byte version of the library is available for learning purposes in `test/misc/1kb.min.js`,
 it was created for the article [Learning fast elliptic-curve cryptography](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
@@ -80,6 +78,9 @@ secp.hashes.sha256 = sha256;
 ```
 
 ### React Native: polyfill getRandomValues and sha256
+
+React Native does not provide secure getRandomValues by default.
+This can't be securely polyfilled from our end, so one will need a RN-specific compile-time dep.
 
 ```ts
 import 'react-native-get-random-values';
@@ -373,8 +374,8 @@ v3 brings the package closer to noble-curves v2.
 
 ```js
 // before
-// etc.hmacSha256Sync = (key, ...messages) => hmac(sha256, key, etc.concatBytes(...messages));
-// etc.hmacSha256Async = (key, ...messages) => Promise.resolve(etc.hmacSha256Sync(key, ...messages));
+etc.hmacSha256Sync = (key, ...messages) => hmac(sha256, key, etc.concatBytes(...messages));
+etc.hmacSha256Async = (key, ...messages) => Promise.resolve(etc.hmacSha256Sync(key, ...messages));
 // after
 hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
 hashes.sha256 = sha256;
