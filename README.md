@@ -48,10 +48,16 @@ import * as secp from '@noble/secp256k1';
   const msg = new TextEncoder().encode('hello noble');
   const sig = await secp.signAsync(msg, secretKey);
   const isValid = await secp.verifyAsync(sig, msg, publicKey);
+})();
 
-  const bobsKeys = secp.keygen();
-  const shared = secp.getSharedSecret(secretKey, bobsKeys.publicKey); // Diffie-Hellman
-  const sigr = await secp.signAsync(msg, secretKey, { format: 'recovered' });
+// ECDH, key recovery
+(async () => {
+  const alice = secp.keygen();
+  const bob = secp.keygen();
+  const shared = secp.getSharedSecret(alice.secretKey, bob.publicKey);
+
+  // recovery
+  const sigr = await secp.signAsync(msg, alice.secretKey, { format: 'recovered' });
   const publicKey2 = secp.recoverPublicKey(sigr, msg);
 })();
 
@@ -309,7 +315,7 @@ Use low-level libraries & languages.
 For this package, there are 0 dependencies; and a few dev dependencies:
 
 - [noble-hashes](https://github.com/paulmillr/noble-hashes) provides cryptographic hashing functionality
-- micro-bmark, micro-should and jsbt are used for benchmarking / testing / build tooling and developed by the same author
+- jsbt is used for benchmarking / testing / build tooling and developed by the same author
 - prettier, fast-check and typescript are used for code quality / test generation / ts compilation. It's hard to audit their source code thoroughly and fully because of their size
 
 ### Randomness
