@@ -377,13 +377,24 @@ const secretKeyToScalar = (secretKey: Bytes): bigint => {
   const num = bytesToNumBE(abytes(secretKey, L, 'secret key'));
   return arange(num, 1n, N, 'invalid secret key: outside of range');
 };
-/** For Signature malleability, validates sig.s is bigger than N/2. */
+/** For Signature malleability, validates sig.s is bigger than N/2. 
+ * @param n - signature s value
+ * @returns true if s > N/2
+ */
 const highS = (n: bigint): boolean => n > N >> 1n;
-/** Creates 33/65-byte public key from 32-byte private key. */
+/** Creates 33/65-byte public key from 32-byte private key. 
+ * @param privKey - 32-byte private key
+ * @param isCompressed - whether to return compressed (33-byte) or uncompressed (65-byte) public key
+ * @returns public key in compressed or uncompressed format
+ */
 const getPublicKey = (privKey: Bytes, isCompressed = true): Bytes => {
   return G.multiply(secretKeyToScalar(privKey)).toBytes(isCompressed);
 };
 
+/** Check if a private key is valid 
+ * @param secretKey - private key to validate
+ * @returns true if the private key is valid
+ */
 const isValidSecretKey = (secretKey: Bytes): boolean => {
   try {
     return !!secretKeyToScalar(secretKey);
@@ -391,6 +402,11 @@ const isValidSecretKey = (secretKey: Bytes): boolean => {
     return false;
   }
 };
+/** Check if a public key is valid 
+ * @param publicKey - public key to validate
+ * @param isCompressed - whether the public key should be in compressed format
+ * @returns true if the public key is valid
+ */
 const isValidPublicKey = (publicKey: Bytes, isCompressed?: boolean): boolean => {
   const { publicKey: comp, publicKeyUncompressed } = lengths;
   try {
@@ -470,6 +486,7 @@ const bits2int = (bytes: Bytes): bigint => {
   const num = bytesToNumBE(bytes);
   return delta > 0 ? num >> big(delta) : num;
 };
+
 /** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
 const bits2int_modN = (bytes: Bytes): bigint => modN(bits2int(abytes(bytes)));
 /**
@@ -704,7 +721,7 @@ const _verify = (sig: Bytes, messageHash: Bytes, publicKey: Bytes, opts: ECDSAVe
     const h = bits2int_modN(messageHash); // Truncate hash
     const P = Point.fromBytes(publicKey); // Validate public key
     if (lowS && highS(s)) return false; // lowS bans sig.s >= CURVE.n/2
-    const is = invert(s, N); // s^-1
+    const is = invert(s, N); // s^-1 mod n
     const u1 = modN(h * is); // u1 = hs^-1 mod n
     const u2 = modN(r * is); // u2 = rs^-1 mod n
     const R = doubleScalarMulUns(P, u1, u2).toAffine(); // R = u1⋅G + u2⋅P
@@ -866,8 +883,11 @@ const getSharedSecret = (secretKeyA: Bytes, publicKeyB: Bytes, isCompressed = tr
   return Point.fromBytes(publicKeyB).multiply(secretKeyToScalar(secretKeyA)).toBytes(isCompressed);
 };
 
-// FIPS 186 B.4.1 compliant key generation produces private keys
-// with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
+/** FIPS 186 B.4.1 compliant key generation produces private keys
+ * with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
+ * @param seed - seed for key generation
+ * @returns 32-byte random secret key
+ */
 const randomSecretKey = (seed = randomBytes(lengths.seed)) => {
   abytes(seed);
   if (seed.length < lengths.seed || seed.length > 1024) err('expected 40-1024b');
@@ -877,6 +897,10 @@ const randomSecretKey = (seed = randomBytes(lengths.seed)) => {
 
 type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
 type KeygenFn = (seed?: Bytes) => KeysSecPub;
+/** Create a key generation function
+ * @param getPublicKey - function to generate public key from private key
+ * @returns key generation function
+ */
 const createKeygen = (getPublicKey: (secretKey: Bytes) => Bytes) => (seed?: Bytes): KeysSecPub => {
   const secretKey = randomSecretKey(seed);
   return { secretKey, publicKey: getPublicKey(secretKey) };
@@ -939,19 +963,35 @@ const challengeAsync = async (...args: Bytes[]): Promise<bigint> =>
 
 /**
  * Schnorr public key is just `x` coordinate of Point as per BIP340.
+ * @param secretKey - 32-byte private key
+ * @returns 32-byte public key (x-coordinate only)
  */
 const pubSchnorr = (secretKey: Bytes): Bytes => {
   return extpubSchnorr(secretKey).px; // d'=int(sk). Fail if d'=0 or d'≥n. Ret bytes(d'⋅G)
 };
 
+/** Key generation function for Schnorr signatures
+ * @param seed - optional seed for key generation
+ * @returns object containing secretKey and publicKey
+ */
 const keygenSchnorr: KeygenFn = createKeygen(pubSchnorr);
 
 // Common preparation fn for both sync and async signing
+/** Prepare data for Schnorr signature creation
+ * @param message - message to sign
+ * @param secretKey - private key
+ * @param auxRand - auxiliary random data
+ * @returns prepared data for signing
+ */
 const prepSigSchnorr = (message: Bytes, secretKey: Bytes, auxRand: Bytes) => {
   const { px, d } = extpubSchnorr(secretKey);
   return { m: abytes(message), px, d, a: abytes(auxRand, L) };
 };
 
+/** Extract k value for Schnorr signatures
+ * @param rand - random bytes
+ * @returns object with rx (x-coordinate) and k (scalar)
+ */
 const extractK = (rand: Bytes) => {
   const k_ = bytesModN(rand); // Let k' = int(rand) mod n
   if (k_ === 0n) err('sign failed: k is zero'); // Fail if k' = 0.
@@ -960,6 +1000,13 @@ const extractK = (rand: Bytes) => {
 };
 
 // Common signature creation helper
+/** Create a Schnorr signature
+ * @param k - scalar value
+ * @param px - x-coordinate
+ * @param e - challenge value
+ * @param d - private key scalar
+ * @returns 64-byte signature
+ */
 const createSigSchnorr = (k: bigint, px: Bytes, e: bigint, d: bigint): Bytes => {
   return concatBytes(px, numTo32b(modN(k + e * d)));
 };
@@ -1005,8 +1052,6 @@ const signSchnorrAsync = async (
   return sig;
 };
 
-// const finishVerif = (P_: Point, r: bigint, s: bigint, e: bigint) => {};
-
 type MaybePromise<T> = T | Promise<T>;
 const callSyncAsyncFn = <T, O>(res: MaybePromise<T>, later: (res2: T) => O) => {
   return res instanceof Promise ? res.then(later) : later(res);
@@ -1048,12 +1093,23 @@ const _verifSchnorr = (
   }
 };
 
-/**
- * Verifies Schnorr signature.
+/** Verifies Schnorr signature.
  * Will swallow errors & return false except for initial type validation of arguments.
+ * @param s - 64-byte signature
+ * @param m - message that was signed
+ * @param p - 32-byte public key
+ * @returns true if signature is valid, false otherwise
  */
 const verifySchnorr = (s: Bytes, m: Bytes, p: Bytes): boolean =>
   _verifSchnorr(s, m, p, challenge) as boolean;
+
+/** Verifies Schnorr signature asynchronously.
+ * Will swallow errors & return false except for initial type validation of arguments.
+ * @param s - 64-byte signature
+ * @param m - message that was signed
+ * @param p - 32-byte public key
+ * @returns true if signature is valid, false otherwise
+ */
 const verifySchnorrAsync = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
   _verifSchnorr(s, m, p, challengeAsync) as Promise<boolean>;
 
@@ -1102,8 +1158,7 @@ const ctneg = (cnd: boolean, p: Point) => {
   return cnd ? n : p;
 };
 
-/**
- * Precomputes give 12x faster getPublicKey(), 10x sign(), 2x verify() by
+/** Precomputes give 12x faster getPublicKey(), 10x sign(), 2x verify() by
  * caching multiples of G (base point). Cache is stored in 32MB of RAM.
  * Any time `G.multiply` is done, precomputes are used.
  * Not used for getSharedSecret, which instead multiplies random pubkey `P.multiply`.
@@ -1112,6 +1167,8 @@ const ctneg = (cnd: boolean, p: Point) => {
  * but takes 2x less RAM. RAM reduction is possible by utilizing `.subtract`.
  *
  * !! Precomputes can be disabled by commenting-out call of the wNAF() inside Point#multiply().
+ * @param n - scalar value
+ * @returns object with p (point) and f (fake point for timing safety)
  */
 const wNAF = (n: bigint): { p: Point; f: Point } => {
   const comp = Gpows || (Gpows = precompute());
