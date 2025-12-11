@@ -8,15 +8,13 @@ Fastest 5KB JS implementation of secp256k1 signatures & ECDH.
   signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 4.94KB (gzipped, elliptic.js is 10x larger, tiny-secp256k1 is 25x larger)
+- 🪶 4.94KB (gzipped) - 10-25x smaller than similar libraries
 
-The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
-focusing on smaller attack surface & better auditability.
-Curves are drop-in replacement and have more features:
-MSM, DER encoding, endomorphism, prehashing, custom point precomputes, hash-to-curve, oprf.
-To upgrade from earlier version, see [Upgrading](#upgrading).
+The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
+Use noble-secp256k1 if you need smaller attack surface & better auditability.
+Switch to noble-curves (drop-in) if you need features like MSM, DER encoding, custom point precomputes.
 
-898-byte version of the library is available for learning purposes in `test/misc/1kb.min.js`,
+898-byte version of the library is available for learning purposes in [`test/misc/1kb.min.js`](https://github.com/paulmillr/noble-secp256k1/blob/c38e57d17a2ecfdb9b8a80890a8e1a2cc140aa04/test/misc/1kb.min.js),
 it was created for the article [Learning fast elliptic-curve cryptography](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
 
 ### This library belongs to _noble_ cryptography
@@ -25,14 +23,16 @@ it was created for the article [Learning fast elliptic-curve cryptography](https
 
 - Zero or minimal dependencies
 - Highly readable TypeScript / JS code
-- PGP-signed releases and transparent NPM builds with provenance
-- Check out [homepage](https://paulmillr.com/noble/) & all libraries:
+- PGP-signed releases and transparent NPM builds
+- All libraries:
   [ciphers](https://github.com/paulmillr/noble-ciphers),
   [curves](https://github.com/paulmillr/noble-curves),
   [hashes](https://github.com/paulmillr/noble-hashes),
   [post-quantum](https://github.com/paulmillr/noble-post-quantum),
   5kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
+- [Check out the homepage](https://paulmillr.com/noble/)
+  for reading resources, documentation, and apps built with noble
 
 ## Usage
 
@@ -50,10 +50,16 @@ import * as secp from '@noble/secp256k1';
   const msg = new TextEncoder().encode('hello noble');
   const sig = await secp.signAsync(msg, secretKey);
   const isValid = await secp.verifyAsync(sig, msg, publicKey);
+})();
 
-  const bobsKeys = secp.keygen();
-  const shared = secp.getSharedSecret(secretKey, bobsKeys.publicKey); // Diffie-Hellman
-  const sigr = await secp.signAsync(msg, secretKey, { format: 'recovered' });
+// ECDH, key recovery
+(async () => {
+  const alice = secp.keygen();
+  const bob = secp.keygen();
+  const shared = secp.getSharedSecret(alice.secretKey, bob.publicKey);
+
+  // recovery
+  const sigr = await secp.signAsync(msg, alice.secretKey, { format: 'recovered' });
   const publicKey2 = secp.recoverPublicKey(sigr, msg);
 })();
 
@@ -80,6 +86,9 @@ secp.hashes.sha256 = sha256;
 ```
 
 ### React Native: polyfill getRandomValues and sha256
+
+React Native does not provide secure getRandomValues by default.
+This can't be securely polyfilled from our end, so one will need a RN-specific compile-time dep.
 
 ```ts
 import 'react-native-get-random-values';
@@ -295,31 +304,27 @@ Use low-level libraries & languages.
 
 ### Supply chain security
 
-- **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures
-- **Releases** are transparent and built on GitHub CI.
-  Check out [attested checksums of single-file builds](https://github.com/paulmillr/noble-secp256k1/attestations)
-  and [provenance logs](https://github.com/paulmillr/noble-secp256k1/actions/workflows/release.yml)
-- **Rare releasing** is followed to ensure less re-audit need for end-users
-- **Dependencies** are minimized and locked-down: any dependency could get hacked and users will be downloading malware with every install.
-  - We make sure to use as few dependencies as possible
-  - Automatic dep updates are prevented by locking-down version ranges; diffs are checked with `npm-diff`
-- **Dev Dependencies** are disabled for end-users; they are only used to develop / build the source code
+- **Commits** are signed with PGP keys to prevent forgery. Be sure to verify the commit signatures
+- **Releases** are made transparently through token-less GitHub CI and Trusted Publishing. Be sure to verify the [provenance logs](https://docs.npmjs.com/generating-provenance-statements) for authenticity.
+- **Rare releasing** is practiced to minimize the need for re-audits by end-users.
+- **Dependencies** are minimized and strictly pinned to reduce supply-chain risk.
+  - We use as few dependencies as possible.
+  - Version ranges are locked, and changes are checked with npm-diff.
+- **Dev dependencies** are excluded from end-user installs; they’re only used for development and build steps.
 
 For this package, there are 0 dependencies; and a few dev dependencies:
 
 - [noble-hashes](https://github.com/paulmillr/noble-hashes) provides cryptographic hashing functionality
-- micro-bmark, micro-should and jsbt are used for benchmarking / testing / build tooling and developed by the same author
-- prettier, fast-check and typescript are used for code quality / test generation / ts compilation. It's hard to audit their source code thoroughly and fully because of their size
+- jsbt is used for benchmarking / testing / build tooling and developed by the same author
+- prettier, fast-check and typescript are used for code quality / test generation / ts compilation
 
 ### Randomness
 
-We're deferring to built-in
-[crypto.getRandomValues](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues)
-which is considered cryptographically secure (CSPRNG).
+We rely on the built-in
+[`crypto.getRandomValues`](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues),
+which is considered a cryptographically secure PRNG.
 
-In the past, browsers had bugs that made it weak: it may happen again.
-Implementing a userspace CSPRNG to get resilient to the weakness
-is even worse: there is no reliable userspace source of quality entropy.
+Browsers have had weaknesses in the past - and could again - but implementing a userspace CSPRNG is even worse, as there’s no reliable userspace source of high-quality entropy.
 
 ### Quantum computers
 
@@ -373,8 +378,8 @@ v3 brings the package closer to noble-curves v2.
 
 ```js
 // before
-// etc.hmacSha256Sync = (key, ...messages) => hmac(sha256, key, etc.concatBytes(...messages));
-// etc.hmacSha256Async = (key, ...messages) => Promise.resolve(etc.hmacSha256Sync(key, ...messages));
+etc.hmacSha256Sync = (key, ...messages) => hmac(sha256, key, etc.concatBytes(...messages));
+etc.hmacSha256Async = (key, ...messages) => Promise.resolve(etc.hmacSha256Sync(key, ...messages));
 // after
 hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
 hashes.sha256 = sha256;
