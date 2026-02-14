@@ -6,7 +6,7 @@
  */
 /**
  * Curve params. secp256k1 is short weierstrass / koblitz curve. Equation is y² == x³ + ax + b.
- * * P = `2n**256n-2n**32n-2n**977n` // field over which calculations are done
+ * * P = `2n**256n - 2n**32n - 977n` // field over which calculations are done
  * * N = `2n**256n - 0x14551231950b75fc4402da1732fc9bebfn` // group order, amount of curve points
  * * h = `1n` // cofactor
  * * a = `0n` // equation param
