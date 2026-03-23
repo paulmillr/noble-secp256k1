@@ -71,6 +71,13 @@ describe('utils', () => {
       })
     )
   );
+  should('validator constructors', () => {
+    throws(() => items.etc.abytes('x' as any), TypeError);
+    throws(() => items.etc.abytes(new Uint8Array(31), 32), RangeError);
+    throws(() => items.getPublicKey(new Uint8Array(32)), RangeError);
+    throws(() => items.utils.randomSecretKey('x' as any), TypeError);
+    throws(() => items.utils.randomSecretKey(new Uint8Array(39)), RangeError);
+  });
 });
 
 describe('utils math', () => {

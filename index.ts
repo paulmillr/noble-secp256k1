@@ -51,6 +51,7 @@ export type WeierstrassOpts<T> = Readonly<{
 
 // ## Helpers
 // ----------
+// @ts-ignore
 const captureTrace = (...args: Parameters<typeof Error.captureStackTrace>): void => {
   if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
     Error.captureStackTrace(...args);
@@ -74,7 +75,8 @@ const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
     const prefix = title && `"${title}" `;
     const ofLen = needsLen ? ` of length ${length}` : '';
     const got = bytes ? `length=${len}` : `type=${typeof value}`;
-    err(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+    const msg = prefix + 'expected Uint8Array' + ofLen + ', got ' + got;
+    throw bytes ? new RangeError(msg) : new TypeError(msg);
   }
   return value;
 };
@@ -124,8 +126,11 @@ const randomBytes = (len: number = L): Bytes => {
   return c.getRandomValues(u8n(len));
 };
 const big = BigInt;
-const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range'): bigint =>
-  isBig(n) && min <= n && n < max ? n : err(msg);
+const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range'): bigint => {
+  if (!isBig(n)) throw new TypeError(msg);
+  if (min <= n && n < max) return n;
+  throw new RangeError(msg);
+};
 /** modular division */
 const M = (a: bigint, b: bigint = P) => {
   const r = a % b;
@@ -150,11 +155,26 @@ const callHash = (name: string) => {
   if (typeof fn !== 'function') err('hashes.' + name + ' not set');
   return fn;
 };
+/**
+ * SHA-256 helper used by the synchronous API.
+ * @param msg - message bytes to hash
+ * @returns 32-byte SHA-256 digest.
+ * @example
+ * Hash message bytes after wiring the synchronous SHA-256 implementation.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * secp.hashes.sha256 = sha256;
+ * const digest = secp.hash(new Uint8Array([1, 2, 3]));
+ * ```
+ */
 const hash = (msg: Bytes): Bytes => callHash('sha256')(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 /** Point in 2d xy affine coordinates. */
 export type AffinePoint = {
+  /** Affine x coordinate. */
   x: bigint;
+  /** Affine y coordinate. */
   y: bigint;
 };
 // ## End of Helpers
@@ -189,7 +209,18 @@ const lift_x = (x: bigint) => {
   return M(r * r) === c ? r : err('sqrt invalid'); // check if result is valid
 };
 
-/** Point in 3d xyz projective coordinates. 3d takes less inversions than 2d. */
+/**
+ * Point in 3d xyz projective coordinates. 3d takes less inversions than 2d.
+ * @param X - X coordinate.
+ * @param Y - Y coordinate.
+ * @param Z - projective Z coordinate.
+ * @example
+ * Do point arithmetic with the base point and encode the result as hex.
+ * ```ts
+ * import { Point } from '@noble/secp256k1';
+ * const hex = Point.BASE.double().toHex();
+ * ```
+ */
 class Point {
   static BASE: Point;
   static ZERO: Point;
@@ -379,7 +410,19 @@ const secretKeyToScalar = (secretKey: Bytes): bigint => {
 };
 /** For Signature malleability, validates sig.s is bigger than N/2. */
 const highS = (n: bigint): boolean => n > N >> 1n;
-/** Creates 33/65-byte public key from 32-byte private key. */
+/**
+ * Creates 33/65-byte public key from 32-byte private key.
+ * @param privKey - 32-byte secret key.
+ * @param isCompressed - return 33-byte compressed key when `true`.
+ * @returns serialized secp256k1 public key.
+ * @example
+ * Derive the serialized public key for a secp256k1 secret key.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * const secretKey = secp.utils.randomSecretKey();
+ * const publicKey = secp.getPublicKey(secretKey);
+ * ```
+ */
 const getPublicKey = (privKey: Bytes, isCompressed = true): Bytes => {
   return G.multiply(secretKeyToScalar(privKey)).toBytes(isCompressed);
 };
@@ -419,7 +462,18 @@ const assertSigLength = (sig: Bytes, format: ECDSASignatureFormat = SIG_COMPACT)
   if (format === SIG_COMPACT && sig.length !== SL) err(msg + SL);
   if (format === SIG_RECOVERED && sig.length !== RL) err(msg + RL);
 };
-/** ECDSA Signature class. Supports only compact 64-byte representation, not DER. */
+/**
+ * ECDSA Signature class. Supports only compact 64-byte representation, not DER.
+ * @param r - signature `r` scalar.
+ * @param s - signature `s` scalar.
+ * @param recovery - optional recovery id.
+ * @example
+ * Build a recovered-format signature object and serialize it.
+ * ```ts
+ * import { Signature } from '@noble/secp256k1';
+ * const bytes = new Signature(1n, 2n, 0).toBytes('recovered');
+ * ```
+ */
 class Signature {
   readonly r: bigint;
   readonly s: bigint;
@@ -486,7 +540,7 @@ const bits2int_modN = (bytes: Bytes): bigint => modN(bits2int(abytes(bytes)));
  * * `false` means "disable extra entropy, use purely deterministic k"
  * * `Uint8Array` passed means "incorporate following data into k generation"
  *
- * https://paulmillr.com/posts/deterministic-signatures/
+ * See {@link https://paulmillr.com/posts/deterministic-signatures/ | Deterministic signatures}.
  */
 export type ECDSAExtraEntropy = boolean | Bytes;
 // todo: better name
@@ -506,26 +560,30 @@ export type ECDSASignatureFormat = 'compact' | 'recovered' | 'der';
  *   When a custom hash is used, it must be set to `false`.
  */
 export type ECDSARecoverOpts = {
+  /** Set to `false` when the message is already hashed with a custom digest. */
   prehash?: boolean;
 };
 /**
  * - `prehash`: (default: true) indicates whether to do sha256(message).
  *   When a custom hash is used, it must be set to `false`.
- * - `lowS`: (default: true) prohibits signatures which have (sig.s >= CURVE.n/2n).
+ * - `lowS`: (default: true) prohibits signatures which have (`sig.s >= CURVE.n / 2n`).
  *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
  *   which is default openssl behavior.
  *   Non-malleable signatures can still be successfully verified in openssl.
  * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
  */
 export type ECDSAVerifyOpts = {
+  /** Set to `false` when the message is already hashed with a custom digest. */
   prehash?: boolean;
+  /** Set to `false` to accept high-S signatures instead of enforcing canonical low-S ones. */
   lowS?: boolean;
+  /** Signature encoding accepted by the verifier. */
   format?: ECDSASignatureFormat;
 };
 /**
  * - `prehash`: (default: true) indicates whether to do sha256(message).
  *   When a custom hash is used, it must be set to `false`.
- * - `lowS`: (default: true) prohibits signatures which have (sig.s >= CURVE.n/2n).
+ * - `lowS`: (default: true) prohibits signatures which have (`sig.s >= CURVE.n / 2n`).
  *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
  *   which is default openssl behavior.
  *   Non-malleable signatures can still be successfully verified in openssl.
@@ -533,9 +591,13 @@ export type ECDSAVerifyOpts = {
  * - `extraEntropy`: (default: false) creates sigs with increased security, see {@link ECDSAExtraEntropy}
  */
 export type ECDSASignOpts = {
+  /** Set to `false` when the message is already hashed with a custom digest. */
   prehash?: boolean;
+  /** Set to `false` to allow high-S signatures instead of normalizing to low-S form. */
   lowS?: boolean;
+  /** Signature encoding produced by the signer. */
   format?: ECDSASignatureFormat;
+  /** Extra entropy mixed into RFC6979 nonce generation for hedged signatures. */
   extraEntropy?: ECDSAExtraEntropy;
 };
 
@@ -547,6 +609,20 @@ const defaultSignOpts: ECDSASignOpts = {
 };
 
 const _sha = 'SHA-256';
+/**
+ * Hash implementations used by the synchronous ECDSA and Schnorr helpers.
+ * @example
+ * Provide sync hash helpers before calling the synchronous signing API.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { hmac } from '@noble/hashes/hmac.js';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * secp.hashes.sha256 = sha256;
+ * secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+ * const secretKey = secp.utils.randomSecretKey();
+ * const sig = secp.sign(new Uint8Array([1, 2, 3]), secretKey);
+ * ```
+ */
 const hashes = {
   hmacSha256Async: async (key: Bytes, message: Bytes): Promise<Bytes> => {
     const s = subtle();
@@ -566,9 +642,9 @@ const prepMsg = (msg: Bytes, opts: ECDSARecoverOpts, async_: boolean): Bytes | P
 };
 
 type Pred<T> = (v: Bytes) => T | undefined;
-const NULL = u8n(0);
-const byte0 = u8of(0x00);
-const byte1 = u8of(0x01);
+const NULL = /* @__PURE__ */ u8n(0);
+const byte0 = /* @__PURE__ */ u8of(0x00);
+const byte1 = /* @__PURE__ */ u8of(0x01);
 const _maxDrbgIters = 1000;
 const _drbgErr = 'drbg: tried max amount of iterations';
 // HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
@@ -728,14 +804,23 @@ const setDefaults = (opts: ECDSASignOpts): Required<ECDSASignOpts> => {
 /**
  * Sign a message using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
+ * @param message - message bytes to sign.
+ * @param secretKey - 32-byte secret key.
+ * @param opts - See {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} improves security.
+ * @returns ECDSA signature encoded according to `opts.format`.
  * @example
- * ```js
+ * Sign a message using secp256k1.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { hmac } from '@noble/hashes/hmac.js';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * secp.hashes.sha256 = sha256;
+ * secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+ * const secretKey = secp.utils.randomSecretKey();
  * const msg = new TextEncoder().encode('hello noble');
- * sign(msg, secretKey);
- * sign(keccak256(msg), secretKey, { prehash: false });
- * sign(msg, secretKey, { extraEntropy: true });
- * sign(msg, secretKey, { format: 'recovered' });
+ * secp.sign(msg, secretKey);
+ * secp.sign(msg, secretKey, { extraEntropy: true });
+ * secp.sign(msg, secretKey, { format: 'recovered' });
  * ```
  */
 const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes => {
@@ -747,14 +832,21 @@ const sign = (message: Bytes, secretKey: Bytes, opts: ECDSASignOpts = {}): Bytes
 /**
  * Sign a message using secp256k1. Async: uses built-in WebCrypto hashes.
  * Prehashes message with sha256, disable using `prehash: false`.
- * @param opts - see {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} will improve security.
+ * @param message - message bytes to sign.
+ * @param secretKey - 32-byte secret key.
+ * @param opts - See {@link ECDSASignOpts} for details. Enabling {@link ECDSAExtraEntropy} improves security.
+ * @returns ECDSA signature encoded according to `opts.format`.
  * @example
- * ```js
+ * Sign a message using secp256k1 with the async WebCrypto path.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { keccak_256 } from '@noble/hashes/sha3.js';
+ * const secretKey = secp.utils.randomSecretKey();
  * const msg = new TextEncoder().encode('hello noble');
- * await signAsync(msg, secretKey);
- * await signAsync(keccak256(msg), secretKey, { prehash: false });
- * await signAsync(msg, secretKey, { extraEntropy: true });
- * await signAsync(msg, secretKey, { format: 'recovered' });
+ * await secp.signAsync(msg, secretKey);
+ * await secp.signAsync(keccak_256(msg), secretKey, { prehash: false });
+ * await secp.signAsync(msg, secretKey, { extraEntropy: true });
+ * await secp.signAsync(msg, secretKey, { format: 'recovered' });
  * ```
  */
 const signAsync = async (
@@ -769,17 +861,29 @@ const signAsync = async (
 
 /**
  * Verify a signature using secp256k1. Sync: uses `hashes.sha256` and `hashes.hmacSha256`.
- * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param signature - default is 64-byte `compact` format; also see {@link ECDSASignatureFormat}.
  * @param message - message which was signed. Keep in mind `prehash` from opts.
- * @param publicKey - public key which
- * @param opts - see {@link ECDSAVerifyOpts} for details.
+ * @param publicKey - public key that should verify the signature.
+ * @param opts - See {@link ECDSAVerifyOpts} for details.
+ * @returns `true` when the signature is valid.
  * @example
- * ```js
+ * Verify a signature using secp256k1.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { hmac } from '@noble/hashes/hmac.js';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * import { keccak_256 } from '@noble/hashes/sha3.js';
+ * secp.hashes.sha256 = sha256;
+ * secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+ * const secretKey = secp.utils.randomSecretKey();
  * const msg = new TextEncoder().encode('hello noble');
- * verify(sig, msg, publicKey);
- * verify(sig, keccak256(msg), publicKey, { prehash: false });
- * verify(sig, msg, publicKey, { lowS: false });
- * verify(sigr, msg, publicKey, { format: 'recovered' });
+ * const publicKey = secp.getPublicKey(secretKey);
+ * const sig = secp.sign(msg, secretKey);
+ * const sigr = secp.sign(msg, secretKey, { format: 'recovered' });
+ * secp.verify(sig, msg, publicKey);
+ * secp.verify(sig, keccak_256(msg), publicKey, { prehash: false });
+ * secp.verify(sig, msg, publicKey, { lowS: false });
+ * secp.verify(sigr, msg, publicKey, { format: 'recovered' });
  * ```
  */
 const verify = (
@@ -795,17 +899,24 @@ const verify = (
 
 /**
  * Verify a signature using secp256k1. Async: uses built-in WebCrypto hashes.
- * @param signature - default is 64-byte 'compact' format, also see {@link ECDSASignatureFormat}
+ * @param sig - default is 64-byte `compact` format; also see {@link ECDSASignatureFormat}.
  * @param message - message which was signed. Keep in mind `prehash` from opts.
- * @param publicKey - public key which
- * @param opts - see {@link ECDSAVerifyOpts} for details.
+ * @param publicKey - public key that should verify the signature.
+ * @param opts - See {@link ECDSAVerifyOpts} for details.
+ * @returns `true` when the signature is valid.
  * @example
- * ```js
+ * Verify a signature using secp256k1 with the async WebCrypto path.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { keccak_256 } from '@noble/hashes/sha3.js';
+ * const secretKey = secp.utils.randomSecretKey();
  * const msg = new TextEncoder().encode('hello noble');
- * verify(sig, msg, publicKey);
- * verify(sig, keccak256(msg), publicKey, { prehash: false });
- * verify(sig, msg, publicKey, { lowS: false });
- * verify(sigr, msg, publicKey, { format: 'recovered' });
+ * const publicKey = secp.getPublicKey(secretKey);
+ * const sig = await secp.signAsync(msg, secretKey);
+ * const sigr = await secp.signAsync(msg, secretKey, { format: 'recovered' });
+ * await secp.verifyAsync(sig, msg, publicKey);
+ * await secp.verifyAsync(sigr, msg, publicKey, { format: 'recovered' });
+ * await secp.verifyAsync(sig, keccak_256(msg), publicKey, { prehash: false });
  * ```
  */
 const verifyAsync = async (
@@ -840,13 +951,46 @@ const _recover = (signature: Bytes, messageHash: Bytes) => {
 
 /**
  * ECDSA public key recovery. Requires msg hash and recovery id.
- * Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.6.
+ * Follows {@link https://secg.org/sec1-v2.pdf | SEC1} 4.1.6.
+ * @param signature - recovered-format signature from `sign(..., { format: 'recovered' })`.
+ * @param message - signed message bytes.
+ * @param opts - See {@link ECDSARecoverOpts} for details.
+ * @returns recovered public key bytes.
+ * @example
+ * Recover a secp256k1 public key from a recovered-format signature.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { hmac } from '@noble/hashes/hmac.js';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * secp.hashes.sha256 = sha256;
+ * secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+ * const secretKey = secp.utils.randomSecretKey();
+ * const message = new Uint8Array([1, 2, 3]);
+ * const sig = secp.sign(message, secretKey, { format: 'recovered' });
+ * secp.recoverPublicKey(sig, message);
+ * ```
  */
 const recoverPublicKey = (signature: Bytes, message: Bytes, opts: ECDSARecoverOpts = {}): Bytes => {
   message = prepMsg(message, setDefaults(opts), false) as Bytes;
   return _recover(signature, message);
 };
 
+/**
+ * Async ECDSA public key recovery. Requires msg hash and recovery id.
+ * @param signature - recovered-format signature from `signAsync(..., { format: 'recovered' })`.
+ * @param message - signed message bytes.
+ * @param opts - See {@link ECDSARecoverOpts} for details.
+ * @returns recovered public key bytes.
+ * @example
+ * Recover a secp256k1 public key from a recovered-format signature with the async API.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * const secretKey = secp.utils.randomSecretKey();
+ * const message = new Uint8Array([1, 2, 3]);
+ * const sig = await secp.signAsync(message, secretKey, { format: 'recovered' });
+ * await secp.recoverPublicKeyAsync(sig, message);
+ * ```
+ */
 const recoverPublicKeyAsync = async (
   signature: Bytes,
   message: Bytes,
@@ -859,8 +1003,18 @@ const recoverPublicKeyAsync = async (
 /**
  * Elliptic Curve Diffie-Hellman (ECDH) on secp256k1.
  * Result is **NOT hashed**. Use hash or KDF on it if you need.
- * @param isCompressed 33-byte (true) or 65-byte (false) output
- * @returns public key C
+ * @param secretKeyA - local 32-byte secret key.
+ * @param publicKeyB - peer public key.
+ * @param isCompressed - return 33-byte compressed output when `true`.
+ * @returns shared secret point bytes.
+ * @example
+ * Derive a shared secp256k1 secret with ECDH.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * const alice = secp.utils.randomSecretKey();
+ * const bob = secp.utils.randomSecretKey();
+ * const shared = secp.getSharedSecret(alice, secp.getPublicKey(bob));
+ * ```
  */
 const getSharedSecret = (secretKeyA: Bytes, publicKeyB: Bytes, isCompressed = true): Bytes => {
   return Point.fromBytes(publicKeyB).multiply(secretKeyToScalar(secretKeyA)).toBytes(isCompressed);
@@ -870,20 +1024,45 @@ const getSharedSecret = (secretKeyA: Bytes, publicKeyB: Bytes, isCompressed = tr
 // with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
 const randomSecretKey = (seed = randomBytes(lengths.seed)) => {
   abytes(seed);
-  if (seed.length < lengths.seed || seed.length > 1024) err('expected 40-1024b');
+  if (seed.length < lengths.seed || seed.length > 1024) throw new RangeError('expected 40-1024b');
   const num = M(bytesToNumBE(seed), N - 1n);
   return numTo32b(num + 1n);
 };
 
 type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
 type KeygenFn = (seed?: Bytes) => KeysSecPub;
-const createKeygen = (getPublicKey: (secretKey: Bytes) => Bytes) => (seed?: Bytes): KeysSecPub => {
-  const secretKey = randomSecretKey(seed);
-  return { secretKey, publicKey: getPublicKey(secretKey) };
-}
-const keygen: KeygenFn = createKeygen(getPublicKey);
+const createKeygen =
+  (getPublicKey: (secretKey: Bytes) => Bytes) =>
+  (seed?: Bytes): KeysSecPub => {
+    const secretKey = randomSecretKey(seed);
+    return { secretKey, publicKey: getPublicKey(secretKey) };
+  };
+/**
+ * Generates a secp256k1 keypair.
+ * @param seed - optional entropy seed.
+ * @returns keypair with `secretKey` and `publicKey`.
+ * @example
+ * Generate a secp256k1 keypair for sync signing.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { hmac } from '@noble/hashes/hmac.js';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * secp.hashes.sha256 = sha256;
+ * secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+ * const { secretKey, publicKey } = secp.keygen();
+ * ```
+ */
+const keygen: KeygenFn = /* @__PURE__ */ createKeygen(getPublicKey);
 
-/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
+/**
+ * Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves.
+ * @example
+ * Convert bytes to a hex string with the low-level helper namespace.
+ * ```ts
+ * import { etc } from '@noble/secp256k1';
+ * const hex = etc.bytesToHex(new Uint8Array([1, 2, 3]));
+ * ```
+ */
 const etc = {
   hexToBytes: hexToBytes as (hex: string) => Bytes,
   bytesToHex: bytesToHex as (bytes: Bytes) => string,
@@ -897,7 +1076,16 @@ const etc = {
   abytes: abytes as typeof abytes,
 };
 
-/** Curve-specific utilities for private keys. */
+/**
+ * Curve-specific key utilities.
+ * @example
+ * Generate a fresh secret key and derive its public key.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * const secretKey = secp.utils.randomSecretKey();
+ * const publicKey = secp.getPublicKey(secretKey);
+ * ```
+ */
 const utils = {
   isValidSecretKey: isValidSecretKey as typeof isValidSecretKey,
   isValidPublicKey: isValidPublicKey as typeof isValidPublicKey,
@@ -937,14 +1125,12 @@ const challenge = (...args: Bytes[]): bigint => bytesModN(taggedHash(T_CHALLENGE
 const challengeAsync = async (...args: Bytes[]): Promise<bigint> =>
   bytesModN(await taggedHashAsync(T_CHALLENGE, ...args));
 
-/**
- * Schnorr public key is just `x` coordinate of Point as per BIP340.
- */
+/** Schnorr public key is just `x` coordinate of Point as per BIP340. */
 const pubSchnorr = (secretKey: Bytes): Bytes => {
   return extpubSchnorr(secretKey).px; // d'=int(sk). Fail if d'=0 or d'≥n. Ret bytes(d'⋅G)
 };
 
-const keygenSchnorr: KeygenFn = createKeygen(pubSchnorr);
+const keygenSchnorr: KeygenFn = /* @__PURE__ */ createKeygen(pubSchnorr);
 
 // Common preparation fn for both sync and async signing
 const prepSigSchnorr = (message: Bytes, secretKey: Bytes, auxRand: Bytes) => {
@@ -1057,13 +1243,28 @@ const verifySchnorr = (s: Bytes, m: Bytes, p: Bytes): boolean =>
 const verifySchnorrAsync = async (s: Bytes, m: Bytes, p: Bytes): Promise<boolean> =>
   _verifSchnorr(s, m, p, challengeAsync) as Promise<boolean>;
 
+/**
+ * BIP340 Schnorr helpers over secp256k1.
+ * @example
+ * Sign and verify a BIP340 Schnorr signature.
+ * ```ts
+ * import * as secp from '@noble/secp256k1';
+ * import { sha256 } from '@noble/hashes/sha2.js';
+ * secp.hashes.sha256 = sha256;
+ * const secretKey = secp.utils.randomSecretKey();
+ * const message = new Uint8Array([1, 2, 3]);
+ * const sig = secp.schnorr.sign(message, secretKey);
+ * const publicKey = secp.schnorr.getPublicKey(secretKey);
+ * const isValid = secp.schnorr.verify(sig, message, publicKey);
+ * ```
+ */
 const schnorr: {
-  keygen: typeof keygenSchnorr,
+  keygen: typeof keygenSchnorr;
   getPublicKey: typeof pubSchnorr;
   sign: typeof signSchnorr;
   verify: typeof verifySchnorr;
-  signAsync: typeof signSchnorrAsync,
-  verifyAsync: typeof verifySchnorrAsync
+  signAsync: typeof signSchnorrAsync;
+  verifyAsync: typeof verifySchnorrAsync;
 } = {
   keygen: keygenSchnorr,
   getPublicKey: pubSchnorr,
@@ -1152,11 +1353,20 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
 // !! Remove the export below to easily use in REPL / browser console
 export {
   etc,
-  getPublicKey, getSharedSecret,
-  hash, hashes,
+  getPublicKey,
+  getSharedSecret,
+  hash,
+  hashes,
   keygen,
-  Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync,
-
-  Signature, utils, verify, verifyAsync
+  Point,
+  recoverPublicKey,
+  recoverPublicKeyAsync,
+  schnorr,
+  sign,
+  signAsync,
+  Signature,
+  utils,
+  verify,
+  verifyAsync
 };
 

@@ -57,10 +57,11 @@ import * as secp from '@noble/secp256k1';
   const alice = secp.keygen();
   const bob = secp.keygen();
   const shared = secp.getSharedSecret(alice.secretKey, bob.publicKey);
+  const msg = new TextEncoder().encode('hello noble');
 
   // recovery
   const sigr = await secp.signAsync(msg, alice.secretKey, { format: 'recovered' });
-  const publicKey2 = secp.recoverPublicKey(sigr, msg);
+  const publicKey2 = await secp.recoverPublicKeyAsync(sigr, msg);
 })();
 
 // Schnorr signatures from BIP340
@@ -78,7 +79,10 @@ import * as secp from '@noble/secp256k1';
 Only async methods are available by default, to keep the library dependency-free.
 To enable sync methods:
 
+> `npm install @noble/hashes`
+
 ```ts
+import * as secp from '@noble/secp256k1';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
@@ -92,6 +96,7 @@ This can't be securely polyfilled from our end, so one will need a RN-specific c
 
 ```ts
 import 'react-native-get-random-values';
+import * as secp from '@noble/secp256k1';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
@@ -138,8 +143,13 @@ Generates 33-byte compressed (default) or 65-byte public key from 32-byte privat
 
 ```ts
 import * as secp from '@noble/secp256k1';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256 = sha256;
 const { secretKey } = secp.keygen();
-const msg = 'hello noble';
+const msg = new TextEncoder().encode('hello noble');
 const sig = secp.sign(msg, secretKey);
 
 // async
@@ -147,9 +157,7 @@ const sigB = await secp.signAsync(msg, secretKey);
 
 // recovered, allows `recoverPublicKey(sigR, msg)`
 const sigR = secp.sign(msg, secretKey, { format: 'recovered' });
-// custom hash
-import { keccak256 } from '@noble/hashes/sha3.js';
-const sigH = secp.sign(keccak256(msg), secretKey, { prehash: false });
+const sigH = secp.sign(keccak_256(msg), secretKey, { prehash: false });
 // hedged sig
 const sigC = secp.sign(msg, secretKey, { extraEntropy: true });
 const sigC2 = secp.sign(msg, secretKey, { extraEntropy: Uint8Array.from([0xca, 0xfe]) });
@@ -172,14 +180,17 @@ Even if their RNG is broken, they will fall back to determinism.
 
 ```ts
 import * as secp from '@noble/secp256k1';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256 = sha256;
 const { secretKey, publicKey } = secp.keygen();
-const msg = 'hello noble';
+const msg = new TextEncoder().encode('hello noble');
 const sig = secp.sign(msg, secretKey);
 const isValid = secp.verify(sig, msg, publicKey);
 
-// custom hash
-import { keccak256 } from '@noble/hashes/sha3.js';
-const sigH = secp.sign(keccak256(msg), secretKey, { prehash: false });
+const sigH = secp.sign(keccak_256(msg), secretKey, { prehash: false });
 ```
 
 Verifies ECDSA signature.
@@ -210,16 +221,19 @@ key A and different key B.
 
 ```ts
 import * as secp from '@noble/secp256k1';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256 = sha256;
 
 const { secretKey, publicKey } = secp.keygen();
-const msg = 'hello noble';
+const msg = new TextEncoder().encode('hello noble');
 const sigR = secp.sign(msg, secretKey, { format: 'recovered' });
 const publicKey2 = secp.recoverPublicKey(sigR, msg);
 
-// custom hash
-import { keccak256 } from '@noble/hashes/sha3.js';
-const sigR = secp.sign(keccak256(msg), secretKey, { format: 'recovered', prehash: false });
-const publicKey2 = secp.recoverPublicKey(sigR, keccak256(msg), { prehash: false });
+const sigRH = secp.sign(keccak_256(msg), secretKey, { format: 'recovered', prehash: false });
+const publicKeyH = secp.recoverPublicKey(sigRH, keccak_256(msg), { prehash: false });
 ```
 
 Recover public key from Signature instance with `recovery` bit set.
@@ -227,14 +241,26 @@ Recover public key from Signature instance with `recovery` bit set.
 ### schnorr
 
 ```ts
+import * as secp from '@noble/secp256k1';
 import { schnorr } from '@noble/secp256k1';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+secp.hashes.hmacSha256 = (key, msg) => hmac(sha256, key, msg);
+secp.hashes.sha256 = sha256;
 const { secretKey, publicKey } = schnorr.keygen();
 const msg = new TextEncoder().encode('hello noble');
 const sig = schnorr.sign(msg, secretKey);
 const isValid = schnorr.verify(sig, msg, publicKey);
+```
 
-const sig = await schnorr.signAsync(msg, secretKey);
-const isValid = await schnorr.verifyAsync(sig, msg, publicKey);
+Async methods work without extra setup:
+
+```ts
+import { schnorr } from '@noble/secp256k1';
+const { secretKey, publicKey } = schnorr.keygen();
+const msg = new TextEncoder().encode('hello noble');
+const sigA = await schnorr.signAsync(msg, secretKey);
+const isValidA = await schnorr.verifyAsync(sigA, msg, publicKey);
 ```
 
 Schnorr
@@ -377,6 +403,9 @@ v3 brings the package closer to noble-curves v2.
 - etc: hashes are now set in `hashes` object. Also sha256 needs to be set now for `prehash: true`:
 
 ```js
+import { etc, hashes } from '@noble/secp256k1';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 // before
 etc.hmacSha256Sync = (key, ...messages) => hmac(sha256, key, etc.concatBytes(...messages));
 etc.hmacSha256Async = (key, ...messages) => Promise.resolve(etc.hmacSha256Sync(key, ...messages));
