@@ -9,7 +9,7 @@
   ],
   "devDependencies": {
     "@noble/hashes": "2.2.0",
-    "@paulmillr/jsbt": "0.5.0",
+    "@paulmillr/jsbt": "0.5.2",
     "@types/node": "25.3.0",
     "fast-check": "4.2.0",
     "prettier": "3.6.2",
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:release": "npx --no @paulmillr/jsbt esbuild test/build",
+    "build:release": "npx --no @paulmillr/jsbt bundle test/build",
     "check": "npm run check:readme && npm run check:treeshake && npm run check:jsdoc",
     "check:readme": "npx --no @paulmillr/jsbt readme package.json",
     "check:treeshake": "npx --no @paulmillr/jsbt treeshake package.json test/build/out-treeshake",
@@ -27,7 +27,7 @@
     "test": "node test/index.ts",
     "test:bun": "bun test/index.ts",
     "test:deno": "deno --allow-env --allow-read test/index.ts",
-    "test:node20": "cd test; npx tsc; node compiled/test/index.js"
+    "test:tsc": "cd test; npx tsc; node compiled/test/index.js"
   },
   "keywords": [
     "secp256k1",
