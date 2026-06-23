@@ -19,7 +19,7 @@
     "benchmark": "node benchmark/secp256k1.ts",
     "build": "tsc",
     "bundle": "npx --no @paulmillr/jsbt bundle",
-    "check": "npm run check:readme && npm run check:treeshake && npm run check:jsdoc",
+    "check": "npx --no @paulmillr/jsbt check",
     "check:readme": "npx --no @paulmillr/jsbt readme package.json",
     "check:treeshake": "npx --no @paulmillr/jsbt treeshake package.json test/build/out-treeshake",
     "check:jsdoc": "npx --no @paulmillr/jsbt tsdoc package.json",
