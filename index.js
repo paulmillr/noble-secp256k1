@@ -220,11 +220,6 @@ const lift_x = (x) => {
         err('sqrt invalid'); // check if result is valid
     return isEven(r) ? r : M(-r);
 };
-export const __TEST = /* @__PURE__ */ Object.freeze({
-    // Shared tests expect the BIP340 helper to expose the canonical even-y point, not just the root.
-    lift_x: (x) => Point.fromAffine({ x, y: lift_x(x) }),
-    extractK: (rand) => extractK(rand),
-});
 /**
  * Point in 3d xyz projective coordinates. 3d takes less inversions than 2d.
  * @param X - X coordinate.
@@ -1224,6 +1219,11 @@ const schnorr = /* @__PURE__ */ Object.freeze({
     signAsync: signSchnorrAsync,
     verifyAsync: verifySchnorrAsync,
 });
+const __TEST = /* @__PURE__ */ (() => Object.freeze({
+    // Shared tests expect the BIP340 helper to expose the canonical even-y point, not just the root.
+    lift_x: (x) => Point.fromAffine({ x, y: lift_x(x) }),
+    extractK: (rand) => extractK(rand),
+}))();
 // ## Precomputes
 // --------------
 const W = 8; // W is window size
@@ -1300,4 +1300,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT/leakage-shape symmetry
 };
 // !! Remove the export below to easily use in REPL / browser console
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, __TEST, };

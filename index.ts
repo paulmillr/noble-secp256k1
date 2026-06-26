@@ -14,9 +14,11 @@
  * * a = `0n` // equation param
  * * b = `7n` // equation param
  * * Gx, Gy are coordinates of Generator / base point
+ *
+ * Mirror noble-curves: Point.CURVE() returns shared params,
+ * but those params must stay frozen so callers cannot mutate
+ * them out from under the arithmetic constants captured below.
  */
-// Mirror noble-curves: Point.CURVE() returns shared params, but those params must stay frozen so
-// callers cannot mutate them out from under the arithmetic constants captured below.
 const secp256k1_CURVE: WeierstrassOpts<bigint> = Object.freeze({
   p: 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn,
   n: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n,
@@ -346,15 +348,6 @@ const lift_x = (x: bigint) => {
   if (M(r * r) !== c) err('sqrt invalid'); // check if result is valid
   return isEven(r) ? r : M(-r);
 };
-export const __TEST: TRet<{
-  lift_x: (x: bigint) => Point;
-  extractK: (rand: TArg<Bytes>) => TRet<{ rx: Bytes; k: bigint }>;
-}> = /* @__PURE__ */ Object.freeze({
-  // Shared tests expect the BIP340 helper to expose the canonical even-y point, not just the root.
-  lift_x: (x: bigint): TRet<Point> => Point.fromAffine({ x, y: lift_x(x) }) as TRet<Point>,
-  extractK: (rand: TArg<Bytes>): TRet<{ rx: Bytes; k: bigint }> => extractK(rand),
-});
-
 /**
  * Point in 3d xyz projective coordinates. 3d takes less inversions than 2d.
  * @param X - X coordinate.
@@ -1505,6 +1498,16 @@ const schnorr: {
   verifyAsync: verifySchnorrAsync,
 });
 
+const __TEST: TRet<{
+  lift_x: (x: bigint) => Point;
+  extractK: (rand: TArg<Bytes>) => TRet<{ rx: Bytes; k: bigint }>;
+}> = /* @__PURE__ */ (() =>
+  Object.freeze({
+    // Shared tests expect the BIP340 helper to expose the canonical even-y point, not just the root.
+    lift_x: (x: bigint): TRet<Point> => Point.fromAffine({ x, y: lift_x(x) }) as TRet<Point>,
+    extractK: (rand: TArg<Bytes>): TRet<{ rx: Bytes; k: bigint }> => extractK(rand),
+  }))();
+
 // ## Precomputes
 // --------------
 
@@ -1599,4 +1602,5 @@ export {
   utils,
   verify,
   verifyAsync,
+  __TEST,
 };

@@ -79,13 +79,6 @@ export type AffinePoint = {
     /** Affine y coordinate. */
     y: bigint;
 };
-export declare const __TEST: TRet<{
-    lift_x: (x: bigint) => Point;
-    extractK: (rand: TArg<Bytes>) => TRet<{
-        rx: Bytes;
-        k: bigint;
-    }>;
-}>;
 /**
  * Point in 3d xyz projective coordinates. 3d takes less inversions than 2d.
  * @param X - X coordinate.
@@ -532,4 +525,11 @@ declare const schnorr: {
     signAsync: typeof signSchnorrAsync;
     verifyAsync: typeof verifySchnorrAsync;
 };
-export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, };
+declare const __TEST: TRet<{
+    lift_x: (x: bigint) => Point;
+    extractK: (rand: TArg<Bytes>) => TRet<{
+        rx: Bytes;
+        k: bigint;
+    }>;
+}>;
+export { etc, getPublicKey, getSharedSecret, hash, hashes, keygen, Point, recoverPublicKey, recoverPublicKeyAsync, schnorr, sign, signAsync, Signature, utils, verify, verifyAsync, __TEST, };

@@ -20,7 +20,6 @@
     "build": "tsc",
     "bundle": "npx --no @paulmillr/jsbt bundle",
     "check": "npx --no @paulmillr/jsbt check",
-    "bench": "node test/benchmark.ts",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",
     "test": "node test/index.ts",
     "test:bun": "bun test/index.ts",
