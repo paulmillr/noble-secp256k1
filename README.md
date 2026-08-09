@@ -437,16 +437,6 @@ The goal of v2 is to provide minimum possible JS library which is safe and fast.
 - `utils` were split into `utils` (same api as in noble-curves) and
   `etc` (`hmacSha256Sync` and others)
 
-## Contributing & testing
-
-- `npm install && npm run build && npm test` will build the code and run tests.
-- `npm run bench` will run benchmarks
-- `npm run bundle` will build single non-module file
-
-See [paulmillr.com/noble](https://paulmillr.com/noble/)
-for useful resources, articles, documentation and demos
-related to the library.
-
 ## Speed
 
     npm run bench

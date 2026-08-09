@@ -1,6 +1,6 @@
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import mark from '@paulmillr/jsbt/bench.js';
+import mark from '@paulmillr/jsbt/benchmark.js';
 import * as curve from '../index.ts';
 
 (async () => {

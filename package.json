@@ -9,7 +9,7 @@
   ],
   "devDependencies": {
     "@noble/hashes": "2.2.0",
-    "@paulmillr/jsbt": "0.6.0",
+    "@paulmillr/jsbt": "0.6.5",
     "@types/node": "25.3.0",
     "fast-check": "4.2.0",
     "prettier": "3.6.2",
@@ -17,15 +17,11 @@
   },
   "scripts": {
     "benchmark": "node benchmark/secp256k1.ts",
+    "benchmark:size": "npx bismar@0.1 -bs",
     "build": "tsc",
-    "bundle": "npx --no @paulmillr/jsbt bundle",
-    "check": "npx --no @paulmillr/jsbt check",
-    "bench": "node test/benchmark.ts",
+    "check": "jsbt-check",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",
-    "test": "node test/index.ts",
-    "test:bun": "bun test/index.ts",
-    "test:deno": "deno --allow-env --allow-read test/index.ts",
-    "test:tsc": "cd test; npx tsc; node compiled/test/index.js"
+    "test": "node test/index.ts"
   },
   "keywords": [
     "secp256k1",
