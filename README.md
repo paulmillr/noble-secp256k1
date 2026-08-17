@@ -317,7 +317,7 @@ We cross-test against sister project [noble-curves](https://github.com/paulmillr
 
 - The current version has not been independently audited. It is a rewrite of v1, which has been audited by cure53 in Apr 2021:
   [PDF](https://cure53.de/pentest-report_noble-lib.pdf) (funded by [Umbra.cash](https://umbra.cash) & community).
-- It's being fuzzed [in a separate repository](https://github.com/paulmillr/fuzzing)
+- It's being fuzzed [in a separate repository](https://github.com/paulmillr/cryptofuzz)
 
 ### Constant-timeness
 
