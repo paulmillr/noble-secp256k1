@@ -328,8 +328,10 @@ declare const signAsync: (message: TArg<Bytes>, secretKey: TArg<Bytes>, opts?: T
  * @param message - message which was signed. Keep in mind `prehash` from opts.
  * @param publicKey - public key that should verify the signature.
  * @param opts - See {@link ECDSAVerifyOpts} for details.
- * @returns `true` when the signature is valid. Unsupported format configuration still
- * throws instead of returning `false`.
+ * @returns `true` when the signature is valid. Malformed inputs — wrong signature length for
+ * the chosen format, non-Uint8Array arguments, unsupported format — throw instead of
+ * returning `false`. This is intentional, so caller bugs fail loudly; only well-formed
+ * signatures failing cryptographic checks return `false`.
  * @example
  * Verify a signature using secp256k1.
  * ```ts
@@ -357,8 +359,10 @@ declare const verify: (signature: TArg<Bytes>, message: TArg<Bytes>, publicKey: 
  * @param message - message which was signed. Keep in mind `prehash` from opts.
  * @param publicKey - public key that should verify the signature.
  * @param opts - See {@link ECDSAVerifyOpts} for details.
- * @returns `true` when the signature is valid. Unsupported format configuration still
- * throws instead of returning `false`.
+ * @returns `true` when the signature is valid. Malformed inputs — wrong signature length for
+ * the chosen format, non-Uint8Array arguments, unsupported format — reject instead of
+ * resolving `false`. This is intentional, so caller bugs fail loudly; only well-formed
+ * signatures failing cryptographic checks resolve to `false`.
  * @example
  * Verify a signature using secp256k1 with the async WebCrypto path.
  * ```ts
@@ -501,8 +505,9 @@ declare const keygenSchnorr: KeygenFn;
  */
 declare const signSchnorr: (message: TArg<Bytes>, secretKey: TArg<Bytes>, auxRand?: TArg<Bytes>) => TRet<Bytes>;
 declare const signSchnorrAsync: (message: TArg<Bytes>, secretKey: TArg<Bytes>, auxRand?: TArg<Bytes>) => Promise<TRet<Bytes>>;
-/** Verifies Schnorr signature. Sync wrapper returns false for post-validation failures
- * after the initial byte checks. */
+/** Verifies Schnorr signature. Invalid points, scalars and failed curve checks return false;
+ * hash-backend misconfiguration (e.g. unset hashes.sha256) throws instead, since it is a
+ * runtime/backend error, not an "invalid signature" result. */
 declare const verifySchnorr: (s: TArg<Bytes>, m: TArg<Bytes>, p: TArg<Bytes>) => boolean;
 /** Async Schnorr verification. Curve/encoding failures after the initial byte checks still
  * become false, but async backend failures reject the promise. Missing crypto.subtle is a

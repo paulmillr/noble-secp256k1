@@ -15,9 +15,10 @@
  * * b = `7n` // equation param
  * * Gx, Gy are coordinates of Generator / base point
  */
+const freeze = Object.freeze;
 // Mirror noble-curves: Point.CURVE() returns shared params, but those params must stay frozen so
 // callers cannot mutate them out from under the arithmetic constants captured below.
-const secp256k1_CURVE = Object.freeze({
+const secp256k1_CURVE = freeze({
     p: 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn,
     n: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n,
     h: 1n,
@@ -31,14 +32,13 @@ const { p: P, n: N, Gx, Gy, b: _b } = secp256k1_CURVE;
 // by the RFC6979 paths here.
 const L = 32;
 const L2 = 64; // 64-byte compact signatures, and 64 hex chars for zero-padded 32-byte scalars
-const lengths = {
-    publicKey: L + 1,
-    publicKeyUncompressed: L2 + 1,
-    signature: L2,
-    // 48-byte keygen seed floor: 384 bits exceeds FIPS 186-5 Table A.2's
-    // 352-bit recommendation for 256-bit prime curves.
-    seed: L + L / 2,
-};
+// Plain consts instead of an object: internal property names would survive minification.
+const Lpub = L + 1; // 33-byte compressed public key
+const LpubU = L2 + 1; // 65-byte uncompressed public key
+const Lsig = L2; // 64-byte compact signature
+// 48-byte keygen seed floor: 384 bits exceeds FIPS 186-5 Table A.2's
+// 352-bit recommendation for 256-bit prime curves.
+const Lseed = L + L / 2;
 // Helpers and Precomputes sections are reused between libraries
 // ## Helpers
 // ----------
@@ -81,12 +81,12 @@ const bytesToHex = (b) => {
         hex += padh(e, 2);
     return hex;
 };
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
 // Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
+// ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
 // prettier-ignore
-const _ch = (ch) => ch >= C._0 && ch <= C._9 ? ch - C._0 // '2' => 50-48
-    : ch >= C.A && ch <= C.F ? ch - (C.A - 10) // 'B' => 66-(65-10)
-        : ch >= C.a && ch <= C.f ? ch - (C.a - 10) // 'b' => 98-(97-10)
+const _ch = (ch) => ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
+    : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
+        : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
             : undefined;
 const hexToBytes = (hex) => {
     const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for type and parse failures.
@@ -124,7 +124,12 @@ const concatBytes = (...arrs) => {
  * WebCrypto OS-level CSPRNG (random number generator).
  * Will throw when not available; large-request ceilings are delegated to getRandomValues().
  */
-const randomBytes = (len = L) => (globalThis?.crypto).getRandomValues(u8n(len));
+const randomBytes = (len = L) => {
+    const c = globalThis?.crypto;
+    if (typeof c?.getRandomValues !== 'function')
+        err('crypto.getRandomValues must be defined, consider polyfill');
+    return c.getRandomValues(u8n(len));
+};
 const big = BigInt;
 const arange = (n, min, max, msg = 'bad number: out of range') => {
     if (typeof n !== 'bigint')
@@ -183,6 +188,7 @@ const hash = (msg) => gh('sha256', abytes(msg, undefined, 'message'));
 const apoint = (p) => (p instanceof Point ? p : err('Point expected'));
 // ## End of Helpers
 // -----------------
+const E_BADPOINT = 'bad point: not on curve';
 /**
  * secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0,
  * making it x³+b; callers validate x first.
@@ -220,7 +226,7 @@ const lift_x = (x) => {
         err('sqrt invalid'); // check if result is valid
     return isEven(r) ? r : M(-r);
 };
-export const __TEST = /* @__PURE__ */ Object.freeze({
+export const __TEST = /* @__PURE__ */ freeze({
     // Shared tests expect the BIP340 helper to expose the canonical even-y point, not just the root.
     lift_x: (x) => Point.fromAffine({ x, y: lift_x(x) }),
     extractK: (rand) => extractK(rand),
@@ -247,7 +253,7 @@ class Point {
         this.X = FpIsValid(X);
         this.Y = FpIsValidNot0(Y); // Y can't be 0 in Projective
         this.Z = FpIsValid(Z);
-        Object.freeze(this);
+        freeze(this);
     }
     /** Returns the shared curve metadata object by reference.
      * It is readonly only at type level, and mutating it won't retarget arithmetic,
@@ -263,7 +269,8 @@ class Point {
     /** Convert Uint8Array or hex string to Point. */
     static fromBytes(bytes) {
         abytes(bytes);
-        const { publicKey: comp, publicKeyUncompressed: uncomp } = lengths; // e.g. for 32-byte: 33, 65
+        const comp = Lpub; // e.g. for 32-byte: 33, 65
+        const uncomp = LpubU;
         let p = undefined;
         const length = bytes.length;
         const head = bytes[0];
@@ -274,19 +281,26 @@ class Point {
         // and public-key validation helpers, so strict handling applies to all callers by default.
         // Local secp256k1 crosstests show OpenSSL raw point codecs accept 0x00 too.
         // Parse SEC 1 compressed/uncompressed encodings, then finish with assertValidity() before returning.
-        if (length === comp && (head === 0x02 || head === 0x03)) {
-            // Equation is y² == x³ + ax + b. We calculate y from x.
-            // lift_x() returns the even root; SEC 1 0x03 still needs the odd root.
-            let y = lift_x(x);
-            if (head === 0x03)
-                y = M(-y);
-            p = new Point(x, y, 1n);
+        try {
+            if (length === comp && (head === 0x02 || head === 0x03)) {
+                // Equation is y² == x³ + ax + b. We calculate y from x.
+                // lift_x() returns the even root; SEC 1 0x03 still needs the odd root.
+                let y = lift_x(x);
+                if (head === 0x03)
+                    y = M(-y);
+                p = new Point(x, y, 1n);
+            }
+            // Uncompressed 65-byte point, 0x04 prefix
+            if (length === uncomp && head === 0x04)
+                p = new Point(x, sliceBytesNumBE(tail, L, L2), 1n);
         }
-        // Uncompressed 65-byte point, 0x04 prefix
-        if (length === uncomp && head === 0x04)
-            p = new Point(x, sliceBytesNumBE(tail, L, L2), 1n);
+        catch (error) {
+            // Out-of-range coordinates and non-residue x report the same error as wrong
+            // prefixes / off-curve points, instead of generic range-check messages.
+            return err(E_BADPOINT);
+        }
         // Validate point
-        return p ? p.assertValidity() : err('bad point: not on curve');
+        return p ? p.assertValidity() : err(E_BADPOINT);
     }
     static fromHex(hex) {
         return Point.fromBytes(hexToBytes(hex));
@@ -392,7 +406,9 @@ class Point {
         // init result point & fake point
         let p = I;
         let f = G;
-        for (let d = this; n > 0n; d = d.double(), n >>= 1n) {
+        // Safe mode always runs scalarBits iterations so ladder length can't leak the scalar's
+        // leading zero bits; unsafe mode stops at the top set bit for speed.
+        for (let d = this, i = 0; safe ? i < scalarBits : n > 0n; d = d.double(), n >>= 1n, i++) {
             // if bit is present, add to point
             // if not present, add to fake, for timing safety
             if (n & 1n)
@@ -426,7 +442,7 @@ class Point {
         FpIsValidNot0(x); // must be in range 1 <= x,y < P
         FpIsValidNot0(y);
         // y² == x³ + ax + b, equation sides must be equal
-        return M(y * y) === koblitz(x) ? this : err('bad point: not on curve');
+        return M(y * y) === koblitz(x) ? this : err(E_BADPOINT);
     }
     /** Converts point to 33/65-byte Uint8Array. */
     toBytes(isCompressed = true) {
@@ -494,12 +510,11 @@ const isValidSecretKey = (secretKey) => {
     }
 };
 const isValidPublicKey = (publicKey, isCompressed) => {
-    const { publicKey: comp, publicKeyUncompressed } = lengths;
     try {
         const l = publicKey.length;
-        if (isCompressed === true && l !== comp)
+        if (isCompressed === true && l !== Lpub)
             return false;
-        if (isCompressed === false && l !== publicKeyUncompressed)
+        if (isCompressed === false && l !== LpubU)
             return false;
         return !!Point.fromBytes(publicKey);
     }
@@ -516,7 +531,7 @@ const assertSigFormat = (format) => {
 };
 const assertSigLength = (sig, format = SIG_COMPACT) => {
     assertSigFormat(format);
-    const len = lengths.signature + Number(format === SIG_RECOVERED);
+    const len = Lsig + Number(format === SIG_RECOVERED);
     if (sig.length !== len)
         err(`Signature format "${format}" expects Uint8Array with length ${len}`);
 };
@@ -542,7 +557,7 @@ class Signature {
         // Keep recovered Signature objects internally consistent across all construction paths.
         if (recovery != null)
             this.recovery = assertRecoveryBit(recovery);
-        Object.freeze(this);
+        freeze(this);
     }
     static fromBytes(b, format = SIG_COMPACT) {
         assertSigLength(b, format);
@@ -771,6 +786,8 @@ const _verify = (sig, messageHash, publicKey, opts = {}) => {
     const { lowS, format } = opts;
     if (sig instanceof Signature)
         err('Signature must be in Uint8Array, use .toBytes()');
+    // Deliberately outside the try: wrong-length / wrongly-typed inputs are caller bugs which
+    // throw loudly, while only well-formed signatures failing crypto checks return false.
     assertSigLength(sig, format);
     abytes(publicKey, undefined, 'publicKey');
     try {
@@ -860,8 +877,10 @@ const signAsync = async (message, secretKey, opts = {}) => {
  * @param message - message which was signed. Keep in mind `prehash` from opts.
  * @param publicKey - public key that should verify the signature.
  * @param opts - See {@link ECDSAVerifyOpts} for details.
- * @returns `true` when the signature is valid. Unsupported format configuration still
- * throws instead of returning `false`.
+ * @returns `true` when the signature is valid. Malformed inputs — wrong signature length for
+ * the chosen format, non-Uint8Array arguments, unsupported format — throw instead of
+ * returning `false`. This is intentional, so caller bugs fail loudly; only well-formed
+ * signatures failing cryptographic checks return `false`.
  * @example
  * Verify a signature using secp256k1.
  * ```ts
@@ -893,8 +912,10 @@ const verify = (signature, message, publicKey, opts = {}) => {
  * @param message - message which was signed. Keep in mind `prehash` from opts.
  * @param publicKey - public key that should verify the signature.
  * @param opts - See {@link ECDSAVerifyOpts} for details.
- * @returns `true` when the signature is valid. Unsupported format configuration still
- * throws instead of returning `false`.
+ * @returns `true` when the signature is valid. Malformed inputs — wrong signature length for
+ * the chosen format, non-Uint8Array arguments, unsupported format — reject instead of
+ * resolving `false`. This is intentional, so caller bugs fail loudly; only well-formed
+ * signatures failing cryptographic checks resolve to `false`.
  * @example
  * Verify a signature using secp256k1 with the async WebCrypto path.
  * ```ts
@@ -1004,10 +1025,10 @@ const getSharedSecret = (secretKeyA, publicKeyB, isCompressed = true) => {
 // FIPS 186-5 Appendix A.4.1 style key generation reduces a wide random integer mod (n - 1) and adds 1.
 // The 48-byte minimum keeps the secp256k1 bias bound below the appendix's epsilon <= 2^-64 target.
 const randomSecretKey = (seed) => {
-    seed = seed === undefined ? randomBytes(lengths.seed) : seed;
+    seed = seed === undefined ? randomBytes(Lseed) : seed;
     abytes(seed);
     // Keep the public range text aligned with the enforced 48-byte FIPS floor.
-    if (seed.length < lengths.seed || seed.length > 1024)
+    if (seed.length < Lseed || seed.length > 1024)
         return err('expected 48-1024b', RangeError);
     const num = M(bytesToNumBE(seed), N - 1n);
     return numTo32b(num + 1n);
@@ -1044,7 +1065,7 @@ const keygen = /* @__PURE__ */ createKeygen(getPublicKey);
  * const hex = etc.bytesToHex(new Uint8Array([1, 2, 3]));
  * ```
  */
-const etc = /* @__PURE__ */ Object.freeze({
+const etc = /* @__PURE__ */ freeze({
     hexToBytes,
     bytesToHex,
     concatBytes,
@@ -1066,7 +1087,7 @@ const etc = /* @__PURE__ */ Object.freeze({
  * const publicKey = secp.getPublicKey(secretKey);
  * ```
  */
-const utils = /* @__PURE__ */ Object.freeze({
+const utils = /* @__PURE__ */ freeze({
     isValidSecretKey: isValidSecretKey,
     isValidPublicKey: isValidPublicKey,
     randomSecretKey: randomSecretKey, // preserve the optional seeded call
@@ -1165,36 +1186,48 @@ const _verifSchnorr = (signature, message, publicKey, challengeFn) => {
     const sig = abytes(signature, L2, 'signature');
     const msg = abytes(message, undefined, 'message');
     const pub = abytes(publicKey, L, 'publicKey');
+    let P_;
+    let r;
+    let s;
+    let i;
     try {
         // lift_x from BIP340. Convert 32-byte x coordinate to elliptic curve point.
         // Fail if x ≥ p. Let c = x³ + 7 mod p.
         const x = bytesToNumBE(pub);
         const y = lift_x(x); // lift_x already returns the unique even root required by BIP340.
-        const P_ = new Point(x, y, 1n).assertValidity();
+        P_ = new Point(x, y, 1n).assertValidity();
         const px = numTo32b(P_.toAffine().x);
         // P = lift_x(int(pk)); fail if that fails
-        const r = sliceBytesNumBE(sig, 0, L); // Let r = int(sig[0:32]); fail if r ≥ p.
-        arange(r, 1n, P);
-        const s = sliceBytesNumBE(sig, L, L2); // Let s = int(sig[32:64]); fail if s ≥ n.
+        r = FpIsValidNot0(sliceBytesNumBE(sig, 0, L)); // Let r = int(sig[0:32]); fail if r ≥ p.
+        // Let s = int(sig[32:64]); fail if s ≥ n.
         // Stricter than BIP-340/libsecp256k1, which only reject s >= n. Honest signing reaches
         // s = 0 only with negligible probability (k + e*d ≡ 0 mod n), so treat zero-s inputs as
         // crafted edge cases and fail closed instead of carrying that extra verification surface.
-        arange(s, 1n, N);
-        const i = concatBytes(numTo32b(r), px, msg);
-        // int(challenge(bytes(r)||bytes(P)||m))%n
-        return callSyncAsyncFn(challengeFn(i), (e) => {
-            const { x, y } = doubleScalarMulUns(P_, s, modN(-e)).toAffine(); // R = s⋅G - e⋅P
-            if (!isEven(y) || x !== r)
-                return false; // -eP == (n-e)P
-            return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
-        });
+        s = FnIsValidNot0(sliceBytesNumBE(sig, L, L2));
+        i = concatBytes(numTo32b(r), px, msg);
     }
     catch (error) {
         return false;
     }
+    // Hash-provider errors (unset hashes.sha256, missing crypto.subtle, bad provider digests)
+    // stay outside the catch above: backend misconfiguration is not an "invalid signature"
+    // result, so it throws / rejects instead of becoming false.
+    // int(challenge(bytes(r)||bytes(P)||m))%n
+    return callSyncAsyncFn(challengeFn(i), (e) => {
+        try {
+            const { x, y } = doubleScalarMulUns(P_, s, modN(-e)).toAffine(); // R = s⋅G - e⋅P
+            if (!isEven(y) || x !== r)
+                return false; // -eP == (n-e)P
+            return true; // Fail if is_infinite(R) / not has_even_y(R) / x(R) ≠ r.
+        }
+        catch (error) {
+            return false; // is_infinite(R) throws inside doubleScalarMulUns
+        }
+    });
 };
-/** Verifies Schnorr signature. Sync wrapper returns false for post-validation failures
- * after the initial byte checks. */
+/** Verifies Schnorr signature. Invalid points, scalars and failed curve checks return false;
+ * hash-backend misconfiguration (e.g. unset hashes.sha256) throws instead, since it is a
+ * runtime/backend error, not an "invalid signature" result. */
 const verifySchnorr = (s, m, p) => _verifSchnorr(s, m, p, challenge);
 /** Async Schnorr verification. Curve/encoding failures after the initial byte checks still
  * become false, but async backend failures reject the promise. Missing crypto.subtle is a
@@ -1216,7 +1249,7 @@ const verifySchnorrAsync = async (s, m, p) => _verifSchnorr(s, m, p, challengeAs
  * const isValid = secp.schnorr.verify(sig, message, publicKey);
  * ```
  */
-const schnorr = /* @__PURE__ */ Object.freeze({
+const schnorr = /* @__PURE__ */ freeze({
     keygen: keygenSchnorr,
     getPublicKey: pubSchnorr,
     sign: signSchnorr,
@@ -1285,11 +1318,11 @@ const wNAF = (n) => {
         const off = w * pwindowSize;
         const offF = off; // offsets, evaluate both
         const offP = off + Math.abs(wbits) - 1;
-        const isEven = w % 2 !== 0; // conditions, evaluate both
+        const isOddW = w % 2 !== 0; // conditions, evaluate both; alternates fake-add sign per window
         const isNeg = wbits < 0;
         if (wbits === 0) {
             // off == I: can't add it. Adding random offF instead.
-            f = f.add(ctneg(isEven, comp[offF])); // bits are 0: add garbage to fake point
+            f = f.add(ctneg(isOddW, comp[offF])); // bits are 0: add garbage to fake point
         }
         else {
             p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
