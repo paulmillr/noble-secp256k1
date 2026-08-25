@@ -31,6 +31,7 @@ it was created for the article [Learning fast elliptic-curve cryptography](https
   [post-quantum](https://github.com/paulmillr/noble-post-quantum),
   5kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
+- WASM version: [awasm-noble](https://github.com/paulmillr/awasm-noble)
 - [Check out the homepage](https://paulmillr.com/noble/)
   for reading resources, documentation, and apps built with noble
 
@@ -435,16 +436,6 @@ The goal of v2 is to provide minimum possible JS library which is safe and fast.
 - `Point` (2d xy) has been changed to `ProjectivePoint` (3d xyz)
 - `utils` were split into `utils` (same api as in noble-curves) and
   `etc` (`hmacSha256Sync` and others)
-
-## Contributing & testing
-
-- `npm install && npm run build && npm test` will build the code and run tests.
-- `npm run bench` will run benchmarks
-- `npm run build:release` will build single non-module file
-
-See [paulmillr.com/noble](https://paulmillr.com/noble/)
-for useful resources, articles, documentation and demos
-related to the library.
 
 ## Speed
 
