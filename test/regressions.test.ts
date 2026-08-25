@@ -177,8 +177,10 @@ describe('golf regressions', () => {
     const rec = secp.sign(msg, sk, { format: 'recovered' });
     eql(rec.length, 65);
     eql(rec.subarray(1), sig); // recovered = recovery byte || compact
-    throws(() => secp.sign(msg, sk, { format: 'der' }), /not supported/);
-    throws(() => secp.verify(sig, msg, pub, { format: 'der' }), /not supported/);
+    const der = secp.sign(msg, sk, { format: 'der' });
+    eql(secp.verify(der, msg, pub, { format: 'der' }), true);
+    eql(secp.Signature.fromBytes(der, 'der').toBytes('der'), der);
+    eql(secp.verify(sig, msg, pub, { format: 'der' }), false);
     eql(secp.recoverPublicKey(rec, msg), pub);
     eql(secp.recoverPublicKey(rec, secp.hash(msg), { prehash: false }), pub);
     const badRec = rec.slice();

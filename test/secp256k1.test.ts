@@ -153,28 +153,25 @@ describe('secp256k1 static vectors', () => {
       throws(() => secp.sign(m, d));
     }
 
-    if (isNobleCurves) {
-      const CASES = deepHexToBytes([
-        [
-          'd1a9dc8ed4e46a6a3e5e594615ca351d7d7ef44df1e4c94c1802f3592183794b',
-          '304402203de2559fccb00c148574997f660e4d6f40605acc71267ee38101abf15ff467af02200950abdf40628fd13f547792ba2fc544681a485f2fdafb5c3b909a4df7350e6b',
-        ],
-        [
-          '5f97983254982546d3976d905c6165033976ee449d300d0e382099fa74deaf82',
-          '3045022100c046d9ff0bd2845b9aa9dff9f997ecebb31e52349f80fe5a5a869747d31dcb88022011f72be2a6d48fe716b825e4117747b397783df26914a58139c3f4c5cbb0e66c',
-        ],
-        [
-          '0d7017a96b97cd9be21cf28aada639827b2814a654a478c81945857196187808',
-          '3045022100d18990bba7832bb283e3ecf8700b67beb39acc73f4200ed1c331247c46edccc602202e5c8bbfe47ae159512c583b30a3fa86575cddc62527a03de7756517ae4c6c73',
-        ],
-      ]);
-      const privKey = hexToBytes(
-        '0101010101010101010101010101010101010101010101010101010101010101'
-      );
-      for (const [msg, exp] of CASES) {
-        const sig = secp.sign(msg, privKey, { prehash: false, format: 'der' });
-        eql(sig, exp, 'format: der');
-      }
+    const CASES = deepHexToBytes([
+      [
+        'd1a9dc8ed4e46a6a3e5e594615ca351d7d7ef44df1e4c94c1802f3592183794b',
+        '304402203de2559fccb00c148574997f660e4d6f40605acc71267ee38101abf15ff467af02200950abdf40628fd13f547792ba2fc544681a485f2fdafb5c3b909a4df7350e6b',
+      ],
+      [
+        '5f97983254982546d3976d905c6165033976ee449d300d0e382099fa74deaf82',
+        '3045022100c046d9ff0bd2845b9aa9dff9f997ecebb31e52349f80fe5a5a869747d31dcb88022011f72be2a6d48fe716b825e4117747b397783df26914a58139c3f4c5cbb0e66c',
+      ],
+      [
+        '0d7017a96b97cd9be21cf28aada639827b2814a654a478c81945857196187808',
+        '3045022100d18990bba7832bb283e3ecf8700b67beb39acc73f4200ed1c331247c46edccc602202e5c8bbfe47ae159512c583b30a3fa86575cddc62527a03de7756517ae4c6c73',
+      ],
+    ]);
+    const privKey = hexToBytes('0101010101010101010101010101010101010101010101010101010101010101');
+    for (const [msg, exp] of CASES) {
+      const opts = { prehash: false, format: 'der' } as const;
+      eql(secp.sign(msg, privKey, opts), exp, 'format: der');
+      eql(await secp.signAsync(msg, privKey, opts), exp, 'format: der async');
     }
   });
 
@@ -440,14 +437,28 @@ describe('Signature', () => {
       throws(() => new secp.Signature(1n, 1n).addRecoveryBit(recovery), /invalid recovery id/);
     }
 
-    if (isNobleCurves) {
-      fc.assert(
-        fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
-          const sig = new secp.Signature(r, s).toBytes('der');
-          eql(secp.Signature.fromBytes(sig, 'der').toBytes('der'), sig, 'DER roundtrip');
-        })
-      );
+    fc.assert(
+      fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
+        const sig = new secp.Signature(r, s).toBytes('der');
+        eql(secp.Signature.fromBytes(sig, 'der').toBytes('der'), sig, 'DER roundtrip');
+      })
+    );
+    for (const der of [
+      '', // empty
+      '3106020101020101', // wrong sequence tag
+      '3007020101020101', // wrong sequence length
+      '3006020180020101', // negative integer
+      '300702020001020101', // unnecessary leading zero
+      '3006020100020101', // zero scalar
+      '3006020101020101ff', // trailing byte
+      '308106020101020101', // non-minimal long-form length
+    ]) {
+      throws(() => secp.Signature.fromBytes(hexToBytes(der), 'der'));
     }
+    const invalidDER = hexToBytes('3006020180020101');
+    const msg = hexToBytes('010203');
+    const publicKey = secp.getPublicKey(numberToBytesBE(1n, 32));
+    eql(secp.verify(invalidDER, msg, publicKey, { format: 'der' }), false);
   });
 
   it('.hasHighS()', () => {
@@ -487,7 +498,6 @@ describe('Signature', () => {
     eql(secp.verify(sig.toBytes(), msg, pub, { prehash: false, lowS: false }), true);
     eql(secp.verify(sig.toBytes(), msg, pub, { prehash: false, lowS: true }), false);
     for (let format of ['der', 'compact']) {
-      if (format === 'der' && !isNobleCurves) continue;
       eql(
         secp.verify(sig.toBytes(format), msg, pub, { prehash: false, lowS: false, format }),
         true
@@ -899,25 +909,16 @@ describe('secp256k1 regressions', () => {
 
   describe('signatures', () => {
     it('DER format support and long prehash handling', async () => {
-      if (!isNobleCurves) {
-        const secretKey = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
-        const msg = Uint8Array.from({ length: 32 }, (_, i) => 255 - i);
-        throws(
-          () => new secp.Signature(1n, 2n).toBytes('der'),
-          /Signature format "der" is not supported/
-        );
-        throws(
-          () => secp.sign(msg, secretKey, { prehash: false, format: 'der' }),
-          /Signature format "der" is not supported/
-        );
-        await rejects(
-          () => secp.signAsync(msg, secretKey, { prehash: false, format: 'der' }),
-          /Signature format "der" is not supported/
-        );
-      }
-
       const secretKey = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
       const leftmost32 = Uint8Array.from({ length: 32 }, (_, i) => 255 - i);
+      const publicKey = secp.getPublicKey(secretKey);
+      const der = secp.sign(leftmost32, secretKey, { prehash: false, format: 'der' });
+      eql(await secp.signAsync(leftmost32, secretKey, { prehash: false, format: 'der' }), der);
+      eql(secp.verify(der, leftmost32, publicKey, { prehash: false, format: 'der' }), true);
+      eql(
+        await secp.verifyAsync(der, leftmost32, publicKey, { prehash: false, format: 'der' }),
+        true
+      );
       const extended = new Uint8Array(161);
       extended.set(leftmost32);
       extended.fill(0xaa, 32);

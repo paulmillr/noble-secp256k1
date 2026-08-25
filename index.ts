@@ -620,19 +620,61 @@ const assertRecoveryBit = (recovery?: number): number => {
   throw new Error('invalid recovery id');
 };
 const assertSigFormat = (format?: ECDSASignatureFormat) => {
-  if (format === 'der')
-    throw new Error('Signature format "der" is not supported: switch to noble-curves');
-  if (format != null && format !== SIG_COMPACT && format !== SIG_RECOVERED)
+  if (format != null && format !== SIG_COMPACT && format !== SIG_RECOVERED && format !== SIG_DER)
     throw new Error('Signature format must be one of: compact, recovered, der');
 };
-const assertSigLength = (sig: TArg<Uint8Array>, format: ECDSASignatureFormat = SIG_COMPACT) => {
+const assertSigLength = (
+  sig: TArg<Uint8Array>,
+  format: ECDSASignatureFormat = SIG_COMPACT
+): void => {
   assertSigFormat(format);
-  const len = 64 + Number(format === SIG_RECOVERED);
+  // DER signatures have a variable length; their exact structure is checked by derSigFromBytes().
+  if (format === SIG_DER) {
+    abytes(sig, undefined, 'signature');
+    return;
+  }
+  const len = L * 2 + Number(format === SIG_RECOVERED);
   if (sig.length !== len)
     throw new Error(`Signature format "${format}" expects Uint8Array with length ${len}`);
 };
+
+// ASN.1 DER subset used by ECDSA signatures: SEQUENCE(INTEGER r, INTEGER s).
+const derSigFromBytes = (b: TArg<Uint8Array>): { r: bigint; s: bigint } => {
+  b = abytes(b, undefined, 'signature');
+  const len = b.length;
+  // Two 256-bit positive INTEGERs need at most one leading sign byte each.
+  if (len < 8 || len > L * 2 + 8 || b[0] !== 0x30 || b[1] !== len - 2)
+    throw new Error('invalid DER signature');
+  let pos = 2;
+  const readInt = (): bigint => {
+    if (b[pos++] !== 0x02) throw new Error('invalid DER signature');
+    const n = b[pos++];
+    if (!n || n > L + 1 || pos + n > len) throw new Error('invalid DER signature');
+    const first = b[pos];
+    // DER INTEGERs are signed. ECDSA scalars must be positive and minimally encoded.
+    if (first & 0x80 || (n > 1 && first === 0 && !(b[pos + 1] & 0x80)))
+      throw new Error('invalid DER signature');
+    const num = sliceBytesNumBE(b, pos, pos + n);
+    pos += n;
+    return num;
+  };
+  const r = readInt();
+  const s = readInt();
+  if (pos !== len) throw new Error('invalid DER signature');
+  return { r, s };
+};
+const derSigToBytes = ({ r, s }: TArg<Signature>): TRet<Uint8Array> => {
+  const encodeInt = (num: bigint): string => {
+    let hex = num.toString(16);
+    if (hex.length & 1) hex = '0' + hex;
+    if (Number.parseInt(hex[0], 16) & 8) hex = '00' + hex;
+    return '02' + padh(hex.length / 2, 2) + hex;
+  };
+  const res = encodeInt(r) + encodeInt(s);
+  return hexToBytes('30' + padh(res.length / 2, 2) + res);
+};
 /**
- * ECDSA Signature class. Supports only compact 64-byte representation, not DER.
+ * ECDSA Signature class. Supports compact, recovered, and DER representations.
  * @param r - signature `r` scalar.
  * @param s - signature `s` scalar.
  * @param recovery - optional recovery id.
@@ -656,6 +698,10 @@ class Signature {
   }
   static fromBytes(b: TArg<Uint8Array>, format: ECDSASignatureFormat = SIG_COMPACT): Signature {
     assertSigLength(b, format);
+    if (format === SIG_DER) {
+      const { r, s } = derSigFromBytes(b);
+      return new Signature(r, s);
+    }
     let rec: number | undefined;
     if (format === SIG_RECOVERED) {
       rec = b[0];
@@ -672,9 +718,8 @@ class Signature {
     return highS(this.s);
   }
   toBytes(format: ECDSASignatureFormat = SIG_COMPACT): TRet<Uint8Array> {
-    // Standalone noble-secp256k1 does not implement DER; reject here so direct Signature users
-    // don't silently get compact bytes for an unsupported format.
     assertSigFormat(format);
+    if (format === SIG_DER) return derSigToBytes(this);
     const { r, s, recovery } = this;
     const res = concatBytes(numTo32b(r), numTo32b(s));
     if (format === SIG_RECOVERED) {
@@ -718,11 +763,11 @@ const bits2int_modN = (bytes: TArg<Uint8Array>): bigint => modN(bits2int(abytes(
 export type ECDSAExtraEntropy = boolean | Uint8Array;
 const SIG_COMPACT = 'compact';
 const SIG_RECOVERED = 'recovered';
+const SIG_DER = 'der';
 /**
  * - `compact` is the default format
  * - `recovered` is the same as compact, but with an extra byte indicating recovery byte
- * - `der` is not supported; it is included only so unsupported requests can be rejected consistently.
- *   Switch to noble-curves if you need der.
+ * - `der` is the ASN.1 DER representation
  */
 export type ECDSASignatureFormat = 'compact' | 'recovered' | 'der';
 /**
@@ -742,7 +787,7 @@ export type ECDSARecoverOpts = {
  *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
  *   which is default openssl behavior.
  *   Non-malleable signatures can still be successfully verified in openssl.
- * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
+ * - `format`: (default: 'compact') 'compact', 'recovered' with recovery byte, or 'der'
  */
 export type ECDSAVerifyOpts = {
   /** Set to `false` when the message is already hashed with a custom digest. */
@@ -759,7 +804,7 @@ export type ECDSAVerifyOpts = {
  *   Compatible with BTC/ETH. Setting `lowS: false` allows to create malleable signatures,
  *   which is default openssl behavior.
  *   Non-malleable signatures can still be successfully verified in openssl.
- * - `format`: (default: 'compact') 'compact' or 'recovered' with recovery byte
+ * - `format`: (default: 'compact') 'compact', 'recovered' with recovery byte, or 'der'
  * - `extraEntropy`: (default: false) creates sigs with increased security, see {@link ECDSAExtraEntropy}
  */
 export type ECDSASignOpts = {
@@ -966,8 +1011,8 @@ const _verify = (
 ) => {
   const [lowS, , format] = opts;
   if (sig instanceof Signature) throw new Error('Signature must be in Uint8Array, use .toBytes()');
-  // Deliberately outside the try: wrong-length / wrongly-typed inputs are caller bugs which
-  // throw loudly, while only well-formed signatures failing crypto checks return false.
+  // Deliberately outside the try: wrongly-typed inputs and wrong fixed-format lengths are caller
+  // bugs which throw loudly. DER structure is parsed inside the try, so malformed DER returns false.
   assertSigLength(sig, format);
   abytes(publicKey, undefined, 'publicKey');
   try {
@@ -1013,6 +1058,7 @@ const setDefaults = (opts: TArg<ECDSASignOpts>) => {
  * secp.sign(msg, secretKey);
  * secp.sign(msg, secretKey, { extraEntropy: true });
  * secp.sign(msg, secretKey, { format: 'recovered' });
+ * secp.sign(msg, secretKey, { format: 'der' });
  * ```
  */
 const sign = (
@@ -1044,6 +1090,7 @@ const sign = (
  * await secp.signAsync(keccak_256(msg), secretKey, { prehash: false });
  * await secp.signAsync(msg, secretKey, { extraEntropy: true });
  * await secp.signAsync(msg, secretKey, { format: 'recovered' });
+ * await secp.signAsync(msg, secretKey, { format: 'der' });
  * ```
  */
 const signAsync = async (
@@ -1063,10 +1110,8 @@ const signAsync = async (
  * @param message - message which was signed. Keep in mind `prehash` from opts.
  * @param publicKey - public key that should verify the signature.
  * @param opts - See {@link ECDSAVerifyOpts} for details.
- * @returns `true` when the signature is valid. Malformed inputs — wrong signature length for
- * the chosen format, non-Uint8Array arguments, unsupported format — throw instead of
- * returning `false`. This is intentional, so caller bugs fail loudly; only well-formed
- * signatures failing cryptographic checks return `false`.
+ * @returns `true` when the signature is valid. Non-Uint8Array arguments, unsupported formats,
+ * and wrong compact/recovered lengths throw. Malformed DER signatures return `false`.
  * @example
  * Verify a signature using secp256k1.
  * ```ts
@@ -1081,10 +1126,12 @@ const signAsync = async (
  * const publicKey = secp.getPublicKey(secretKey);
  * const sig = secp.sign(msg, secretKey);
  * const sigr = secp.sign(msg, secretKey, { format: 'recovered' });
+ * const sigd = secp.sign(msg, secretKey, { format: 'der' });
  * secp.verify(sig, msg, publicKey);
  * secp.verify(sig, keccak_256(msg), publicKey, { prehash: false });
  * secp.verify(sig, msg, publicKey, { lowS: false });
  * secp.verify(sigr, msg, publicKey, { format: 'recovered' });
+ * secp.verify(sigd, msg, publicKey, { format: 'der' });
  * ```
  */
 const verify = (
@@ -1104,10 +1151,8 @@ const verify = (
  * @param message - message which was signed. Keep in mind `prehash` from opts.
  * @param publicKey - public key that should verify the signature.
  * @param opts - See {@link ECDSAVerifyOpts} for details.
- * @returns `true` when the signature is valid. Malformed inputs — wrong signature length for
- * the chosen format, non-Uint8Array arguments, unsupported format — reject instead of
- * resolving `false`. This is intentional, so caller bugs fail loudly; only well-formed
- * signatures failing cryptographic checks resolve to `false`.
+ * @returns `true` when the signature is valid. Non-Uint8Array arguments, unsupported formats,
+ * and wrong compact/recovered lengths reject. Malformed DER signatures resolve to `false`.
  * @example
  * Verify a signature using secp256k1 with the async WebCrypto path.
  * ```ts
@@ -1118,8 +1163,10 @@ const verify = (
  * const publicKey = secp.getPublicKey(secretKey);
  * const sig = await secp.signAsync(msg, secretKey);
  * const sigr = await secp.signAsync(msg, secretKey, { format: 'recovered' });
+ * const sigd = await secp.signAsync(msg, secretKey, { format: 'der' });
  * await secp.verifyAsync(sig, msg, publicKey);
  * await secp.verifyAsync(sigr, msg, publicKey, { format: 'recovered' });
+ * await secp.verifyAsync(sigd, msg, publicKey, { format: 'der' });
  * await secp.verifyAsync(sig, keccak_256(msg), publicKey, { prehash: false });
  * ```
  */

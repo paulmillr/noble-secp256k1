@@ -473,12 +473,9 @@ describe('basic curve tests', () => {
                 if (hasToHex) eql(sigRS(C.Signature.fromHex(sigr.toHex(f), f)), sigRS(sigr));
               }
 
-              const isNobleCurves = !!C.Point.Fp;
-              if (isNobleCurves) {
-                f = 'der';
-                eql(sigRS(C.Signature.fromBytes(sig.toBytes(f), f)), sigRS(sig));
-                if (hasToHex) eql(sigRS(C.Signature.fromHex(sig.toHex(f), f)), sigRS(sig));
-              }
+              f = 'der';
+              eql(sigRS(C.Signature.fromBytes(sig.toBytes(f), f)), sigRS(sig));
+              if (hasToHex) eql(sigRS(C.Signature.fromHex(sig.toHex(f), f)), sigRS(sig));
             }),
             { numRuns: NUM_RUNS }
           ));

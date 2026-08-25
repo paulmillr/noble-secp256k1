@@ -8,11 +8,11 @@ Fastest 5KB JS implementation of secp256k1 signatures & ECDH.
   signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 4.94KB (gzipped) - 10-25x smaller than similar libraries
+- 🪶 5.21KB (gzipped) - 10-25x smaller than similar libraries
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
 Use noble-secp256k1 if you need smaller attack surface & better auditability.
-Switch to noble-curves (drop-in) if you need features like MSM, DER encoding, custom point precomputes.
+Switch to noble-curves (drop-in) if you need features like MSM or custom point precomputes.
 
 898-byte version of the library is available for learning purposes in [`test/misc/1kb.min.js`](https://github.com/paulmillr/noble-secp256k1/blob/c38e57d17a2ecfdb9b8a80890a8e1a2cc140aa04/test/misc/1kb.min.js),
 it was created for the article [Learning fast elliptic-curve cryptography](https://paulmillr.com/posts/noble-secp256k1-fast-ecc/).
@@ -51,6 +51,8 @@ import * as secp from '@noble/secp256k1';
   const msg = new TextEncoder().encode('hello noble');
   const sig = await secp.signAsync(msg, secretKey);
   const isValid = await secp.verifyAsync(sig, msg, publicKey);
+  const der = await secp.signAsync(msg, secretKey, { format: 'der' });
+  const isValidDER = await secp.verifyAsync(der, msg, publicKey, { format: 'der' });
 })();
 
 // ECDH, key recovery
@@ -370,6 +372,7 @@ NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https
 v3 brings the package closer to noble-curves v2.
 
 - Add Schnorr signatures
+- Add DER signature encoding through `{ format: 'der' }`
 - Most methods now expect Uint8Array, string hex inputs are prohibited
 - Add `keygen`, `keygenAsync` method
 - sign, verify: Switch to **prehashed messages**. Instead of
@@ -424,7 +427,8 @@ The goal of v2 is to provide minimum possible JS library which is safe and fast.
   - `der` option has been removed. There are 2 options:
     1. Use compact encoding: `fromCompact`, `toBytes`, `toCompactHex`.
        Compact encoding is simply a concatenation of 32-byte r and 32-byte s.
-    2. If you must use DER encoding, switch to noble-curves (see above).
+    2. In v2, DER encoding required noble-curves. It is available again in v3 through
+       `{ format: 'der' }`.
 - `verify`
   - `strict` option was renamed to `lowS`
 - `getSharedSecret`
