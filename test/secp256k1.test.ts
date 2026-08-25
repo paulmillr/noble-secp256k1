@@ -611,6 +611,13 @@ describe('verify()', () => {
       const recoveredPubkey = secp.recoverPublicKey(recoveredSig, message, { prehash: false });
       eql(recoveredPubkey, publicKey);
       eql(
+        secp.recoverPublicKey(recoveredSig, message, {
+          prehash: false,
+          isCompressed: false,
+        }),
+        secp.getPublicKey(privateKey, false)
+      );
+      eql(
         secp.verify(recoveredSig, message, publicKey, { prehash: false, format: 'recovered' }),
         true
       );
@@ -936,6 +943,13 @@ describe('secp256k1 regressions', () => {
         true
       );
       eql(await secp.recoverPublicKeyAsync(sigA, msg, { prehash: false }), publicKey);
+      eql(
+        await secp.recoverPublicKeyAsync(sigA, msg, {
+          prehash: false,
+          isCompressed: false,
+        }),
+        secp.getPublicKey(secretKey, false)
+      );
     });
   });
 });
