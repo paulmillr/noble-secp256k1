@@ -1,0 +1,10 @@
+name: Fuzz
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+jobs:
+  fuzz:
+    uses: paulmillr/cryptofuzz/.github/workflows/noble-commit-fuzz.yml@a977f8bf03f1f9e68d512eb5b6ab09376a493a6f
+    with:
+      ref: ${{ github.sha }}
