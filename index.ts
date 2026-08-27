@@ -206,30 +206,19 @@ const bytesToHex = (bytes: TArg<Uint8Array>): string => {
   for (const byte of abytes(bytes)) hex += padh(byte, 2);
   return hex;
 };
-// Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
-// ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
-// prettier-ignore
-const asciiToBase16 = (ch: number): number | undefined => {
-  return ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
-  : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
-  : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
-  : undefined;
-};
 /** Convert hex string to byte array. */
 const hexToBytes = (hex: string): TRet<Uint8Array> => {
   const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for parse failures.
   if (typeof hex !== 'string') throw new TypeError(e);
-  const hl = hex.length;
-  const al = hl / 2;
-  if (hl % 2) throw new RangeError(e);
-  const array = new Uint8Array(al);
-  for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-    const n1 = asciiToBase16(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-    const n2 = asciiToBase16(hex.charCodeAt(hi + 1)); // parse second char
-    if (n1 === undefined || n2 === undefined) throw new RangeError(e);
-    array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
+  if (hex.length % 2 || !/^[\da-f]*$/i.test(hex)) throw new RangeError(e);
+  const array = new Uint8Array(hex.length / 2);
+  for (let ai = 0, hi = 0; ai < array.length; ai++, hi += 2) {
+    const n1 = hex.charCodeAt(hi);
+    const n2 = hex.charCodeAt(hi + 1);
+    // Regex guarantees ASCII. For 0..9/A..F/a..f, this maps char codes to 0..15.
+    array[ai] = ((n1 & 15) + (n1 >> 6) * 9) * 16 + (n2 & 15) + (n2 >> 6) * 9;
   }
-  return array;
+  return array as TRet<Uint8Array>;
 };
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 // WebCrypto is available in all modern environments
@@ -357,8 +346,8 @@ const FnIsValidNot0 = (n: bigint) => arange(n, 1n, N);
 const isEven = (y: bigint) => !(y & 1n);
 /** SEC 1 compressed-prefix helper. Parity only: callers validate y before asking for the prefix byte. */
 const getPrefix = (y: bigint) => Uint8Array.of(isEven(y) ? 0x02 : 0x03);
-/** lift_x from BIP340 returns the unique even square root for x³+7.
- * SEC 1 callers still flip it for the odd-prefix branch. */
+/** lift_x from BIP340 returns the unique point with x and an even square root of x³+7.
+ * SEC 1 callers still negate it for the odd-prefix branch. */
 const lift_x = (x: bigint) => {
   // Let c = x³ + 7 mod p. Fail if x ≥ p. (also fail if x < 1)
   const c = koblitz(FpIsValidNot0(x));
@@ -373,7 +362,7 @@ const lift_x = (x: bigint) => {
     num = (num * num) % P; // Not constant-time.
   }
   if (M(r * r) !== c) throw new Error('sqrt invalid'); // check if result is valid
-  return isEven(r) ? r : M(-r);
+  return new Point(x, isEven(r) ? r : M(-r), 1n);
 };
 /**
  * Point in 3d xyz projective coordinates. 3d takes less inversions than 2d.
@@ -413,34 +402,30 @@ class Point {
   /** Convert Uint8Array or hex string to Point. */
   static fromBytes(bytes: TArg<Uint8Array>): Point {
     abytes(bytes);
-    let p: Point | undefined = undefined;
     const length = bytes.length;
     const head = bytes[0];
-    const tail = bytes.subarray(1);
-    const x = sliceBytesNumBE(tail, 0, L);
+    const x = sliceBytesNumBE(bytes, 1, 33);
     // SEC 1 defines the rare infinity encoding 0x00, but SEC 1 public-key validation rejects
     // infinity. We keep 0x00 rejected here because this parser is reused by verify(), ECDH,
     // and public-key validation helpers, so strict handling applies to all callers by default.
     // Local secp256k1 crosstests show OpenSSL raw point codecs accept 0x00 too.
-    // Parse SEC 1 compressed/uncompressed encodings, then finish with assertValidity() before returning.
+    // Parse and validate SEC 1 compressed/uncompressed encodings before returning.
     try {
       if (length === 33 && (head === 0x02 || head === 0x03)) {
         // Equation is y² == x³ + ax + b. We calculate y from x.
-        // lift_x() returns the even root; SEC 1 0x03 still needs the odd root.
-        let y = lift_x(x);
-        if (head === 0x03) y = M(-y);
-        p = new Point(x, y, 1n);
+        // lift_x() returns the even point; SEC 1 0x03 still needs the odd point.
+        const p = lift_x(x);
+        return head === 0x03 ? p.negate() : p;
       }
       // Uncompressed 65-byte point, 0x04 prefix
-      if (length === 65 && head === 0x04) p = new Point(x, sliceBytesNumBE(tail, L, L * 2), 1n);
+      if (length === 65 && head === 0x04)
+        return new Point(x, sliceBytesNumBE(bytes, 33, 65), 1n).assertValidity();
     } catch (error) {
       // Out-of-range coordinates and non-residue x report the same error as wrong
       // prefixes / off-curve points, instead of generic range-check messages.
       throw new Error(E_BADPOINT);
     }
-    // Validate point
-    if (!p) throw new Error(E_BADPOINT);
-    return p.assertValidity();
+    throw new Error(E_BADPOINT);
   }
   static fromHex(hex: string): Point {
     return Point.fromBytes(hexToBytes(hex));
@@ -825,15 +810,21 @@ const hashes = {
 // used by sign/verify/recover, and this helper returns the same reference unchanged.
 const prepMsg = (
   msg: TArg<Uint8Array>,
-  opts: ECDSARecoverOpts,
+  prehash: boolean,
   async_: boolean
 ): TRet<Uint8Array | Promise<Uint8Array>> => {
   const message = abytes(msg, undefined, 'message');
-  if (!opts.prehash) return message;
+  if (!prehash) return message;
   return async_ ? callHashAsync('sha256Async', message) : callHash('sha256', message);
 };
 
 type Pred<T> = (v: Uint8Array) => T | undefined;
+type ECDSAOpts = readonly [
+  boolean, // lowS
+  boolean, // prehash
+  ECDSASignatureFormat,
+  ECDSAExtraEntropy | undefined,
+];
 const NULL = /* @__PURE__ */ new Uint8Array(0);
 const byte0 = /* @__PURE__ */ Uint8Array.of(0x00);
 const byte1 = /* @__PURE__ */ Uint8Array.of(0x01);
@@ -914,10 +905,10 @@ const hmacDrbgAsync = async <T>(seed: Uint8Array, pred: Pred<T>): Promise<T> => 
 const _sign = <T>(
   messageHash: Uint8Array,
   secretKey: Uint8Array,
-  opts: ECDSASignOpts,
+  opts: ECDSAOpts,
   drbg: (seed: Uint8Array, pred: Pred<TRet<Uint8Array>>) => T
 ): T => {
-  let { lowS, extraEntropy } = opts; // generates low-s sigs by default
+  const [lowS, , format, extraEntropy] = opts; // generates low-s sigs by default
   // RFC6979 3.2: we skip step A
   const h1i = bits2int_modN(messageHash); // msg bigint
   const d = secretKeyToScalar(secretKey); // validate private key, convert to bigint
@@ -951,17 +942,17 @@ const _sign = <T>(
     // that restart-from-scratch note does not apply here: hmacDrbg() keeps advancing through one
     // RFC6979 stream until k2sig() accepts a candidate, instead of restarting from the same seed.
     if (r === 0n) return;
-    const s = modN(ik * modN(h1i + r * d)); // s = k^-1(m + rd) mod n
+    const s = modN(ik * (h1i + r * d)); // s = k^-1(m + rd) mod n
     if (s === 0n) return;
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit (2 or 3, when q.x > n)
     let normS = s; // normalized S
     if (lowS && highS(s)) {
       // if lowS was passed, ensure s is always
-      normS = modN(-s); // in the bottom half of CURVE.n
+      normS = N - s; // in the bottom half of CURVE.n
       recovery ^= 1;
     }
     const sig = new Signature(r, normS, recovery) as RecoveredSignature; // use normS, not s
-    return sig.toBytes(opts.format);
+    return sig.toBytes(format);
   };
   return drbg(concatBytes(...seedArgs), k2sig);
 };
@@ -971,9 +962,9 @@ const _verify = (
   sig: TArg<Uint8Array>,
   messageHash: TArg<Uint8Array>,
   publicKey: TArg<Uint8Array>,
-  opts: ECDSAVerifyOpts = {}
+  opts: ECDSAOpts
 ) => {
-  const { lowS, format } = opts;
+  const [lowS, , format] = opts;
   if (sig instanceof Signature) throw new Error('Signature must be in Uint8Array, use .toBytes()');
   // Deliberately outside the try: wrong-length / wrongly-typed inputs are caller bugs which
   // throw loudly, while only well-formed signatures failing crypto checks return false.
@@ -985,25 +976,21 @@ const _verify = (
     const Q = Point.fromBytes(publicKey); // Validate public key. Q, not P: P is the field prime
     if (lowS && highS(s)) return false; // lowS bans sig.s >= CURVE.n/2
     const is = invert(s, N); // s^-1
-    const u1 = modN(h * is); // u1 = hs^-1 mod n
-    const u2 = modN(r * is); // u2 = rs^-1 mod n
-    const R = doubleScalarMulUns(Q, u1, u2).toAffine(); // R = u1⋅G + u2⋅Q
-    // Stop if R is identity / zero point. Check is done inside `doubleScalarMulUns`
-    const v = modN(R.x); // R.x must be in N's field, not P's
-    return v === r; // mod(R.x, n) == r
+    // R = u1⋅G + u2⋅Q with u1 = hs^-1, u2 = rs^-1. Identity throws inside doubleScalarMulUns.
+    // Reduce R.x in N's field, not P's.
+    return modN(doubleScalarMulUns(Q, modN(h * is), modN(r * is)).toAffine().x) === r;
   } catch (error) {
     return false;
   }
 };
 
 const setDefaults = (opts: TArg<ECDSASignOpts>) => {
-  // Inline defaults keep the same returned keys/values while avoiding the extra defaults object.
-  return {
-    lowS: opts.lowS ?? true,
-    prehash: opts.prehash ?? true,
-    format: opts.format ?? SIG_COMPACT,
-    extraEntropy: opts.extraEntropy ?? false,
-  };
+  return [
+    opts.lowS ?? true,
+    opts.prehash ?? true,
+    opts.format ?? SIG_COMPACT,
+    opts.extraEntropy,
+  ] as const;
 };
 
 /**
@@ -1033,10 +1020,10 @@ const sign = (
   secretKey: TArg<Uint8Array>,
   opts: TArg<ECDSASignOpts> = {}
 ): TRet<Uint8Array> => {
-  opts = setDefaults(opts);
-  assertSigFormat(opts.format);
-  const msg = prepMsg(message, opts, false) as Uint8Array;
-  return _sign<TRet<Uint8Array>>(msg, secretKey, opts, hmacDrbg);
+  const o = setDefaults(opts);
+  assertSigFormat(o[2]);
+  const msg = prepMsg(message, o[1], false) as Uint8Array;
+  return _sign<TRet<Uint8Array>>(msg, secretKey, o, hmacDrbg);
 };
 
 /**
@@ -1064,10 +1051,10 @@ const signAsync = async (
   secretKey: TArg<Uint8Array>,
   opts: TArg<ECDSASignOpts> = {}
 ): Promise<TRet<Uint8Array>> => {
-  opts = setDefaults(opts);
-  assertSigFormat(opts.format);
-  const msg = (await prepMsg(snapshotBytes(message, 'message'), opts, true)) as Uint8Array;
-  return _sign<Promise<TRet<Uint8Array>>>(msg, secretKey, opts, hmacDrbgAsync);
+  const o = setDefaults(opts);
+  assertSigFormat(o[2]);
+  const msg = (await prepMsg(snapshotBytes(message, 'message'), o[1], true)) as Uint8Array;
+  return _sign<Promise<TRet<Uint8Array>>>(msg, secretKey, o, hmacDrbgAsync);
 };
 
 /**
@@ -1106,9 +1093,9 @@ const verify = (
   publicKey: TArg<Uint8Array>,
   opts: TArg<ECDSAVerifyOpts> = {}
 ): boolean => {
-  opts = setDefaults(opts);
-  const msg = prepMsg(message, opts, false) as Uint8Array;
-  return _verify(signature, msg, publicKey, opts);
+  const o = setDefaults(opts);
+  const msg = prepMsg(message, o[1], false) as Uint8Array;
+  return _verify(signature, msg, publicKey, o);
 };
 
 /**
@@ -1142,9 +1129,9 @@ const verifyAsync = async (
   publicKey: TArg<Uint8Array>,
   opts: TArg<ECDSAVerifyOpts> = {}
 ): Promise<boolean> => {
-  opts = setDefaults(opts);
-  const msg = (await prepMsg(message, opts, true)) as Uint8Array;
-  return _verify(sig, msg, publicKey, opts);
+  const o = setDefaults(opts);
+  const msg = (await prepMsg(message, o[1], true)) as Uint8Array;
+  return _verify(sig, msg, publicKey, o);
 };
 
 const _recover = (
@@ -1152,25 +1139,20 @@ const _recover = (
   messageHash: TArg<Uint8Array>,
   isCompressed: boolean
 ): TRet<Uint8Array> => {
-  const sig = Signature.fromBytes(signature, 'recovered');
-  const { r, s } = sig;
+  const { r, s, recovery: rec } = Signature.fromBytes(signature, 'recovered');
   // 0 or 1 recovery id determines sign of "y" coordinate.
   // 2 or 3 means q.x was >N.
-  const recovery = assertRecoveryBit(sig.recovery);
+  const recovery = assertRecoveryBit(rec);
   // SEC 1 recovery derives e through the same truncation path as verification, so prehash:false
   // must accept long digests here too instead of hard-requiring 32-byte SHA-256 input.
-  const h = bits2int_modN(abytes(messageHash, undefined, 'msgHash')); // Truncate hash
-  const radj = recovery === 2 || recovery === 3 ? r + N : r;
+  const h = bits2int_modN(messageHash); // Truncate hash; prepMsg() already validated it.
+  const radj = recovery > 1 ? r + N : r;
   FpIsValidNot0(radj); // ensure q.x is still a field element
-  // Recovery bit and R.y share parity, so the y-prefix helper applies: even bit => 0x02, odd => 0x03.
-  const head = getPrefix(big(recovery));
-  const Rb = concatBytes(head, numTo32b(radj)); // concat head + r
-  const R = Point.fromBytes(Rb);
   const ir = invert(radj, N); // r^-1
-  const u1 = modN(-h * ir); // -hr^-1
-  const u2 = modN(s * ir); // sr^-1
-  const point = doubleScalarMulUns(R, u1, u2); // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)
-  return point.toBytes(isCompressed);
+  // Recovery bit and R.y share parity: even bit => 0x02, odd => 0x03.
+  const R = Point.fromBytes(concatBytes(getPrefix(big(recovery)), numTo32b(radj)));
+  // (sr^-1)R-(hr^-1)G = -(hr^-1)G + (sr^-1)R
+  return doubleScalarMulUns(R, modN(-h * ir), modN(s * ir)).toBytes(isCompressed);
 };
 
 /**
@@ -1199,7 +1181,7 @@ const recoverPublicKey = (
   message: TArg<Uint8Array>,
   opts: TArg<ECDSARecoverOpts> = {}
 ): TRet<Uint8Array> => {
-  const msg = prepMsg(message, setDefaults(opts), false) as Uint8Array;
+  const msg = prepMsg(message, setDefaults(opts)[1], false) as Uint8Array;
   return _recover(signature, msg, opts.isCompressed ?? true);
 };
 
@@ -1224,7 +1206,7 @@ const recoverPublicKeyAsync = async (
   message: TArg<Uint8Array>,
   opts: TArg<ECDSARecoverOpts> = {}
 ): Promise<TRet<Uint8Array>> => {
-  const msg = (await prepMsg(message, setDefaults(opts), true)) as Uint8Array;
+  const msg = (await prepMsg(message, setDefaults(opts)[1], true)) as Uint8Array;
   return _recover(signature, msg, opts.isCompressed ?? true);
 };
 
@@ -1474,9 +1456,7 @@ const _verifSchnorr = (
     // lift_x from BIP340. Convert 32-byte x coordinate to elliptic curve point.
     // Fail if x ≥ p. Let c = x³ + 7 mod p.
     const x = bytesToNumBE(pub);
-    const y = lift_x(x); // lift_x already returns the unique even root required by BIP340.
-    P_ = new Point(x, y, 1n).assertValidity();
-    const px = numTo32b(P_.toAffine().x);
+    P_ = lift_x(x); // lift_x returns the validated even-y point required by BIP340.
     // P = lift_x(int(pk)); fail if that fails
     r = FpIsValidNot0(sliceBytesNumBE(sig, 0, L)); // Let r = int(sig[0:32]); fail if r ≥ p.
     // Let s = int(sig[32:64]); fail if s ≥ n.
@@ -1484,7 +1464,8 @@ const _verifSchnorr = (
     // s = 0 only with negligible probability (k + e*d ≡ 0 mod n), so treat zero-s inputs as
     // crafted edge cases and fail closed instead of carrying that extra verification surface.
     s = FnIsValidNot0(sliceBytesNumBE(sig, L, 64));
-    chalInput = concatBytes(numTo32b(r), px, msg);
+    // lift_x validated x < P, so the 32-byte input encoding equals bytes(P.x) exactly.
+    chalInput = concatBytes(numTo32b(r), pub, msg);
   } catch (error) {
     return false;
   }
@@ -1622,8 +1603,8 @@ export const __TEST: TRet<{
   extractK: (rand: TArg<Uint8Array>) => TRet<{ rx: Uint8Array; k: bigint }>;
 }> = /* @__PURE__ */ freeze({
   // Shared tests expect the BIP340 helper to expose the canonical even-y point, not just the root.
-  lift_x: (x: bigint): TRet<Point> => Point.fromAffine({ x, y: lift_x(x) }) as TRet<Point>,
-  extractK: (rand: TArg<Uint8Array>): TRet<{ rx: Uint8Array; k: bigint }> => extractK(rand),
+  lift_x: lift_x as (x: bigint) => TRet<Point>,
+  extractK: extractK as (rand: TArg<Uint8Array>) => TRet<{ rx: Uint8Array; k: bigint }>,
 });
 
 // !! Remove the export below to easily use in REPL / browser console
