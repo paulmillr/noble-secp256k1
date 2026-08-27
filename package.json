@@ -18,7 +18,7 @@
   },
   "scripts": {
     "benchmark": "node benchmark/secp256k1.ts",
-    "benchmark:size": "bismar -bsm index.js/{getPublicKey,signAsync,verifyAsync,schnorr,getSharedSecret,keygen}",
+    "benchmark:size": "bismar -bsm",
     "build": "tsc",
     "check": "jsbt-check",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",
