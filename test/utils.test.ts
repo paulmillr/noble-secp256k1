@@ -31,6 +31,7 @@ describe('utils', () => {
   it('hexToBytes', () => {
     for (let v of staticHexVectors) eql(hexToBytes(v.hex), v.bytes);
     for (let v of staticHexVectors) eql(hexToBytes(v.hex.toUpperCase()), v.bytes);
+    for (const v of ['１２', 'ＡＦ', '𝟘𝟙']) throws(() => hexToBytes(v), RangeError);
     for (let [v, repr] of getTypeTests()) {
       if (repr === '""') continue;
       throws(() => hexToBytes(v));

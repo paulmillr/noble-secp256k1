@@ -1,5 +1,6 @@
 import { should } from '@paulmillr/jsbt/test.js';
 import './hashes.test.ts';
+import './regressions.test.ts';
 import './point.test.ts';
 import './secp256k1.test.ts';
 import './utils.test.ts';
