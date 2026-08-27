@@ -16,29 +16,25 @@
  * * Gx, Gy are coordinates of Generator / base point
  */
 const freeze = Object.freeze;
+const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+const Gx = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+const Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
 // Mirror noble-curves: Point.CURVE() returns shared params, but those params must stay frozen so
 // callers cannot mutate them out from under the arithmetic constants captured below.
 const secp256k1_CURVE: WeierstrassOpts<bigint> = freeze({
-  p: 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn,
-  n: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n,
+  p: P,
+  n: N,
   h: 1n,
   a: 0n,
   b: 7n,
-  Gx: 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n,
-  Gy: 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n,
+  Gx,
+  Gy,
 });
-const { p: P, n: N, Gx, Gy, b: _b } = secp256k1_CURVE;
 
 // 32-byte field / scalar width, and the SHA-256 / HMAC-DRBG output width used
 // by the RFC6979 paths here.
 const L = 32;
-// Plain consts instead of an object: internal property names would survive minification.
-const Lpub = L + 1; // 33-byte compressed public key
-const LpubU = L * 2 + 1; // 65-byte uncompressed public key
-const Lsig = L * 2; // 64-byte compact signature
-// 48-byte keygen seed floor: 384 bits exceeds FIPS 186-5 Table A.2's
-// 352-bit recommendation for 256-bit prime curves.
-const Lseed = L + L / 2;
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
 
@@ -181,8 +177,7 @@ const isBytes = (a: unknown): a is Uint8Array => {
     a instanceof Uint8Array ||
     (ArrayBuffer.isView(a) &&
       a.constructor.name === 'Uint8Array' &&
-      'BYTES_PER_ELEMENT' in a &&
-      a.BYTES_PER_ELEMENT === 1)
+      (a as Uint8Array).BYTES_PER_ELEMENT === 1)
   );
 };
 /** Asserts something is Uint8Array. */
@@ -207,11 +202,8 @@ const snapshotBytes = (value: TArg<Uint8Array>, title: string): TRet<Uint8Array>
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 /** Convert byte array to hex string. */
 const bytesToHex = (bytes: TArg<Uint8Array>): string => {
-  abytes(bytes);
   let hex = '';
-  for (let i = 0; i < bytes.length; i++) {
-    hex += padh(bytes[i], 2);
-  }
+  for (const byte of abytes(bytes)) hex += padh(byte, 2);
   return hex;
 };
 // Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
@@ -249,14 +241,10 @@ const subtle = () => {
 /** Copies several Uint8Arrays into one. */
 const concatBytes = (...arrays: TArg<Uint8Array[]>): TRet<Uint8Array> => {
   let sum = 0;
-  for (let i = 0; i < arrays.length; i++) {
-    const a = arrays[i];
-    abytes(a);
-    sum += a.length;
-  }
+  for (const a of arrays) sum += abytes(a).length;
   const res = new Uint8Array(sum);
-  for (let i = 0, pad = 0; i < arrays.length; i++) {
-    const a = arrays[i];
+  let pad = 0;
+  for (const a of arrays) {
     res.set(a, pad);
     pad += a.length;
   }
@@ -279,10 +267,7 @@ const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of r
   throw new RangeError(msg);
 };
 /** Canonical modular reduction. Callers must provide a positive modulus. */
-const M = (a: bigint, b: bigint = P) => {
-  const r = a % b;
-  return r >= 0n ? r : b + r;
-};
+const M = (a: bigint, b: bigint = P) => ((a %= b) >= 0n ? a : b + a);
 const modN = (a: bigint) => M(a, N);
 /** Modular inversion using extended euclidean GCD. Variable-time (non-CT). */
 const invert = (number: bigint, modulo: bigint): bigint => {
@@ -318,12 +303,11 @@ const _hash = (name: string) => {
 // so wrapper helpers must enforce the exact 32-byte digest contract instead of trusting providers.
 const callHash = (name: string, a: TArg<Uint8Array>, b?: TArg<Uint8Array>): TRet<Uint8Array> =>
   abytes(_hash(name)(a, b), L, 'digest');
-const callHashAsync = (
+const callHashAsync = async (
   name: string,
   a: TArg<Uint8Array>,
   b?: TArg<Uint8Array>
-): Promise<TRet<Uint8Array>> =>
-  Promise.resolve(_hash(name)(a, b)).then((r) => abytes(r, L, 'digest'));
+): Promise<TRet<Uint8Array>> => abytes(await _hash(name)(a, b), L, 'digest');
 /**
  * SHA-256 helper used by the synchronous API.
  * @param msg - message bytes to hash
@@ -361,7 +345,7 @@ const E_BADPOINT = 'bad point: not on curve';
  * secp256k1 formula. Koblitz curves are subclass of weierstrass curves with a=0,
  * making it x³+b; callers validate x first.
  */
-const koblitz = (x: bigint) => M(M(x * x) * x + _b);
+const koblitz = (x: bigint) => M(M(x * x) * x + 7n);
 /** assert is element of field mod P (incl. 0 for projective infinity coordinates) */
 const FpIsValid = (n: bigint) => arange(n, 0n, P);
 /** assert is element of field mod P (excl. 0 where current callers need a non-zero coordinate) */
@@ -440,7 +424,7 @@ class Point {
     // Local secp256k1 crosstests show OpenSSL raw point codecs accept 0x00 too.
     // Parse SEC 1 compressed/uncompressed encodings, then finish with assertValidity() before returning.
     try {
-      if (length === Lpub && (head === 0x02 || head === 0x03)) {
+      if (length === 33 && (head === 0x02 || head === 0x03)) {
         // Equation is y² == x³ + ax + b. We calculate y from x.
         // lift_x() returns the even root; SEC 1 0x03 still needs the odd root.
         let y = lift_x(x);
@@ -448,7 +432,7 @@ class Point {
         p = new Point(x, y, 1n);
       }
       // Uncompressed 65-byte point, 0x04 prefix
-      if (length === LpubU && head === 0x04) p = new Point(x, sliceBytesNumBE(tail, L, L * 2), 1n);
+      if (length === 65 && head === 0x04) p = new Point(x, sliceBytesNumBE(tail, L, L * 2), 1n);
     } catch (error) {
       // Out-of-range coordinates and non-residue x report the same error as wrong
       // prefixes / off-curve points, instead of generic range-check messages.
@@ -471,14 +455,10 @@ class Point {
   equals(other: Point): boolean {
     const { X: X1, Y: Y1, Z: Z1 } = this;
     const { X: X2, Y: Y2, Z: Z2 } = apoint(other); // checks class equality
-    const X1Z2 = M(X1 * Z2);
-    const X2Z1 = M(X2 * Z1);
-    const Y1Z2 = M(Y1 * Z2);
-    const Y2Z1 = M(Y2 * Z1);
-    return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
+    return M(X1 * Z2) === M(X2 * Z1) && M(Y1 * Z2) === M(Y2 * Z1);
   }
   is0(): boolean {
-    return this.equals(I);
+    return this.Z === 0n;
   }
   /** Flip point over y coordinate. */
   negate(): Point {
@@ -498,7 +478,7 @@ class Point {
     const { X: X1, Y: Y1, Z: Z1 } = this;
     const { X: X2, Y: Y2, Z: Z2 } = apoint(other);
     const a = 0n;
-    const b = _b;
+    const b = 7n;
     let X3 = 0n, Y3 = 0n, Z3 = 0n;
     const b3 = M(b * 3n);
     let t0 = M(X1 * X2), t1 = M(Y1 * Y2), t2 = M(Z1 * Z2), t3 = M(X1 + Y1); // step 1
@@ -539,9 +519,9 @@ class Point {
     let p = I;
     let f = G;
     let d: Point = this;
-    // Safe mode always runs scalarBits iterations so ladder length can't leak the scalar's
+    // Safe mode always runs 256 iterations so ladder length can't leak the scalar's
     // leading zero bits; unsafe mode stops at the top set bit for speed.
-    for (let i = 0; safe ? i < scalarBits : n > 0n; i++) {
+    for (let i = 0; safe ? i < 256 : n > 0n; i++) {
       // if bit is present, add to point
       // if not present, add to fake, for timing safety
       if (n & 1n) p = p.add(d);
@@ -558,7 +538,7 @@ class Point {
   toAffine(): AffinePoint {
     const { X: x, Y: y, Z: z } = this;
     // fast-paths for ZERO point OR Z=1
-    if (this.equals(I)) return { x: 0n, y: 0n };
+    if (z === 0n) return { x: 0n, y: 0n };
     if (z === 1n) return { x, y };
     const iz = invert(z, P);
     // (Z * Z^-1) must be 1, otherwise bad math
@@ -605,9 +585,9 @@ const bytesToNumBE = (b: TArg<Uint8Array>): bigint => big('0x' + (bytesToHex(b) 
 // Callers provide monotone slice bounds; subarray() would otherwise clamp or reinterpret them silently.
 const sliceBytesNumBE = (b: TArg<Uint8Array>, from: number, to: number) =>
   bytesToNumBE(b.subarray(from, to));
-const B256 = 2n ** 256n; // upper bound for values representable in 32 bytes
-/** Generic 32-byte big-endian encoder. Must be 0 <= num < B256; call sites need not be field/scalar elements. */
-const numTo32b = (num: bigint): TRet<Uint8Array> => hexToBytes(padh(arange(num, 0n, B256), L * 2)); // L*2 = 64 hex chars for a zero-padded 32-byte value
+/** Generic 32-byte big-endian encoder. Must be 0 <= num < 2²⁵⁶; call sites need not be field/scalar elements. */
+const numTo32b = (num: bigint): TRet<Uint8Array> =>
+  hexToBytes(padh(arange(num, 0n, 2n ** 256n), L * 2)); // L*2 = 64 hex chars for a zero-padded 32-byte value
 /** Normalize private key to scalar (bigint). Verifies scalar is in range 1 <= d < N. */
 const secretKeyToScalar = (secretKey: TArg<Uint8Array>): bigint => {
   const num = bytesToNumBE(abytes(secretKey, L, 'secret key'));
@@ -642,8 +622,8 @@ const isValidSecretKey = (secretKey: TArg<Uint8Array>): boolean => {
 const isValidPublicKey = (publicKey: TArg<Uint8Array>, isCompressed?: boolean): boolean => {
   try {
     const l = publicKey.length;
-    if (isCompressed === true && l !== Lpub) return false;
-    if (isCompressed === false && l !== LpubU) return false;
+    if (isCompressed === true && l !== 33) return false;
+    if (isCompressed === false && l !== 65) return false;
     return !!Point.fromBytes(publicKey);
   } catch (error) {
     return false;
@@ -655,14 +635,14 @@ const assertRecoveryBit = (recovery?: number): number => {
   throw new Error('invalid recovery id');
 };
 const assertSigFormat = (format?: ECDSASignatureFormat) => {
-  if (format === SIG_DER)
+  if (format === 'der')
     throw new Error('Signature format "der" is not supported: switch to noble-curves');
   if (format != null && format !== SIG_COMPACT && format !== SIG_RECOVERED)
     throw new Error('Signature format must be one of: compact, recovered, der');
 };
 const assertSigLength = (sig: TArg<Uint8Array>, format: ECDSASignatureFormat = SIG_COMPACT) => {
   assertSigFormat(format);
-  const len = Lsig + Number(format === SIG_RECOVERED);
+  const len = 64 + Number(format === SIG_RECOVERED);
   if (sig.length !== len)
     throw new Error(`Signature format "${format}" expects Uint8Array with length ${len}`);
 };
@@ -697,7 +677,7 @@ class Signature {
       b = b.subarray(1);
     }
     const r = sliceBytesNumBE(b, 0, L);
-    const s = sliceBytesNumBE(b, L, Lsig);
+    const s = sliceBytesNumBE(b, L, 64);
     return new Signature(r, s, rec);
   }
   addRecoveryBit(bit: number): RecoveredSignature {
@@ -753,7 +733,6 @@ const bits2int_modN = (bytes: TArg<Uint8Array>): bigint => modN(bits2int(abytes(
 export type ECDSAExtraEntropy = boolean | Uint8Array;
 const SIG_COMPACT = 'compact';
 const SIG_RECOVERED = 'recovered';
-const SIG_DER = 'der';
 /**
  * - `compact` is the default format
  * - `recovered` is the same as compact, but with an extra byte indicating recovery byte
@@ -832,9 +811,8 @@ const hashes = {
     message: TArg<Uint8Array>
   ): Promise<TRet<Uint8Array>> => {
     const s = subtle();
-    const name = 'HMAC';
-    const k = await s.importKey('raw', key, { name, hash: { name: _sha } }, false, ['sign']);
-    return new Uint8Array(await s.sign(name, k, message)) as TRet<Uint8Array>;
+    const k = await s.importKey('raw', key, { name: 'HMAC', hash: _sha }, false, ['sign']);
+    return new Uint8Array(await s.sign('HMAC', k, message)) as TRet<Uint8Array>;
   },
   hmacSha256: undefined as
     undefined | ((key: TArg<Uint8Array>, message: TArg<Uint8Array>) => TRet<Uint8Array>),
@@ -859,7 +837,6 @@ type Pred<T> = (v: Uint8Array) => T | undefined;
 const NULL = /* @__PURE__ */ new Uint8Array(0);
 const byte0 = /* @__PURE__ */ Uint8Array.of(0x00);
 const byte1 = /* @__PURE__ */ Uint8Array.of(0x01);
-const _maxDrbgIters = 1000;
 const _drbgErr = 'drbg: tried max amount of iterations';
 // HMAC-DRBG from NIST 800-90. Minimal, non-full-spec - used for RFC6979 signatures.
 const hmacDrbg = <T>(seed: Uint8Array, pred: Pred<T>): T => {
@@ -883,7 +860,7 @@ const hmacDrbg = <T>(seed: Uint8Array, pred: Pred<T>): T => {
   };
   // HMAC-DRBG generate() function
   const gen = () => {
-    if (i++ >= _maxDrbgIters) throw new Error(_drbgErr);
+    if (i++ >= 1000) throw new Error(_drbgErr);
     v = h(); // v = hmac(k || v)
     return v; // One block is enough here because secp256k1 qlen and SHA-256 hlen are both 32 bytes.
   };
@@ -919,7 +896,7 @@ const hmacDrbgAsync = async <T>(seed: Uint8Array, pred: Pred<T>): Promise<T> => 
   };
   // HMAC-DRBG generate() function
   const gen = async () => {
-    if (i++ >= _maxDrbgIters) throw new Error(_drbgErr);
+    if (i++ >= 1000) throw new Error(_drbgErr);
     v = await h(); // v = hmac(k || v)
     return v; // Same one-block shortcut: secp256k1 qlen and SHA-256 hlen are both 32 bytes here.
   };
@@ -942,20 +919,17 @@ const _sign = <T>(
 ): T => {
   let { lowS, extraEntropy } = opts; // generates low-s sigs by default
   // RFC6979 3.2: we skip step A
-  const int2octets = numTo32b; // int to octets
   const h1i = bits2int_modN(messageHash); // msg bigint
-  const h1o = int2octets(h1i); // msg octets
   const d = secretKeyToScalar(secretKey); // validate private key, convert to bigint
-  const seedArgs: Uint8Array[] = [int2octets(d), h1o]; // Step D of RFC6979 3.2
+  const seedArgs: Uint8Array[] = [numTo32b(d), numTo32b(h1i)]; // Step D of RFC6979 3.2
   /** RFC6979 3.6: additional k' (optional). See {@link ECDSAExtraEntropy}. */
   if (extraEntropy != null && extraEntropy !== false) {
     // K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1) || k')
     // gen random bytes OR pass as-is
-    const e = extraEntropy === true ? randomBytes(L) : extraEntropy;
-    seedArgs.push(abytes(e, undefined, 'extraEntropy')); // check for being bytes
+    seedArgs.push(
+      abytes(extraEntropy === true ? randomBytes(L) : extraEntropy, undefined, 'extraEntropy')
+    );
   }
-  const seed = concatBytes(...seedArgs);
-  const m = h1i; // RFC name for the truncated msg scalar
   // Converts signature params into point w r/s, checks result for validity.
   // To transform k => Signature:
   // q = k⋅G
@@ -977,7 +951,7 @@ const _sign = <T>(
     // that restart-from-scratch note does not apply here: hmacDrbg() keeps advancing through one
     // RFC6979 stream until k2sig() accepts a candidate, instead of restarting from the same seed.
     if (r === 0n) return;
-    const s = modN(ik * modN(m + r * d)); // s = k^-1(m + rd) mod n
+    const s = modN(ik * modN(h1i + r * d)); // s = k^-1(m + rd) mod n
     if (s === 0n) return;
     let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit (2 or 3, when q.x > n)
     let normS = s; // normalized S
@@ -989,7 +963,7 @@ const _sign = <T>(
     const sig = new Signature(r, normS, recovery) as RecoveredSignature; // use normS, not s
     return sig.toBytes(opts.format);
   };
-  return drbg(seed, k2sig);
+  return drbg(concatBytes(...seedArgs), k2sig);
 };
 
 // Follows [SEC1](https://secg.org/sec1-v2.pdf) 4.1.4.
@@ -1283,10 +1257,10 @@ const getSharedSecret = (
 // FIPS 186-5 Appendix A.4.1 style key generation reduces a wide random integer mod (n - 1) and adds 1.
 // The 48-byte minimum keeps the secp256k1 bias bound below the appendix's epsilon <= 2^-64 target.
 const randomSecretKey = (seed?: TArg<Uint8Array>): TRet<Uint8Array> => {
-  seed = seed === undefined ? randomBytes(Lseed) : seed;
+  seed = seed === undefined ? randomBytes(48) : seed;
   abytes(seed);
   // Keep the public range text aligned with the enforced 48-byte FIPS floor.
-  if (seed.length < Lseed || seed.length > 1024) throw new RangeError('expected 48-1024b');
+  if (seed.length < 48 || seed.length > 1024) throw new RangeError('expected 48-1024b');
   const num = M(bytesToNumBE(seed), N - 1n);
   return numTo32b(num + 1n);
 };
@@ -1374,9 +1348,6 @@ const utils: {
 // Internal BIP340 tag names are ASCII-only here, so charCodeAt() is enough; this is not a general UTF-8 encoder.
 const getTag = (tag: string): TRet<Uint8Array> =>
   Uint8Array.from('BIP0340/' + tag, (c) => c.charCodeAt(0)) as TRet<Uint8Array>;
-const T_AUX = 'aux';
-const T_NONCE = 'nonce';
-const T_CHALLENGE = 'challenge';
 // Both SHA-256 provider slots are configurable, so tag hashing still goes through the checked
 // wrappers even though the built-in defaults are deterministic and the tag bytes are ASCII-only.
 const taggedHash = (tag: string, ...messages: TArg<Uint8Array[]>): TRet<Uint8Array> => {
@@ -1402,9 +1373,9 @@ const extpubSchnorr = (priv: TArg<Uint8Array>) => {
 
 const bytesModN = (bytes: TArg<Uint8Array>) => modN(bytesToNumBE(bytes));
 const challenge = (...args: TArg<Uint8Array[]>): bigint =>
-  bytesModN(taggedHash(T_CHALLENGE, ...args));
+  bytesModN(taggedHash('challenge', ...args));
 const challengeAsync = async (...args: TArg<Uint8Array[]>): Promise<bigint> =>
-  bytesModN(await taggedHashAsync(T_CHALLENGE, ...args));
+  bytesModN(await taggedHashAsync('challenge', ...args));
 
 /** Schnorr public key is just `x` coordinate of Point as per BIP340. */
 const pubSchnorr = (secretKey: TArg<Uint8Array>): TRet<Uint8Array> => {
@@ -1453,15 +1424,12 @@ const signSchnorr = (
   auxRand: TArg<Uint8Array> = randomBytes(L)
 ): TRet<Uint8Array> => {
   const { m, px, d, a } = prepSigSchnorr(message, secretKey, auxRand);
-  const aux = taggedHash(T_AUX, a);
   // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
-  const t = numTo32b(d ^ bytesToNumBE(aux));
+  const t = numTo32b(d ^ bytesToNumBE(taggedHash('aux', a)));
   // Let rand = hash/nonce(t || bytes(P) || m)
-  const rand = taggedHash(T_NONCE, t, px, m);
-  const { rx, k } = extractK(rand);
+  const { rx, k } = extractK(taggedHash('nonce', t, px, m));
   // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
-  const e = challenge(rx, px, m);
-  const sig = createSigSchnorr(k, rx, e, d);
+  const sig = createSigSchnorr(k, rx, challenge(rx, px, m), d);
   // If Verify(bytes(P), m, sig) (see below) returns failure, abort
   if (!verifySchnorr(sig, m, px)) throw new Error(E_INVSIG);
   return sig;
@@ -1473,15 +1441,12 @@ const signSchnorrAsync = async (
   auxRand: TArg<Uint8Array> = randomBytes(L)
 ): Promise<TRet<Uint8Array>> => {
   const { m, px, d, a } = prepSigSchnorr(message, secretKey, auxRand);
-  const aux = await taggedHashAsync(T_AUX, a);
   // Let t be the byte-wise xor of bytes(d) and hash/aux(a)
-  const t = numTo32b(d ^ bytesToNumBE(aux));
+  const t = numTo32b(d ^ bytesToNumBE(await taggedHashAsync('aux', a)));
   // Let rand = hash/nonce(t || bytes(P) || m)
-  const rand = await taggedHashAsync(T_NONCE, t, px, m);
-  const { rx, k } = extractK(rand);
+  const { rx, k } = extractK(await taggedHashAsync('nonce', t, px, m));
   // Let e = int(hash/challenge(bytes(R) || bytes(P) || m)) mod n.
-  const e = await challengeAsync(rx, px, m);
-  const sig = createSigSchnorr(k, rx, e, d);
+  const sig = createSigSchnorr(k, rx, await challengeAsync(rx, px, m), d);
   // If Verify(bytes(P), m, sig) (see below) returns failure, abort
   if (!(await verifySchnorrAsync(sig, m, px))) throw new Error(E_INVSIG);
   return sig;
@@ -1498,7 +1463,7 @@ const _verifSchnorr = (
   publicKey: TArg<Uint8Array>,
   challengeFn: (...args: Uint8Array[]) => MaybePromise<bigint>
 ): MaybePromise<boolean> => {
-  const sig = abytes(signature, Lsig, 'signature');
+  const sig = abytes(signature, 64, 'signature');
   const msg = abytes(message, undefined, 'message');
   const pub = abytes(publicKey, L, 'publicKey');
   let P_: Point;
@@ -1518,7 +1483,7 @@ const _verifSchnorr = (
     // Stricter than BIP-340/libsecp256k1, which only reject s >= n. Honest signing reaches
     // s = 0 only with negligible probability (k + e*d ≡ 0 mod n), so treat zero-s inputs as
     // crafted edge cases and fail closed instead of carrying that extra verification surface.
-    s = FnIsValidNot0(sliceBytesNumBE(sig, L, Lsig));
+    s = FnIsValidNot0(sliceBytesNumBE(sig, L, 64));
     chalInput = concatBytes(numTo32b(r), px, msg);
   } catch (error) {
     return false;
@@ -1587,18 +1552,14 @@ const schnorr: {
 // ## Precomputes
 // --------------
 
-const W = 8; // W is window size
-const scalarBits = 256;
-const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8, NOT 32 - see wNAF loop
-const pwindowSize = 2 ** (W - 1); // 128 for W=8
 const precompute = () => {
   const points: Point[] = [];
   let p = G;
   let b = p;
-  for (let w = 0; w < pwindows; w++) {
+  for (let w = 0; w < 33; w++) {
     b = p;
     points.push(b);
-    for (let i = 1; i < pwindowSize; i++) {
+    for (let i = 1; i < 128; i++) {
       b = b.add(p);
       points.push(b);
     } // i=1, bc we skip 0
@@ -1628,30 +1589,25 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
   const comp = Gpows || (Gpows = precompute());
   let p = I;
   let f = G; // f must be G, or could become I in the end
-  const pow_2_w = 2 ** W; // 256 for W=8
-  const maxNum = pow_2_w; // 256 for W=8
-  const mask = big(pow_2_w - 1); // 255 for W=8 == mask 0b11111111
-  const shiftBy = big(W); // 8 for W=8
-  for (let w = 0; w < pwindows; w++) {
-    let wbits = Number(n & mask); // extract W bits.
-    n >>= shiftBy; // shift number by W bits.
+  for (let w = 0; w < 33; w++) {
+    let wbits = Number(n & 255n); // extract W=8 bits.
+    n >>= 8n; // shift number by W=8 bits.
     // We use negative indexes to reduce size of precomputed table by 2x.
     // Instead of needing precomputes 0..256, we only calculate them for 0..128.
     // If an index > 128 is found, we do (256-index) - where 256 is next window.
     // Naive: index +127 => 127, +224 => 224
     // Optimized: index +127 => 127, +224 => 256-32
-    if (wbits > pwindowSize) {
-      wbits -= maxNum;
+    if (wbits > 128) {
+      wbits -= 256;
       n += 1n;
     }
-    const off = w * pwindowSize;
-    const offF = off; // offsets, evaluate both
+    const off = w * 128;
     const offP = off + Math.abs(wbits) - 1;
     const isOddW = w % 2 !== 0; // conditions, evaluate both; alternates fake-add sign per window
     const isNeg = wbits < 0;
     if (wbits === 0) {
-      // off == I: can't add it. Adding random offF instead.
-      f = f.add(ctneg(isOddW, comp[offF])); // bits are 0: add garbage to fake point
+      // off == I: can't add it. Add the first point in this window to the fake accumulator.
+      f = f.add(ctneg(isOddW, comp[off])); // bits are 0: add garbage to fake point
     } else {
       p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
     }
