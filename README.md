@@ -8,7 +8,7 @@ Fastest 5KB JS implementation of secp256k1 signatures & ECDH.
   signatures compliant with [BIP340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
 - 🤝 Elliptic Curve Diffie-Hellman [ECDH](https://en.wikipedia.org/wiki/Elliptic-curve_Diffie–Hellman)
 - 🔒 Supports [hedged signatures](https://paulmillr.com/posts/deterministic-signatures/) guarding against fault attacks
-- 🪶 4.94KB (gzipped) - 10-25x smaller than similar libraries
+- 🪶 4.8KB (gzipped) - 10-25x smaller than similar libraries
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
 Use noble-secp256k1 if you need smaller attack surface & better auditability.
