@@ -1416,7 +1416,7 @@ const prepSigSchnorr = (
 ) => {
   const m = snapshotBytes(message, 'message');
   const { px, d } = extpubSchnorr(secretKey);
-  return { m, px, d, a: abytes(auxRand, L) };
+  return { m, px, d, a: snapshotBytes(auxRand, 'auxRand', L) };
 };
 
 const extractK = (rand: TArg<Uint8Array>): TRet<{ rx: Uint8Array; k: bigint }> => {
