@@ -1,7 +1,8 @@
 # Changelog for noble-secp256k1
 
-## 3.2.0 (2026-08-27)
+## 3.2.0 (2026-08-30)
 
+- verify: ensure recovery id is bound to msg/sig (only for recovered format)
 - Added `isCompressed` to the options for `recoverPublicKey()` and `recoverPublicKeyAsync()`
 - Made safe generic `Point#multiply()` execute the full 256-bit ladder regardless of the scalar's leading zero bits
 - Made `signAsync()`, `schnorr.sign()`, and `schnorr.signAsync()` snapshot the message at invocation, preventing caller mutation
