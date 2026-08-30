@@ -1,5 +1,5 @@
+import * as random from '@paulmillr/jsbt/random.js';
 import { describe, it } from '@paulmillr/jsbt/test.js';
-import * as fc from 'fast-check';
 import { deepStrictEqual as eql, throws } from 'node:assert';
 import {
   CURVES,
@@ -17,10 +17,10 @@ import { getTypeTests } from './utils.ts';
 const NUM_RUNS = 5;
 function hexa() {
   const items = '0123456789abcdef';
-  return fc.integer({ min: 0, max: 15 }).map((n) => items[n]);
+  return random.integer({ min: 0, max: 15 }).map((n) => items[n]);
 }
 function hexaString(constraints = {}) {
-  return fc.string({ ...constraints, unit: hexa() });
+  return random.string({ ...constraints, unit: hexa() });
 }
 const FC_HEX = hexaString({ minLength: 64, maxLength: 64 });
 
@@ -41,7 +41,7 @@ describe('basic curve tests', () => {
   for (const name in CURVES) {
     const C = CURVES[name];
     const CURVE_ORDER = C.Point.Fn?.ORDER ?? C.Point.CURVE().n;
-    const FC_BIGINT = fc.bigInt(1n + 1n, CURVE_ORDER - 1n);
+    const FC_BIGINT = random.bigInt(1n + 1n, CURVE_ORDER - 1n);
     const p = C.Point;
     const o = getOtherCurve(name).Point;
     if (!p) continue;
@@ -149,8 +149,8 @@ describe('basic curve tests', () => {
           equal(G[1].multiply(c).multiply(inv), G[1].multiply(a), 'c*G * (1/b)*G = a*G');
         });
         it('multiply, rand', () =>
-          fc.assert(
-            fc.property(FC_BIGINT, FC_BIGINT, (a, b) => {
+          random.assert(
+            random.property(FC_BIGINT, FC_BIGINT, (a, b) => {
               const c = mod(a + b, CURVE_ORDER);
               if (c === CURVE_ORDER || c < 1n) return;
               const pA = G[1].multiply(a);
@@ -165,8 +165,8 @@ describe('basic curve tests', () => {
             { numRuns: NUM_RUNS }
           ));
         it('multiply2, rand', () =>
-          fc.assert(
-            fc.property(FC_BIGINT, FC_BIGINT, (a, b) => {
+          random.assert(
+            random.property(FC_BIGINT, FC_BIGINT, (a, b) => {
               const c = mod(a * b, CURVE_ORDER);
               const pA = G[1].multiply(a);
               const pB = G[1].multiply(b);
@@ -254,20 +254,24 @@ describe('basic curve tests', () => {
           equal(msm(points, [3n, 5n, 7n, 11n]), p.BASE.multiply(129n), '129 * G');
         });
         it('MSM random', () =>
-          fc.assert(
-            fc.property(fc.array(fc.tuple(FC_BIGINT, FC_BIGINT)), FC_BIGINT, (pairs) => {
-              let total = 0n;
-              const scalars = [];
-              const points = [];
-              for (const [ps, s] of pairs) {
-                points.push(p.BASE.multiply(ps));
-                scalars.push(s);
-                total += ps * s;
+          random.assert(
+            random.property(
+              random.array(random.tuple(FC_BIGINT, FC_BIGINT)),
+              FC_BIGINT,
+              (pairs) => {
+                let total = 0n;
+                const scalars = [];
+                const points = [];
+                for (const [ps, s] of pairs) {
+                  points.push(p.BASE.multiply(ps));
+                  scalars.push(s);
+                  total += ps * s;
+                }
+                total = mod(total, CURVE_ORDER);
+                const exp = total ? p.BASE.multiply(total) : p.ZERO;
+                equal(pippenger(p, points, scalars), exp, 'total');
               }
-              total = mod(total, CURVE_ORDER);
-              const exp = total ? p.BASE.multiply(total) : p.ZERO;
-              equal(pippenger(p, points, scalars), exp, 'total');
-            }),
+            ),
             { numRuns: NUM_RUNS }
           ));
         it('precomputeMSMUnsafe basic', () => {
@@ -283,27 +287,31 @@ describe('basic curve tests', () => {
           }
         });
         it('precomputeMSMUnsafe random', () =>
-          fc.assert(
-            fc.property(fc.array(fc.tuple(FC_BIGINT, FC_BIGINT)), FC_BIGINT, (pairs) => {
-              const Point = C.Point;
-              if (!Point) throw new Error('Unknown point');
+          random.assert(
+            random.property(
+              random.array(random.tuple(FC_BIGINT, FC_BIGINT)),
+              FC_BIGINT,
+              (pairs) => {
+                const Point = C.Point;
+                if (!Point) throw new Error('Unknown point');
 
-              let total = 0n;
-              const scalars = [];
-              const points = [];
-              for (const [ps, s] of pairs) {
-                points.push(p.BASE.multiply(ps));
-                scalars.push(s);
-                total += ps * s;
-              }
-              total = mod(total, CURVE_ORDER);
-              const res = total ? p.BASE.multiply(total) : p.ZERO;
+                let total = 0n;
+                const scalars = [];
+                const points = [];
+                for (const [ps, s] of pairs) {
+                  points.push(p.BASE.multiply(ps));
+                  scalars.push(s);
+                  total += ps * s;
+                }
+                total = mod(total, CURVE_ORDER);
+                const res = total ? p.BASE.multiply(total) : p.ZERO;
 
-              for (let windowSize = 1; windowSize <= 10; windowSize++) {
-                const mul = precomputeMSMUnsafe(Point, points, windowSize);
-                equal(mul(scalars), res, 'windowSize=' + windowSize);
+                for (let windowSize = 1; windowSize <= 10; windowSize++) {
+                  const mul = precomputeMSMUnsafe(Point, points, windowSize);
+                  equal(mul(scalars), res, 'windowSize=' + windowSize);
+                }
               }
-            }),
+            ),
             { numRuns: NUM_RUNS }
           ));
       });
@@ -315,8 +323,8 @@ describe('basic curve tests', () => {
       });
       // toHex/fromHex (if available)
       it('fromBytes(toBytes()) roundtrip', () => {
-        fc.assert(
-          fc.property(FC_BIGINT, (x) => {
+        random.assert(
+          random.property(FC_BIGINT, (x) => {
             const point = p.BASE.multiply(x);
             let c = false; // compressed
             const bu = point.toBytes(c);
@@ -329,8 +337,8 @@ describe('basic curve tests', () => {
         );
       });
       it('fromHex(toHex()) roundtrip', () => {
-        fc.assert(
-          fc.property(FC_BIGINT, (x) => {
+        random.assert(
+          random.property(FC_BIGINT, (x) => {
             const point = p.BASE.multiply(x);
             let c = false; // compressed
             const hu = point.toHex(c);
@@ -363,8 +371,8 @@ describe('basic curve tests', () => {
 
       if (C.verify) {
         it('.verify() should verify random signatures', () =>
-          fc.assert(
-            fc.property(FC_HEX, (msgh) => {
+          random.assert(
+            random.property(FC_HEX, (msgh) => {
               const msg = hexToBytes(msgh);
               const keys = C.keygen();
               const sig = C.sign(msg, keys.secretKey);
@@ -452,8 +460,8 @@ describe('basic curve tests', () => {
       }
       if (C.Signature) {
         it('Signature serialization roundtrip', () =>
-          fc.assert(
-            fc.property(FC_HEX, (msgh) => {
+          random.assert(
+            random.property(FC_HEX, (msgh) => {
               const msg = hexToBytes(msgh);
               const priv = C.utils.randomSecretKey();
               const sigb = C.sign(msg, priv);
@@ -483,8 +491,8 @@ describe('basic curve tests', () => {
             { numRuns: NUM_RUNS }
           ));
         it('Signature.addRecoveryBit/Signature.recoverPublicKey', () =>
-          fc.assert(
-            fc.property(FC_HEX, (msgh) => {
+          random.assert(
+            random.property(FC_HEX, (msgh) => {
               if (C.Point.CURVE().h > 2) return; // unsupported, see k2sig
               const msg = hexToBytes(msgh);
               const keys = C.keygen();

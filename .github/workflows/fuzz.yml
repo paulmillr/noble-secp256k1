@@ -5,6 +5,6 @@ on:
   workflow_dispatch:
 jobs:
   fuzz:
-    uses: paulmillr/cryptofuzz/.github/workflows/noble-commit-fuzz.yml@a977f8bf03f1f9e68d512eb5b6ab09376a493a6f
+    uses: paulmillr/cryptofuzz/.github/workflows/noble-commit-fuzz.yml@c4c2c6054b3545f7d6bb0f8608371a6a6f3c93fb
     with:
       ref: ${{ github.sha }}

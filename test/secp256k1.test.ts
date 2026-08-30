@@ -1,17 +1,17 @@
 import { bytesToHex, hexToBytes, isBytes } from '@noble/hashes/utils.js';
+import * as random from '@paulmillr/jsbt/random.js';
 import { describe, it } from '@paulmillr/jsbt/test.js';
-import * as fc from 'fast-check';
 import { deepStrictEqual as eql, rejects, throws } from 'node:assert';
 import { deepHexToBytes, getTypeTestsNonUi8a, json, jsonGZ, txt } from './utils.ts';
 // prettier-ignore
 import {
-    bytesToNumberBE,
-    mod,
-    numberToBytesBE,
-    schnorr,
-    secp,
-    selectHash,
-    sigFromDER
+  bytesToNumberBE,
+  mod,
+  numberToBytesBE,
+  schnorr,
+  secp,
+  selectHash,
+  sigFromDER
 } from './secp256k1.helpers.ts';
 
 const loadEcdsaVectors = () => deepHexToBytes(json('./vectors/secp256k1/ecdsa.json'));
@@ -47,7 +47,7 @@ export function phex(point) {
 const Point = secp.Point;
 const isNobleCurves = !!Point.Fp;
 const CURVE_N = secp.Point.CURVE().n;
-const FC_BIGINT = fc.bigInt(1n + 1n, CURVE_N - 1n);
+const FC_BIGINT = random.bigInt(1n + 1n, CURVE_N - 1n);
 // TODO: Real implementation.
 function derToPub(der) {
   return der.slice(46 / 2);
@@ -401,8 +401,8 @@ describe('secp256k1', () => {
       );
     eql(Point.fromBytes(p1.toBytes(true)).equals(p1), true, '#toBytes() roundtrip failed case');
 
-    fc.assert(
-      fc.property(FC_BIGINT, (x) => {
+    random.assert(
+      random.property(FC_BIGINT, (x) => {
         const p1 = Point.BASE.multiply(x);
         const b1 = p1.toBytes(true);
         eql(Point.fromBytes(b1).toBytes(true), b1, '#toBytes() roundtrip');
@@ -420,8 +420,8 @@ describe('secp256k1', () => {
 
 describe('Signature', () => {
   it('serialization roundtrips and recovery id validation', () => {
-    fc.assert(
-      fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
+    random.assert(
+      random.property(FC_BIGINT, FC_BIGINT, (r, s) => {
         const sig = new secp.Signature(r, s);
         eql(secp.Signature.fromBytes(sig.toBytes()), sig, 'compact roundtrip');
       })
@@ -441,8 +441,8 @@ describe('Signature', () => {
     }
 
     if (isNobleCurves) {
-      fc.assert(
-        fc.property(FC_BIGINT, FC_BIGINT, (r, s) => {
+      random.assert(
+        random.property(FC_BIGINT, FC_BIGINT, (r, s) => {
           const sig = new secp.Signature(r, s).toBytes('der');
           eql(secp.Signature.fromBytes(sig, 'der').toBytes('der'), sig, 'DER roundtrip');
         })
@@ -526,14 +526,14 @@ describe('sign()', () => {
 describe('verify()', () => {
   function hexa() {
     const items = '0123456789abcdef';
-    return fc.integer({ min: 0, max: 15 }).map((n) => items[n]);
+    return random.integer({ min: 0, max: 15 }).map((n) => items[n]);
   }
   function hexaString(constraints = {}) {
-    return fc.string({ ...constraints, unit: hexa() });
+    return random.string({ ...constraints, unit: hexa() });
   }
   it('random signatures and fixed edge cases', async () => {
-    await fc.assert(
-      fc.asyncProperty(
+    await random.assert(
+      random.asyncProperty(
         FC_BIGINT,
         // @ts-ignore
         hexaString({ minLength: 64, maxLength: 64 }),

@@ -78,6 +78,102 @@ describe('hashes', () => {
     );
   });
 
+  it('signAsync() snapshots the secret key and extra entropy before its first await', async () => {
+    const message = filled(9);
+    const secretA = filled(7);
+    const secretB = filled(8);
+    const entropyA = filled(0x31);
+    const entropyB = filled(0x32);
+    const secretKey = secretA.slice();
+    const extraEntropy = entropyA.slice();
+    const signing = secp256k1.signAsync(message, secretKey, {
+      prehash: false,
+      extraEntropy,
+    });
+    secretKey.set(secretB);
+    extraEntropy.set(entropyB);
+    const signature = await signing;
+    const expected = await secp256k1.signAsync(message, secretA, {
+      prehash: false,
+      extraEntropy: entropyA,
+    });
+    eql(signature, expected, 'bound to invocation-time secret key and entropy');
+    eql(
+      secp256k1.verify(signature, message, secp256k1.getPublicKey(secretA), { prehash: false }),
+      true
+    );
+    eql(
+      secp256k1.verify(signature, message, secp256k1.getPublicKey(secretB), { prehash: false }),
+      false
+    );
+  });
+
+  it('verifyAsync() and recoverPublicKeyAsync() snapshot inputs before their first await', async () => {
+    const message = filled(0x41);
+    const secretKey = filled(7);
+    const publicKey = secp256k1.getPublicKey(secretKey);
+    const recoveredSig = await secp256k1.signAsync(message, secretKey, {
+      prehash: false,
+      format: 'recovered',
+    });
+
+    const verifySig = recoveredSig.slice();
+    const verifyMsg = message.slice();
+    const verifyPub = publicKey.slice();
+    const verifying = secp256k1.verifyAsync(verifySig, verifyMsg, verifyPub, {
+      prehash: false,
+      format: 'recovered',
+    });
+    verifySig.fill(0);
+    verifyMsg.fill(0x42);
+    verifyPub.fill(0);
+    eql(await verifying, true, 'verification uses invocation-time bytes');
+
+    const recoverSig = recoveredSig.slice();
+    const recoverMsg = message.slice();
+    const recoverOpts = { prehash: false, isCompressed: true };
+    const recovering = secp256k1.recoverPublicKeyAsync(recoverSig, recoverMsg, recoverOpts);
+    recoverSig.fill(0);
+    recoverMsg.fill(0x42);
+    recoverOpts.isCompressed = false;
+    eql(await recovering, publicKey, 'recovery uses invocation-time bytes');
+  });
+
+  it('async ECDSA validates bounded inputs before copying them', async () => {
+    const copyMustNotRun = (length: number) => {
+      const bytes = new Uint8Array(length);
+      Object.defineProperty(bytes, Symbol.iterator, {
+        value: () => {
+          throw new Error('copied before validation');
+        },
+      });
+      return bytes;
+    };
+    const message = filled(9);
+    const secretKey = filled(7);
+    const publicKey = secp256k1.getPublicKey(secretKey);
+    const signature = await secp256k1.signAsync(message, secretKey, { prehash: false });
+    const recovered = await secp256k1.signAsync(message, secretKey, {
+      prehash: false,
+      format: 'recovered',
+    });
+
+    await rejects(() => secp256k1.signAsync(message, copyMustNotRun(33)), /length 32/);
+    await rejects(() => secp256k1.verifyAsync(copyMustNotRun(66), message, publicKey), /length 64/);
+    eql(await secp256k1.verifyAsync(signature, message, copyMustNotRun(66)), false);
+    await rejects(() => secp256k1.recoverPublicKeyAsync(copyMustNotRun(66), message), /length 65/);
+    eql(
+      await secp256k1.verifyAsync(signature, copyMustNotRun(8193), publicKey, {
+        prehash: false,
+      }),
+      false
+    );
+    await rejects(
+      () => secp256k1.recoverPublicKeyAsync(recovered, copyMustNotRun(8193), { prehash: false }),
+      /input is too large/
+    );
+  });
+
   it('sign()/signAsync() reject configured HMAC-SHA256 providers that return digests not exactly 32 bytes', async () => {
     const msg = Uint8Array.of(9);
     const secretKey = Uint8Array.of(...Array(31).fill(0), 1);

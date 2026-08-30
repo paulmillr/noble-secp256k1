@@ -8,17 +8,16 @@
     "index.ts"
   ],
   "devDependencies": {
-    "@noble/hashes": "2.3.0",
-    "@paulmillr/jsbt": "0.7.1",
-    "bismar": "0.1.8",
+    "@noble/hashes": "2.4.0",
+    "@paulmillr/jsbt": "0.7.2",
     "@types/node": "26.2.0",
-    "fast-check": "4.2.0",
+    "bismar": "0.1.9",
     "prettier": "3.9.6",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "scripts": {
     "benchmark": "node benchmark/secp256k1.ts",
-    "benchmark:size": "bismar -bsm index.js/{getPublicKey,signAsync,verifyAsync,schnorr,getSharedSecret,keygen}",
+    "benchmark:size": "bismar -bsm",
     "build": "tsc",
     "check": "jsbt-check",
     "format": "prettier --write 'index.ts' 'test/*.{js,ts}'",

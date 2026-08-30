@@ -1,5 +1,5 @@
+import * as random from '@paulmillr/jsbt/random.js';
 import { describe, it } from '@paulmillr/jsbt/test.js';
-import * as fc from 'fast-check';
 import { deepStrictEqual as eql, throws } from 'node:assert';
 import {
   bytesToHex,
@@ -15,10 +15,10 @@ import { getTypeTests } from './utils.ts';
 
 function hexa() {
   const items = '0123456789abcdef';
-  return fc.integer({ min: 0, max: 15 }).map((n) => items[n]);
+  return random.integer({ min: 0, max: 15 }).map((n) => items[n]);
 }
 function hexaString(constraints = {}) {
-  return fc.string({ ...constraints, unit: hexa() });
+  return random.string({ ...constraints, unit: hexa() });
 }
 
 describe('utils', () => {
@@ -45,8 +45,8 @@ describe('utils', () => {
     }
   });
   it('hexToBytes <=> bytesToHex roundtrip', () =>
-    fc.assert(
-      fc.property(hexaString({ minLength: 2, maxLength: 64 }), (hex) => {
+    random.assert(
+      random.property(hexaString({ minLength: 2, maxLength: 64 }), (hex) => {
         if (hex.length % 2 !== 0) return;
         eql(hex, bytesToHex(hexToBytes(hex)));
         eql(hex, bytesToHex(hexToBytes(hex.toUpperCase())));
@@ -72,8 +72,8 @@ describe('utils', () => {
     }
   });
   it('concatBytes random', () =>
-    fc.assert(
-      fc.property(fc.uint8Array(), fc.uint8Array(), fc.uint8Array(), (a, b, c) => {
+    random.assert(
+      random.property(random.uint8Array(), random.uint8Array(), random.uint8Array(), (a, b, c) => {
         const expected = Uint8Array.from([...a, ...b, ...c]);
         eql(concatBytes(a.slice(), b.slice(), c.slice()), expected);
       })

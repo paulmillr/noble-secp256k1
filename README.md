@@ -343,7 +343,7 @@ For this package, there are 0 dependencies; and a few dev dependencies:
 
 - [noble-hashes](https://github.com/paulmillr/noble-hashes) provides cryptographic hashing functionality
 - jsbt is used for benchmarking / testing / build tooling and developed by the same author
-- prettier, fast-check and typescript are used for code quality / test generation / ts compilation
+- prettier and typescript are used for code quality / ts compilation; @paulmillr/jsbt for property-based tests
 
 ### Randomness
 

@@ -5,9 +5,7 @@
 - Added `isCompressed` to the options for `recoverPublicKey()` and `recoverPublicKeyAsync()`
 - Made safe generic `Point#multiply()` execute the full 256-bit ladder regardless of the scalar's leading zero bits
 - Made `signAsync()`, `schnorr.sign()`, and `schnorr.signAsync()` snapshot the message at invocation, preventing caller mutation
-- Made Schnorr verification distinguish invalid signatures from hash-backend failures
-- Normalized malformed compressed and uncompressed point decoding to a consistent `bad point: not on curve` error, and added an actionable error when WebCrypto randomness is unavailable.
-- Standardized byte, hex, scalar, and helper validation with the other Noble packages
+- Reduce code size by ~10%, rewrite some utils for this purpose
 
 ## 3.1.0 (2026-04-11)
 

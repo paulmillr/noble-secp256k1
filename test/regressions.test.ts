@@ -177,6 +177,14 @@ describe('golf regressions', () => {
     const rec = secp.sign(msg, sk, { format: 'recovered' });
     eql(rec.length, 65);
     eql(rec.subarray(1), sig); // recovered = recovery byte || compact
+    const wrongRecovery = rec.slice();
+    wrongRecovery[0] ^= 1;
+    eql(
+      secp.verify(wrongRecovery, msg, pub, { format: 'recovered' }),
+      false,
+      'recovered signatures bind the recovery id'
+    );
+    eql(secp.verify(wrongRecovery.subarray(1), msg, pub), true, 'compact r/s remains valid');
     throws(() => secp.sign(msg, sk, { format: 'der' }), /not supported/);
     throws(() => secp.verify(sig, msg, pub, { format: 'der' }), /not supported/);
     eql(secp.recoverPublicKey(rec, msg), pub);
@@ -194,6 +202,25 @@ describe('golf regressions', () => {
     eql(secp.verify(sigE, msg, pub), true);
     eql(secp.verify(secp.sign(msg, sk, { extraEntropy: true }), msg, pub), true);
     throws(() => secp.sign(msg, sk, { extraEntropy: 'nope' as any }), TypeError);
+  });
+
+  it('ECDSA signature parsing requires a real Uint8Array', () => {
+    const sk = secp.utils.randomSecretKey();
+    const msg = new Uint8Array(32).fill(7);
+    const pub = secp.getPublicKey(sk);
+    const sig = secp.sign(msg, sk, { prehash: false });
+    const fake = {
+      length: sig.length,
+      subarray: (from: number, to?: number) => sig.subarray(from, to),
+    };
+    throws(
+      () => secp.Signature.fromBytes(fake as unknown as Uint8Array),
+      /"signature" expected Uint8Array/
+    );
+    throws(
+      () => secp.verify(fake as unknown as Uint8Array, msg, pub, { prehash: false }),
+      /"signature" expected Uint8Array/
+    );
   });
 
   it('verify/recover fail closed when the double-scalar result is infinity', () => {
