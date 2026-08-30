@@ -182,22 +182,22 @@ const isBytes = (a: unknown): a is Uint8Array => {
 };
 /** Asserts something is Uint8Array. */
 const abytes = (value: TArg<Uint8Array>, length?: number, title: string = ''): TRet<Uint8Array> => {
-  // Success path first: this runs at the start of every update() / digestInto(), and the
-  // common `abytes(data)` form must not pay for length handling it does not use.
-  if (isBytes(value) && (length === undefined || value.length === length))
-    return value as TRet<Uint8Array>;
-  // Error path: recompute freely to build the exact message.
   const bytes = isBytes(value);
-  const ofLen = length !== undefined ? ` of length ${length}` : '';
-  const got = bytes ? `length=${value.length}` : `type=${typeof value}`;
-  const message = (title ? `"${title}" ` : '') + 'expected Uint8Array' + ofLen + ', got ' + got;
-  if (!bytes) throw new TypeError(message);
-  throw new RangeError(message);
+  if (bytes && (length === undefined || value.length === length)) return value as TRet<Uint8Array>;
+  const message =
+    (title ? `"${title}" ` : '') +
+    'expected Uint8Array' +
+    (length !== undefined ? ` of length ${length}` : '') +
+    ', got ' +
+    (bytes ? `length=${value.length}` : `type=${typeof value}`);
+  throw new (bytes ? RangeError : TypeError)(message);
 };
 // Signing can retain the message across hash callbacks / awaits, and Schnorr hashes it more than
 // once. Take one owned snapshot so caller mutation cannot change the signing transcript.
-const snapshotBytes = (value: TArg<Uint8Array>, title: string): TRet<Uint8Array> =>
-  Uint8Array.from(abytes(value, undefined, title));
+// cloneBytes expects an already-validated view; snapshotBytes validates, then copies.
+const cloneBytes = (value: Uint8Array): TRet<Uint8Array> => Uint8Array.from(value);
+const snapshotBytes = (value: TArg<Uint8Array>, title: string, length?: number): TRet<Uint8Array> =>
+  cloneBytes(abytes(value, length, title));
 // Callers keep values non-negative and within the requested width; padStart() won't truncate over-wide inputs.
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 /** Convert byte array to hex string. */
@@ -580,6 +580,9 @@ const secretKeyToScalar = (secretKey: TArg<Uint8Array>): bigint => {
 };
 /** For signature malleability, checks the strict upper-half predicate s > floor(N/2). */
 const highS = (n: bigint): boolean => n > N >> 1n;
+// Recovery id of an affine nonce point: bit 0 is y parity, bit 1 is x = r + n.
+const getRecoveryBit = (x: bigint, y: bigint, r: bigint): number =>
+  (x === r ? 0 : 2) | Number(y & 1n);
 /**
  * Creates a SEC 1 public key from a 32-byte private key.
  * @param privKey - 32-byte secret key.
@@ -625,11 +628,16 @@ const assertSigFormat = (format?: ECDSASignatureFormat) => {
   if (format != null && format !== SIG_COMPACT && format !== SIG_RECOVERED)
     throw new Error('Signature format must be one of: compact, recovered, der');
 };
-const assertSigLength = (sig: TArg<Uint8Array>, format: ECDSASignatureFormat = SIG_COMPACT) => {
+const assertSigLength = (
+  sig: TArg<Uint8Array>,
+  format: ECDSASignatureFormat = SIG_COMPACT
+): TRet<Uint8Array> => {
   assertSigFormat(format);
+  const bytes = abytes(sig, undefined, 'signature');
   const len = 64 + Number(format === SIG_RECOVERED);
-  if (sig.length !== len)
+  if (bytes.length !== len)
     throw new Error(`Signature format "${format}" expects Uint8Array with length ${len}`);
+  return bytes;
 };
 /**
  * ECDSA Signature class. Supports only compact 64-byte representation, not DER.
@@ -655,7 +663,7 @@ class Signature {
     freeze(this);
   }
   static fromBytes(b: TArg<Uint8Array>, format: ECDSASignatureFormat = SIG_COMPACT): Signature {
-    assertSigLength(b, format);
+    b = assertSigLength(b, format);
     let rec: number | undefined;
     if (format === SIG_RECOVERED) {
       rec = b[0];
@@ -689,16 +697,28 @@ class Signature {
  * RFC 6979 §2.3.2 says bits2int keeps the leftmost qlen bits and discards the rest.
  * FIPS 186-4 4.6 gives the same leftmost-bit truncation rule. bits2int can produce res>N.
  */
+// The 8 KiB cap is only a local DoS guard. Longer ordinary prehashes must still follow
+// RFC 6979 §2.3.2 truncation instead of being rejected just because blen > qlen.
+const MAX_PREHASHED_BYTES = 8192;
+const E_MSGBIG = 'input is too large';
+const oversizedMsg = (bytes: TArg<Uint8Array>, prehash?: boolean): boolean =>
+  !prehash && bytes.length > MAX_PREHASHED_BYTES;
 const bits2int = (bytes: TArg<Uint8Array>): bigint => {
-  // The 8 KiB cap is only a local DoS guard. Longer ordinary prehashes must still follow
-  // RFC 6979 §2.3.2 truncation instead of being rejected just because blen > qlen.
-  if (bytes.length > 8192) throw new Error('input is too large');
+  if (oversizedMsg(bytes)) throw new Error(E_MSGBIG);
   const delta = bytes.length * 8 - 256;
   const num = bytesToNumBE(bytes);
   return delta > 0 ? num >> big(delta) : num;
 };
 /** int2octets can't be used; pads small msgs with 0: BAD for truncation as per RFC vectors */
 const bits2int_modN = (bytes: TArg<Uint8Array>): bigint => modN(bits2int(abytes(bytes)));
+// Async entry points snapshot the message before their first await. An oversized prehash is
+// rejected before the copy, so an attacker-controlled view is never cloned just to fail in
+// bits2int().
+const snapshotMsg = (message: TArg<Uint8Array>, prehash?: boolean): TRet<Uint8Array> => {
+  const view = abytes(message, undefined, 'message');
+  if (oversizedMsg(view, prehash)) throw new Error(E_MSGBIG);
+  return cloneBytes(view);
+};
 /**
  * Option to enable hedged signatures with improved security.
  *
@@ -944,7 +964,7 @@ const _sign = <T>(
     if (r === 0n) return;
     const s = modN(ik * (h1i + r * d)); // s = k^-1(m + rd) mod n
     if (s === 0n) return;
-    let recovery = (q.x === r ? 0 : 2) | Number(q.y & 1n); // recovery bit (2 or 3, when q.x > n)
+    let recovery = getRecoveryBit(q.x, q.y, r); // recovery bit (2 or 3, when q.x > n)
     let normS = s; // normalized S
     if (lowS && highS(s)) {
       // if lowS was passed, ensure s is always
@@ -971,26 +991,30 @@ const _verify = (
   assertSigLength(sig, format);
   abytes(publicKey, undefined, 'publicKey');
   try {
-    const { r, s } = Signature.fromBytes(sig, format);
+    const { r, s, recovery } = Signature.fromBytes(sig, format);
     const h = bits2int_modN(messageHash); // Truncate hash
     const Q = Point.fromBytes(publicKey); // Validate public key. Q, not P: P is the field prime
     if (lowS && highS(s)) return false; // lowS bans sig.s >= CURVE.n/2
     const is = invert(s, N); // s^-1
     // R = u1⋅G + u2⋅Q with u1 = hs^-1, u2 = rs^-1. Identity throws inside doubleScalarMulUns.
-    // Reduce R.x in N's field, not P's.
-    return modN(doubleScalarMulUns(Q, modN(h * is), modN(r * is)).toAffine().x) === r;
+    const { x, y } = doubleScalarMulUns(Q, modN(h * is), modN(r * is)).toAffine();
+    if (modN(x) !== r) return false; // Reduce R.x in N's field, not P's.
+    // The recovery byte is part of the recovered signature and must describe this exact R.
+    return format !== SIG_RECOVERED || recovery === getRecoveryBit(x, y, r);
   } catch (error) {
     return false;
   }
 };
 
-const setDefaults = (opts: TArg<ECDSASignOpts>) => {
+// `own` snapshots extraEntropy bytes, for async paths that must not see caller mutation.
+const setDefaults = (opts: TArg<ECDSASignOpts>, own = false): ECDSAOpts => {
+  const e = opts.extraEntropy;
   return [
     opts.lowS ?? true,
     opts.prehash ?? true,
     opts.format ?? SIG_COMPACT,
-    opts.extraEntropy,
-  ] as const;
+    own && e != null && typeof e !== 'boolean' ? snapshotBytes(e, 'extraEntropy') : e,
+  ];
 };
 
 /**
@@ -1051,10 +1075,12 @@ const signAsync = async (
   secretKey: TArg<Uint8Array>,
   opts: TArg<ECDSASignOpts> = {}
 ): Promise<TRet<Uint8Array>> => {
-  const o = setDefaults(opts);
+  const o = setDefaults(opts, true);
   assertSigFormat(o[2]);
-  const msg = (await prepMsg(snapshotBytes(message, 'message'), o[1], true)) as Uint8Array;
-  return _sign<Promise<TRet<Uint8Array>>>(msg, secretKey, o, hmacDrbgAsync);
+  const msgBytes = snapshotMsg(message, o[1]);
+  const secretBytes = snapshotBytes(secretKey, 'secret key', L);
+  const msg = (await prepMsg(msgBytes, o[1], true)) as Uint8Array;
+  return _sign<Promise<TRet<Uint8Array>>>(msg, secretBytes, o, hmacDrbgAsync);
 };
 
 /**
@@ -1130,8 +1156,18 @@ const verifyAsync = async (
   opts: TArg<ECDSAVerifyOpts> = {}
 ): Promise<boolean> => {
   const o = setDefaults(opts);
-  const msg = (await prepMsg(message, o[1], true)) as Uint8Array;
-  return _verify(sig, msg, publicKey, o);
+  const sigView = assertSigLength(sig, o[2]);
+  const msgView = abytes(message, undefined, 'message');
+  const publicKeyView = abytes(publicKey, undefined, 'publicKey');
+  // Reject bounded malformed inputs before copying attacker-controlled views. This also avoids
+  // copying a prehashed message that bits2int() would reject immediately.
+  if (oversizedMsg(msgView, o[1]) || (publicKeyView.length !== 33 && publicKeyView.length !== 65))
+    return false;
+  const sigBytes = cloneBytes(sigView);
+  const msgBytes = cloneBytes(msgView);
+  const publicKeyBytes = cloneBytes(publicKeyView);
+  const msg = (await prepMsg(msgBytes, o[1], true)) as Uint8Array;
+  return _verify(sigBytes, msg, publicKeyBytes, o);
 };
 
 const _recover = (
@@ -1206,8 +1242,12 @@ const recoverPublicKeyAsync = async (
   message: TArg<Uint8Array>,
   opts: TArg<ECDSARecoverOpts> = {}
 ): Promise<TRet<Uint8Array>> => {
-  const msg = (await prepMsg(message, setDefaults(opts)[1], true)) as Uint8Array;
-  return _recover(signature, msg, opts.isCompressed ?? true);
+  const prehash = setDefaults(opts)[1];
+  const sigBytes = cloneBytes(assertSigLength(signature, SIG_RECOVERED));
+  const msgBytes = snapshotMsg(message, prehash);
+  const isCompressed = opts.isCompressed ?? true;
+  const msg = (await prepMsg(msgBytes, prehash, true)) as Uint8Array;
+  return _recover(sigBytes, msg, isCompressed);
 };
 
 /**
