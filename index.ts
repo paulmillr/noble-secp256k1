@@ -182,15 +182,17 @@ const isBytes = (a: unknown): a is Uint8Array => {
 };
 /** Asserts something is Uint8Array. */
 const abytes = (value: TArg<Uint8Array>, length?: number, title: string = ''): TRet<Uint8Array> => {
+  // Success path first: this runs at the start of every update() / digestInto(), and the
+  // common `abytes(data)` form must not pay for length handling it does not use.
+  if (isBytes(value) && (length === undefined || value.length === length))
+    return value as TRet<Uint8Array>;
+  // Error path: recompute freely to build the exact message.
   const bytes = isBytes(value);
-  if (bytes && (length === undefined || value.length === length)) return value as TRet<Uint8Array>;
-  const message =
-    (title ? `"${title}" ` : '') +
-    'expected Uint8Array' +
-    (length !== undefined ? ` of length ${length}` : '') +
-    ', got ' +
-    (bytes ? `length=${value.length}` : `type=${typeof value}`);
-  throw new (bytes ? RangeError : TypeError)(message);
+  const ofLen = length !== undefined ? ` of length ${length}` : '';
+  const got = bytes ? `length=${value.length}` : `type=${typeof value}`;
+  const message = (title ? `"${title}" ` : '') + 'expected Uint8Array' + ofLen + ', got ' + got;
+  if (!bytes) throw new TypeError(message);
+  throw new RangeError(message);
 };
 // Signing can retain the message across hash callbacks / awaits, and Schnorr hashes it more than
 // once. Take one owned snapshot so caller mutation cannot change the signing transcript.
